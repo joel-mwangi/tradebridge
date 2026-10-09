@@ -35,7 +35,9 @@ export async function middleware(request: NextRequest) {
   const authenticated = Boolean(user && !error);
 
   if (isPublic && authenticated) {
-    return NextResponse.redirect(new URL("/", request.url));
+    const redirect = NextResponse.redirect(new URL("/", request.url));
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   if (!isPublic && !authenticated) {
@@ -44,7 +46,9 @@ export async function middleware(request: NextRequest) {
     }
     const loginUrl = new URL("/login", request.url);
     if (path !== "/") loginUrl.searchParams.set("next", path);
-    return NextResponse.redirect(loginUrl);
+    const redirect = NextResponse.redirect(loginUrl);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   return response;
