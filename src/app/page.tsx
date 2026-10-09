@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const markets = [
   { symbol: "R_100", name: "Volatility 100 Index", change: "+0.82%", tone: "up" },
@@ -12,6 +12,30 @@ const markets = [
 export default function Home() {
   const [selected, setSelected] = useState(markets[0]);
   const [direction, setDirection] = useState<"Buy" | "Sell">("Buy");
+  const [connected, setConnected] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/deriv/status", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { connected?: boolean }) => {
+        if (active) setConnected(Boolean(data.connected));
+      })
+      .catch(() => {
+        if (active) setConnected(false);
+      });
+
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("auth_error");
+    if (params.get("connection") === "connected") setAuthMessage("Deriv authorization completed. Account data has not been loaded yet.");
+    if (error === "configuration") setAuthMessage("Deriv OAuth is not configured yet. Add the server environment variables and register the exact callback URL.");
+    if (error === "cancelled") setAuthMessage("Deriv authorization was cancelled.");
+    if (error === "invalid_callback") setAuthMessage("We could not verify the Deriv authorization response. Please try again.");
+    if (error === "token_exchange") setAuthMessage("Deriv could not complete authorization. Please try again.");
+    if (error) window.history.replaceState({}, "", window.location.pathname);
+    return () => { active = false; };
+  }, []);
 
   return (
     <main className="shell">
@@ -19,13 +43,13 @@ export default function Home() {
         <a className="brand" href="#"><span className="brand-icon">T</span> tradebridge<span className="accent">.</span></a>
         <p className="side-label">WORKSPACE</p>
         <nav><a className="nav active" href="#overview">▦ <span>Overview</span></a><a className="nav" href="#markets">⌁ <span>Markets</span></a><a className="nav" href="#ticket">↗ <span>Trade</span></a><a className="nav" href="#activity">◷ <span>Activity</span></a></nav>
-        <div className="side-status"><span className="status-dot" /><div><strong>Deriv connection</strong><small>Not connected</small></div></div>
+        <div className="side-status"><span className="status-dot" /><div><strong>Deriv connection</strong><small>{connected ? "Authorized session" : "Not connected"}</small></div></div>
       </aside>
       <section className="main" id="overview">
         <header className="topbar"><span>Workspace <b>/</b> Overview</span><div><span className="demo-tag">● Demo environment</span><span className="avatar">JM</span></div></header>
         <div className="content">
-          <div className="intro"><div><p className="eyebrow">YOUR TRADING WORKSPACE</p><h1>Trade with a clearer view.</h1><p className="muted">Markets, account information, and activity in one workspace.</p></div><button className="primary" onClick={() => window.alert("Deriv authorization is not implemented yet.")}>Connect Deriv ↗</button></div>
-          <section className="notice"><span className="notice-icon">i</span><div><strong>Preview mode — no live account connected</strong><p>Market movements below are illustrative placeholders. This version cannot place real trades.</p></div><b>DEMO</b></section>
+          <div className="intro"><div><p className="eyebrow">YOUR TRADING WORKSPACE</p><h1>Trade with a clearer view.</h1><p className="muted">Markets, account information, and activity in one workspace.</p></div>{connected ? <form action="/api/auth/deriv/disconnect" method="post"><button className="primary" type="submit">Disconnect Deriv</button></form> : <div className="connect-actions"><button className="primary" onClick={() => { window.location.href = "/api/auth/deriv/start"; }}>Connect Deriv ↗</button><a className="signup-link" href="/api/auth/deriv/start?mode=signup">Create account</a></div>}</div>
+          <section className="notice"><span className="notice-icon">i</span><div><strong>{connected ? "Deriv authorized — preview mode remains active" : "Preview mode — no live account connected"}</strong><p>{authMessage || "Market movements below are illustrative placeholders. This version cannot place real trades."}</p></div><b>DEMO</b></section>
           <div className="stats">
             <article className="card"><span>Account balance</span><strong>— <small>USD</small></strong><p>Connect an account to load balance</p></article>
             <article className="card"><span>Open positions</span><strong>—</strong><p>No live positions loaded</p></article>
