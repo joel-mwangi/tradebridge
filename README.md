@@ -6,12 +6,12 @@ Real accounts can be linked and inspected, but **real-money order entry is delib
 
 ## Supported workflow
 
-- **Markets:** Discover eligible active symbols, stream live ticks, and view the actual returned tick history in the chart.
+- **Markets:** Discover eligible active symbols, stream live ticks, and switch between line history and OHLC candlesticks with selectable intervals using Deriv-returned market data.
 - **Accounts:** List only Deriv accounts linked to the authenticated TradeBridge user; label account type clearly and show the selected account's balance.
 - **Demo orders:** Request a Deriv proposal for a Higher/Lower (CALL/PUT) Options contract and confirm the order separately.
 - **Real accounts:** Display linked Real account details in read-only mode. Real order sessions are blocked until enforceable server-side risk controls are implemented.
 - **Positions:** Stream open-contract updates, including current profit/loss and contract status, and request an early market sale after a second confirmation.
-- **Account activity:** Load recent statement transactions, view the daily profit table, refresh the account panels, and export the currently loaded statement rows to CSV.
+- **Account activity:** Load and page through Deriv statement transactions, view the daily profit table, refresh account panels, and export the currently loaded statement rows to CSV.
 - **Session safety:** Server-side account ownership/type checks, Demo-only trading WebSocket issuance, server-only writes to risk-consent records, consent revocation, and token cookies that are HttpOnly in production.
 
 TradeBridge currently implements Deriv **Options** contracts with Higher/Lower (CALL/PUT). It is not a general CFD, forex margin, copy-trading, or multi-asset terminal.
