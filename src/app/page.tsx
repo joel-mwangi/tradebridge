@@ -49,7 +49,8 @@ export default function Home() {
     if (tradeTimeout.current) clearTimeout(tradeTimeout.current);
     tradeTimeout.current = null;
   }
-  const activeAccount = accounts.find((account) => account.account_id === selectedAccountId) ?? accounts[0];
+  const demoAccounts = accounts.filter((account) => (account.account_type ?? "").toLowerCase() === "demo");
+  const activeAccount = demoAccounts.find((account) => account.account_id === selectedAccountId) ?? demoAccounts[0];
 
   async function requestDemoQuote() {
     const stake = Number(stakeAmount);
@@ -295,10 +296,11 @@ export default function Home() {
         if (!active) return;
         setConnected(Boolean(data.connected));
         setAccounts(data.accounts ?? []);
-        if (data.accounts?.length) setSelectedAccountId((current) =>
-          data.accounts?.some((account) => account.account_id === current)
+        const eligibleDemoAccounts = (data.accounts ?? []).filter((account) => (account.account_type ?? "").toLowerCase() === "demo");
+        setSelectedAccountId((current) =>
+          eligibleDemoAccounts.some((account) => account.account_id === current)
             ? current
-            : data.accounts?.[0].account_id ?? ""
+            : eligibleDemoAccounts[0]?.account_id ?? ""
         );
         if (data.connected) setAuthMessage("Deriv connection verified. Account details were retrieved from Deriv.");
         else if (data.error === "token_expired") setAuthMessage("Your Deriv session expired or was revoked. Please connect again.");
@@ -345,6 +347,23 @@ export default function Home() {
   function startDerivConnect() {
     finishOnboarding();
     window.location.href = "/api/auth/deriv/start";
+  }
+
+  function startDemoTrading() {
+    finishOnboarding();
+    if (!connected) {
+      startDerivConnect();
+      return;
+    }
+    if (demoAccounts.length === 0) {
+      setTradeStatus("No demo account is available. Create a virtual-money account in Deriv, then reconnect to TradeBridge.");
+      document.getElementById("ticket")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    setSelectedAccountId(demoAccounts[0].account_id);
+    setQuote(null);
+    setTradeStatus("");
+    document.getElementById("ticket")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
@@ -396,10 +415,11 @@ export default function Home() {
       <section className="main" id="overview">
         <header className="topbar"><span>Workspace <b>/</b> Overview</span><div><span className="demo-tag">● Demo environment</span><form action="/auth/signout" method="post"><button className="signout-button" type="submit">Sign out</button></form></div></header>
         <div className="content">
-          <div className="intro"><div><p className="eyebrow">YOUR TRADING WORKSPACE</p><h1>Trade with a clearer view.</h1><p className="muted">Markets, account information, and activity in one workspace.</p></div>{connected ? <form action="/api/auth/deriv/disconnect" method="post"><button className="primary" type="submit">Disconnect Deriv</button></form> : <div className="connect-actions"><button className="primary" onClick={() => { window.location.href = "/api/auth/deriv/start"; }}>Connect Deriv ↗</button><a className="signup-link" href="/api/auth/deriv/start?mode=signup">Create Deriv account</a></div>}</div>
+          <div className="intro"><div><p className="eyebrow">YOUR TRADING WORKSPACE</p><h1>Trade with a clearer view.</h1><p className="muted">Markets, account information, and activity in one workspace.</p></div><div className="intro-actions"><button className="start-demo" onClick={startDemoTrading}>Start demo trading <span aria-hidden="true">→</span></button>{connected ? <form action="/api/auth/deriv/disconnect" method="post"><button className="secondary" type="submit">Disconnect Deriv</button></form> : <div className="connect-actions"><button className="secondary" onClick={startDerivConnect}>Connect Deriv ↗</button><a className="signup-link" href="/api/auth/deriv/start?mode=signup">Create Deriv account</a></div>}</div></div>
+          <section className="demo-entry" aria-labelledby="demo-entry-title"><div><p className="eyebrow">VIRTUAL FUNDS ONLY</p><h2 id="demo-entry-title">{!connected ? "Connect Deriv to get started" : demoAccounts.length === 0 ? "No demo account available" : "Ready to practise with a demo account?"}</h2><p>{!connected ? "Connect your Deriv account, then choose a virtual-money account before placing a demo trade." : demoAccounts.length === 0 ? "Your connected Deriv account has no available demo account. Create a virtual account in Deriv, then reconnect to refresh your account list. Real-money accounts cannot be traded here." : `Choose a demo account and practise with virtual funds. ${demoAccounts.length} demo account${demoAccounts.length === 1 ? " is" : "s are"} available.`}</p></div><button className="demo-entry-action" onClick={connected && demoAccounts.length === 0 ? startDerivConnect : startDemoTrading}>{!connected ? "Connect Deriv" : demoAccounts.length === 0 ? "Reconnect Deriv" : "Open demo trade ticket"} <span aria-hidden="true">↗</span></button></section>
           <section className="notice"><span className="notice-icon">i</span><div><strong>{connected ? "Deriv connected — demo trading only" : "No verified Deriv session"}</strong><p>{authMessage || "Market prices are live when the Deriv stream is available. Demo orders require a fresh quote and separate confirmation; real-money orders are disabled."}</p></div><b>DEMO</b></section>
           <div className="stats">
-            <article className="card"><span>Available balance</span><strong>{activeAccount?.balance !== null && activeAccount?.balance !== undefined ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(activeAccount.balance) : "—"} <small>{activeAccount?.currency ?? ""}</small></strong><p>{activeAccount ? `${activeAccount.account_type ?? "Trading"} account · ${activeAccount.account_id}` : connected ? "No account details were returned" : "Connect Deriv to load verified balance"}</p>{accounts.length > 1 && <select className="account-select" aria-label="Select Deriv account" value={activeAccount?.account_id ?? ""} onChange={(event) => { setSelectedAccountId(event.target.value); setQuote(null); tradeSocket.current?.close(); setTradeStatus(""); }}>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.account_id} · {account.account_type ?? "Account"}</option>)}</select>}</article>
+            <article className="card"><span>Demo account balance</span><strong>{activeAccount?.balance !== null && activeAccount?.balance !== undefined ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(activeAccount.balance) : "—"} <small>{activeAccount?.currency ?? ""}</small></strong><p>{activeAccount ? `Virtual account · ${activeAccount.account_id}` : !connected ? "Connect Deriv to load your demo account" : accounts.length === 0 ? "No linked account was returned by Deriv" : "No demo account is linked. Create a virtual account in Deriv and reconnect."}</p><label className="account-select-label" htmlFor="demo-account-select">Demo account for trading</label>{demoAccounts.length > 0 ? <select id="demo-account-select" className="account-select" aria-label="Select demo account for trading" value={activeAccount?.account_id ?? ""} onChange={(event) => { setSelectedAccountId(event.target.value); setQuote(null); tradeSocket.current?.close(); setTradeStatus(""); }}>{demoAccounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.account_id} · {account.currency ?? "Currency"} · Demo</option>)}</select> : <div className="no-demo-inline" role="status"><strong>{connected ? "Demo account needed" : "Deriv not connected"}</strong><span>{connected ? "Create a virtual account in Deriv, then reconnect." : "Connect Deriv to load eligible demo accounts."}</span></div>}</article>
             <article className="card"><span>Open positions</span><strong className="metric-placeholder">Not available</strong><p>Position tracking is not connected yet.</p></article>
             <article className="card"><span>Today’s profit / loss</span><strong className="metric-placeholder">Not available</strong><p>Profit and loss tracking is not integrated yet.</p></article>
           </div>
