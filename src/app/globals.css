@@ -190,3 +190,11 @@ footer{line-height:1.5}
 .signout-button{border:1px solid #dce5eb;background:#fff;border-radius:8px;padding:8px 12px;color:#526477;font-size:11px;font-weight:700}
 .signout-button:hover{border-color:#a7dccc;background:#f1fbf7;color:#127a64}
 @media(max-width:560px){.auth-page{padding:12px}.auth-card{padding:25px 20px;border-radius:16px}.auth-brand{margin-bottom:25px}.auth-links{align-items:flex-start;flex-direction:column;gap:13px}.topbar form{display:flex}.signout-button{padding:8px 9px}}
+
+.auth-social{display:grid;gap:16px;margin:0 0 17px}
+.auth-google{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;min-height:46px;padding:11px 14px;border:1px solid #dfe6ec;border-radius:8px;background:#fff;color:#263648;font-size:12px;font-weight:700;transition:background .15s,border-color .15s}
+.auth-google:hover{background:#f8fafc;border-color:#c4d0da}
+.auth-google:focus-visible{outline:3px solid #ccefe3;outline-offset:2px}
+.auth-google svg{flex-shrink:0}
+.auth-divider{display:flex;align-items:center;gap:12px;color:#8794a2;font-size:10px}
+.auth-divider:before,.auth-divider:after{content:"";height:1px;flex:1;background:#e8edf1}
