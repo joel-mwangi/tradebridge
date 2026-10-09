@@ -10,8 +10,11 @@ type Props = {
   currency: string;
   accountType: "demo" | "real" | "other";
   busy: boolean;
+  activityLoading: boolean;
+  activityHasMore: boolean;
   onSell: (contractId: string) => void;
   onRefresh: () => void;
+  onLoadMore: () => void;
 };
 
 function money(value: number | null, currency: string) {
@@ -39,10 +42,13 @@ function csvCell(value: unknown) {
   return '"' + text.replace(/"/g, '""') + '"';
 }
 
-export default function TradingActivity({ positions, activity, currency, accountType, busy, onSell, onRefresh }: Props) {
+export default function TradingActivity({
+  positions, activity, currency, accountType, busy, activityLoading, activityHasMore,
+  onSell, onRefresh, onLoadMore,
+}: Props) {
   const [pendingSellId, setPendingSellId] = useState<string | null>(null);
   const liveAccount = accountType === "real";
-  const canClosePositions = accountType === "demo" || liveAccount;
+  const canClosePositions = accountType === "demo";
 
   function exportStatement() {
     const headers = ["Transaction ID", "Time", "Action", "Description", "Amount", "Balance", "Currency", "Contract ID"];
@@ -66,7 +72,7 @@ export default function TradingActivity({ positions, activity, currency, account
     <section className={styles.activityPanel}>
       <div className={styles.panelHeading}>
         <div><p className={styles.eyebrow}>{liveAccount ? "LIVE ACCOUNT" : "DEMO ACCOUNT"}</p><h2>Open positions <span className={styles.countPill}>{positions.length}</span></h2><p className={styles.panelSubtext}>Open Deriv contracts · current profit/loss updates when available.</p></div>
-        <button type="button" className={styles.panelActionButton} onClick={onRefresh} disabled={busy}>Refresh</button>
+        <button type="button" className={styles.panelActionButton} onClick={onRefresh} disabled={busy || activityLoading}>Refresh</button>
       </div>
       {positions.length === 0 ? <div className={styles.emptyState}>
         <span className={styles.emptyIcon}>◷</span><strong>No open positions</strong><p>After Deriv confirms an order, active contracts appear here with their current status and profit/loss.</p>
@@ -90,7 +96,7 @@ export default function TradingActivity({ positions, activity, currency, account
       <div className={styles.panelHeading}>
         <div><p className={styles.eyebrow}>ACCOUNT STATEMENT</p><h2>Recent activity</h2><p className={styles.panelSubtext}>Latest transactions returned by Deriv.</p></div>
         <div className={styles.panelActions}>
-          <button type="button" className={styles.panelActionButton} onClick={onRefresh} disabled={busy}>Refresh</button>
+          <button type="button" className={styles.panelActionButton} onClick={onRefresh} disabled={busy || activityLoading}>Refresh</button>
           <button type="button" className={styles.panelActionButton} onClick={exportStatement} disabled={activity.length === 0}>Export CSV</button>
         </div>
       </div>
@@ -103,6 +109,12 @@ export default function TradingActivity({ positions, activity, currency, account
           <div className={styles.activityAmount}><strong className={item.amount === null ? "" : item.amount < 0 ? styles.negative : styles.positive}>{money(item.amount, item.currency || currency)}</strong>{item.balance !== null && <small>Balance {money(item.balance, item.currency || currency)}</small>}</div>
         </article>)}
       </div>}
+      {activityHasMore && <div className={styles.statementPagination}>
+        <button type="button" className={styles.panelActionButton} onClick={onLoadMore} disabled={activityLoading}>
+          {activityLoading ? "Loading transactions…" : "Load older transactions"}
+        </button>
+      </div>}
+      {activityLoading && activity.length === 0 && <p className={styles.statementFootnote}>Loading statement from Deriv…</p>}
       <p className={styles.statementFootnote}>Export includes the transactions currently loaded from Deriv, not the account's full lifetime archive.</p>
     </section>
   </div>;
