@@ -341,16 +341,20 @@ export function useTradingSession(
           if (message.msg_type === "buy" && message.buy && buyRequestRef.current !== null && message.req_id === buyRequestRef.current) {
             clearTimeoutRef();
             buyRequestRef.current = null;
-            if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
-            setOrderResolutionRequired(false);
             setBusy(false);
             setQuote(null);
             const contractId = String(message.buy.contract_id ?? "");
             if (!contractId) {
-              setStatus("Deriv returned a buy response without a contract ID. Check account activity before retrying.");
+              // A success-shaped response without a contract ID is not proof
+              // that the order failed. Keep the account locked for reconciliation.
+              if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "unknown");
+              setOrderResolutionRequired(true);
+              setStatus("Deriv returned a buy response without a contract ID. Order entry is paused; reconcile positions and statement before retrying.");
               refreshAccount();
               return;
             }
+            if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
+            setOrderResolutionRequired(false);
             setStatus((isRealAccount ? "Real-money trade" : "Demo trade") + " confirmed by Deriv. Contract " + contractId + " is being added to your account activity.");
             const monitorId = nextId();
             subscribedContractIdsRef.current.add(contractId);
