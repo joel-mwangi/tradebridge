@@ -5,18 +5,23 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import AuthShell from "@/components/auth-shell";
+import GoogleSignInButton from "@/components/google-sign-in-button";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [nextPath, setNextPath] = useState("/");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const requested = params.get("next");
+    if (requested && requested.startsWith("/") && !requested.startsWith("//")) setNextPath(requested);
+
     if (params.get("error") === "configuration") {
-      setMessage("Platform authentication is not configured yet. Add the Supabase environment variables in Vercel.");
-    } else if (params.get("error") === "callback") {
+      setMessage("Sign-in is temporarily unavailable. Please try again later.");
+    } else if (params.get("error") === "callback" || params.get("error") === "google") {
       setMessage("We could not complete sign-in. Please try again.");
     } else if (params.get("signed_out") === "1") {
       setMessage("You have signed out of TradeBridge.");
@@ -32,20 +37,23 @@ export default function LoginPage() {
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) setMessage(error.message);
-      else {
-        const requested = new URLSearchParams(window.location.search).get("next");
-        const destination = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/";
-        window.location.assign(destination);
+      if (error) {
+        setMessage("We could not sign you in with those details. Check them and try again.");
+      } else {
+        window.location.assign(nextPath);
       }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+    } catch {
+      setMessage("Unable to sign in right now. Please try again.");
     } finally {
       setBusy(false);
     }
   }
 
   return <AuthShell title="Welcome back" subtitle="Sign in to your TradeBridge account to access your trading workspace.">
+    <div className="auth-social">
+      <GoogleSignInButton next={nextPath} />
+      <div className="auth-divider"><span>or sign in with email</span></div>
+    </div>
     <form className="auth-form" onSubmit={submit}>
       <label htmlFor="email">Email address</label>
       <input id="email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required />
