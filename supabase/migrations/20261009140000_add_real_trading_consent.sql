@@ -1,5 +1,5 @@
 -- Persist per-user, per-real-account opt-in for live-money trading.
--- Live orders remain account-scoped to the authenticated Deriv identity.
+-- Clients may read their own setting, but only trusted server-side routes may mutate it.
 create table if not exists public.deriv_live_trading_consents (
   user_id uuid not null references auth.users (id) on delete cascade,
   deriv_account_id text not null references public.deriv_account_links (deriv_account_id) on delete cascade,
@@ -25,24 +25,19 @@ create index if not exists deriv_live_trading_consents_account_idx
   on public.deriv_live_trading_consents (deriv_account_id);
 
 alter table public.deriv_live_trading_consents enable row level security;
-revoke all on table public.deriv_live_trading_consents from anon, authenticated;
-grant select, insert, update on table public.deriv_live_trading_consents to authenticated;
 
+-- Do not grant client INSERT or UPDATE. A client could otherwise forge the
+-- acknowledgement through PostgREST without visiting the consent UI/API route.
+revoke all on table public.deriv_live_trading_consents from public, anon, authenticated;
+grant select on table public.deriv_live_trading_consents to authenticated;
+grant all on table public.deriv_live_trading_consents to service_role;
+
+drop policy if exists "Users can create their own live trading consent" on public.deriv_live_trading_consents;
+drop policy if exists "Users can update their own live trading consent" on public.deriv_live_trading_consents;
 drop policy if exists "Users can read their own live trading consent" on public.deriv_live_trading_consents;
 create policy "Users can read their own live trading consent"
   on public.deriv_live_trading_consents for select to authenticated
   using ((select auth.uid()) = user_id);
-
-drop policy if exists "Users can create their own live trading consent" on public.deriv_live_trading_consents;
-create policy "Users can create their own live trading consent"
-  on public.deriv_live_trading_consents for insert to authenticated
-  with check ((select auth.uid()) = user_id);
-
-drop policy if exists "Users can update their own live trading consent" on public.deriv_live_trading_consents;
-create policy "Users can update their own live trading consent"
-  on public.deriv_live_trading_consents for update to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
 
 create or replace function public.set_deriv_live_consent_updated_at()
 returns trigger
