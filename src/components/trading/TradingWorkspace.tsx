@@ -52,7 +52,6 @@ export default function TradingWorkspace() {
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [authMessage, setAuthMessage] = useState("Checking your Deriv connection…");
-  const [loadingAccounts, setLoadingAccounts] = useState(true);
   const { markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket } = useMarketData();
   const demoAccounts = accounts.filter((item) => (item.account_type ?? "").toLowerCase() === "demo");
   const activeAccount = demoAccounts.find((item) => item.account_id === selectedAccountId) ?? demoAccounts[0] ?? null;
@@ -90,9 +89,7 @@ export default function TradingWorkspace() {
           setAuthMessage("Could not verify the Deriv connection. Check your connection, then reconnect Deriv.");
         }
       })
-      .finally(() => {
-        if (active) setLoadingAccounts(false);
-      });
+      ;
 
     return () => { active = false; };
   }, []);
