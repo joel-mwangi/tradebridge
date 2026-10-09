@@ -37,7 +37,7 @@ test("unresolved order state is shared across tabs, rather than isolated to sess
 });
 
 test("buy and early-sale timeouts persist an unresolved-order lock", () => {
-  assert.match(tradingHook, /writeOrderResolution\\(orderResolutionKey, "unknown"\\)[\\s\\S]{0,500}Deriv did not confirm the order in time/);
+  assert.match(tradingHook, /writeOrderResolution\(orderResolutionKey, "unknown"\)[\s\S]{0,500}Deriv did not confirm the order in time/);
   assert.match(tradingHook, /writeOrderResolution\(orderResolutionKey, "unknown"\)[\s\S]{0,250}Deriv did not confirm the sale in time/);
   assert.match(tradingHook, /if \(buyRequestRef\.current !== null \|\| sellRequestRef\.current !== null\)/);
 });
