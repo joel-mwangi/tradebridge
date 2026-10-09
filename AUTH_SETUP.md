@@ -16,15 +16,17 @@ Redeploy after saving the variables. Do not commit actual credentials to GitHub.
 In Supabase Dashboard → Authentication → URL Configuration:
 
 - Set the Site URL to `https://swigtrade.vercel.app`.
-- Add `https://swigtrade.vercel.app/auth/callback` and `https://swigtrade.vercel.app/auth/callback?next=/reset-password` to the allowed redirect URLs.
+- Add `https://swigtrade.vercel.app/auth/callback` and `https://swigtrade.vercel.app/auth/callback?next=/reset-password` to the allowed redirect URLs. Google OAuth returns through this callback; keep the exact deployed origin on the allow list.
 - Add the equivalent Preview deployment callback URL(s) if you test authentication on Vercel previews.
 - For local development, allow `http://localhost:3000/auth/callback` and `http://localhost:3000/auth/callback?next=/reset-password`.
 
-Enable email/password authentication. If email confirmation is enabled, configure the confirmation email to redirect through the callback URL above. The password-reset flow uses the same callback with `?next=/reset-password`.
+Enable email/password authentication. Under Authentication → Sign In / Providers, enable Google and save the Google OAuth client ID and client secret there (not in Vercel or GitHub). In Google Cloud Console, add Supabase's displayed callback URL as an authorized redirect URI. In Supabase's URL Configuration, allow the TradeBridge callback URL above. If email confirmation is enabled, configure the confirmation email to redirect through the callback URL above. The password-reset flow uses the same callback with `?next=/reset-password`.
 
 ## 3. User flows
 
-- `/register`: create a TradeBridge account.
+- `/register`: create a TradeBridge account with email/password or Google.
+- `/login`: sign in with email/password or Google.
+- `/auth/google`: server-side route that initiates Google OAuth without logging provider responses or tokens.
 - `/login`: sign in to the platform.
 - `/forgot-password`: request a password reset email.
 - `/reset-password`: set a new password after following the emailed link.
@@ -41,4 +43,4 @@ The middleware verifies sessions server-side and protects dashboard pages and AP
 5. While signed out, request `/api/auth/deriv/accounts`; it should return HTTP 401.
 6. Test password recovery and reconnect Deriv while signed in.
 
-A successful code commit does not itself confirm that Supabase project settings or Vercel environment variables are configured.
+A successful code commit does not itself confirm that Supabase project settings or Vercel environment variables are configured. Browser redirects and OAuth network requests are inherently visible in developer tools; this implementation avoids logging tokens/secrets and uses only the public Supabase publishable key in app code. Never put the Google client secret, Supabase secret key, or service-role key in `NEXT_PUBLIC_*` variables or client components.
