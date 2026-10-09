@@ -13,22 +13,55 @@ export default function Home() {
   const [selected, setSelected] = useState(markets[0]);
   const [direction, setDirection] = useState<"Buy" | "Sell">("Buy");
   const [connected, setConnected] = useState(false);
+  const [accounts, setAccounts] = useState<Array<{
+    account_id: string;
+    balance: number | null;
+    currency: string | null;
+    account_type: string | null;
+    status: string | null;
+  }>>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const activeAccount = accounts.find((account) => account.account_id === selectedAccountId) ?? accounts[0];
 
   useEffect(() => {
     let active = true;
-    fetch("/api/auth/deriv/status", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data: { connected?: boolean }) => {
-        if (active) setConnected(Boolean(data.connected));
+    fetch("/api/auth/deriv/accounts", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json() as {
+          connected?: boolean;
+          accounts?: Array<{
+            account_id: string;
+            balance: number | null;
+            currency: string | null;
+            account_type: string | null;
+            status: string | null;
+          }>;
+          error?: string;
+        };
+        if (!active) return;
+        setConnected(Boolean(data.connected));
+        setAccounts(data.accounts ?? []);
+        if (data.accounts?.length) setSelectedAccountId((current) =>
+          data.accounts?.some((account) => account.account_id === current)
+            ? current
+            : data.accounts?.[0].account_id ?? ""
+        );
+        if (data.connected) setAuthMessage("Deriv connection verified. Account details were retrieved from Deriv.");
+        else if (data.error === "token_expired") setAuthMessage("Your Deriv session expired or was revoked. Please connect again.");
+        else if (data.error === "insufficient_scope") setAuthMessage("Deriv denied account access. Reconnect and approve the required trading permission.");
+        else if (data.error === "deriv_unavailable") setAuthMessage("Deriv could not be reached right now. Please retry shortly.");
       })
       .catch(() => {
-        if (active) setConnected(false);
+        if (active) {
+          setConnected(false);
+          setAuthMessage("Could not verify the Deriv connection. Please retry.");
+        }
       });
 
     const params = new URLSearchParams(window.location.search);
     const error = params.get("auth_error");
-    if (params.get("connection") === "connected") setAuthMessage("Deriv authorization completed. Account data has not been loaded yet.");
+    if (params.get("connection") === "connected") setAuthMessage("Authorization completed. Verifying your Deriv account…");
     if (error === "configuration") setAuthMessage("Deriv OAuth is not configured yet. Add the server environment variables and register the exact callback URL.");
     if (error === "cancelled") setAuthMessage("Deriv authorization was cancelled.");
     if (error === "invalid_callback") setAuthMessage("We could not verify the Deriv authorization response. Please try again.");
@@ -51,7 +84,7 @@ export default function Home() {
           <div className="intro"><div><p className="eyebrow">YOUR TRADING WORKSPACE</p><h1>Trade with a clearer view.</h1><p className="muted">Markets, account information, and activity in one workspace.</p></div>{connected ? <form action="/api/auth/deriv/disconnect" method="post"><button className="primary" type="submit">Disconnect Deriv</button></form> : <div className="connect-actions"><button className="primary" onClick={() => { window.location.href = "/api/auth/deriv/start"; }}>Connect Deriv ↗</button><a className="signup-link" href="/api/auth/deriv/start?mode=signup">Create account</a></div>}</div>
           <section className="notice"><span className="notice-icon">i</span><div><strong>{connected ? "Deriv authorized — preview mode remains active" : "Preview mode — no live account connected"}</strong><p>{authMessage || "Market movements below are illustrative placeholders. This version cannot place real trades."}</p></div><b>DEMO</b></section>
           <div className="stats">
-            <article className="card"><span>Account balance</span><strong>— <small>USD</small></strong><p>Connect an account to load balance</p></article>
+            <article className="card"><span>Account balance</span><strong>{activeAccount?.balance !== null && activeAccount?.balance !== undefined ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(activeAccount.balance) : "—"} <small>{activeAccount?.currency ?? ""}</small></strong><p>{activeAccount ? `${activeAccount.account_type ?? "Trading"} account · ${activeAccount.account_id}` : connected ? "No account details were returned" : "Connect Deriv to load verified balance"}</p>{accounts.length > 1 && <select className="account-select" aria-label="Select Deriv account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.account_id} · {account.account_type ?? "Account"}</option>)}</select>}</article>
             <article className="card"><span>Open positions</span><strong>—</strong><p>No live positions loaded</p></article>
             <article className="card"><span>Today’s P/L</span><strong>— <small>USD</small></strong><p>Performance appears after connection</p></article>
           </div>
