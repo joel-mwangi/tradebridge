@@ -7,7 +7,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const API_BASE = "https://api.derivws.com";
-const ACKNOWLEDGEMENT_VERSION = "REAL_MONEY_RISK_ACKNOWLEDGEMENT_V1";
 const headers = { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" };
 
 function clearDerivCookies(response: NextResponse) {
@@ -67,23 +66,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unsupported_account_type" }, { status: 403, headers });
   }
 
+  // A browser-held authenticated Deriv Options WebSocket can submit orders
+  // outside TradeBridge's stake/loss checks. Do not issue a trading-capable
+  // Real-account OTP URL until every order can pass through a server-side
+  // execution gateway with enforceable limits and revocation. Real account
+  // summary/details remain available from the OAuth-backed accounts endpoint.
   if (accountType === "real") {
-    const { data: consent, error } = await context.supabase
-      .from("deriv_live_trading_consents")
-      .select("enabled, acknowledgement_version, max_stake, max_daily_loss")
-      .eq("user_id", context.userId)
-      .eq("deriv_account_id", accountId)
-      .maybeSingle();
-
-    if (error) {
-      return NextResponse.json(
-        { error: "live_consent_schema_missing", message: "Apply the real-trading consent migration before enabling live trading." },
-        { status: 503, headers },
-      );
-    }
-    if (!consent?.enabled || consent.acknowledgement_version !== ACKNOWLEDGEMENT_VERSION) {
-      return NextResponse.json({ error: "live_consent_required" }, { status: 403, headers });
-    }
+    return NextResponse.json({
+      error: "real_execution_gateway_unavailable",
+      message: "Real-account order sessions are disabled until server-side order controls can enforce risk limits for every order.",
+    }, { status: 503, headers });
   }
 
   try {
@@ -120,13 +112,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "invalid_trading_session" }, { status: 502, headers });
     }
 
-    const expectedPath = accountType === "real"
-      ? "/trading/v1/options/ws/real"
-      : "/trading/v1/options/ws/demo";
     if (
       socketUrl.protocol !== "wss:" ||
       socketUrl.hostname !== "api.derivws.com" ||
-      socketUrl.pathname !== expectedPath ||
+      socketUrl.pathname !== "/trading/v1/options/ws/demo" ||
       !socketUrl.searchParams.has("otp")
     ) {
       return NextResponse.json({ error: "trading_session_account_type_mismatch" }, { status: 502, headers });
@@ -134,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       url: socketUrl.toString(),
-      account_type: accountType,
+      account_type: "demo",
       account_id: accountId,
     }, { headers });
   } catch {
