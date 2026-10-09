@@ -132,6 +132,11 @@
 .chartFootnote { margin: 12px 0 0; color: #99a4b0; font-size: 9px; line-height: 1.6; }
 .ticketPanel { position: sticky; top: 14px; }
 .demoLock { flex-shrink: 0; padding: 6px 8px; border-radius: 6px; background: #eaf8f3; color: #128269; font-size: 8px; font-weight: 850; letter-spacing: .6px; }
+.realLock { flex-shrink: 0; padding: 6px 8px; border-radius: 6px; background: #fff3e3; color: #9b5a17; font-size: 8px; font-weight: 850; letter-spacing: .6px; }
+.accountModeNotice { display: grid; gap: 5px; margin: 0 0 13px; padding: 11px 12px; border: 1px solid #f0d7b4; border-radius: 8px; background: #fffaf2; color: #80551f; font-size: 10px; line-height: 1.55; }
+.accountModeNotice strong { font-size: 10px; }
+.accountModeNotice span { color: #886d4c; }
+.ticketPanel button:disabled, .ticketPanel input:disabled { cursor: not-allowed; opacity: .56; }
 .tradeMarket { display: flex; align-items: center; gap: 11px; padding: 13px 0 16px; margin-bottom: 16px; border-bottom: 1px solid #edf1f4; }
 .tradeMarketIcon { width: 40px; height: 40px; background: #eaf8f3; color: #12866a; font-size: 14px; }
 .tradeMarket>div { display: grid; gap: 5px; min-width: 0; }
