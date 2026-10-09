@@ -86,6 +86,10 @@ export function useTradingSession(
   const [activity, setActivity] = useState<AccountActivity[]>([]);
   const [balance, setBalance] = useState(EMPTY_BALANCE);
   const [realizedProfit, setRealizedProfit] = useState<number | null>(null);
+  const [orderResolutionRequired, setOrderResolutionRequired] = useState(false);
+  const orderResolutionKey = account?.account_id
+    ? `tradebridge:order-resolution-required:${account.account_id}`
+    : null;
 
   const socketRef = useRef<WebSocket | null>(null);
   const sequenceRef = useRef(100);
@@ -128,6 +132,18 @@ export function useTradingSession(
         req_id: profitId,
       });
     };
+
+    const storedOrderState = orderResolutionKey ? window.sessionStorage.getItem(orderResolutionKey) : null;
+    if (storedOrderState) {
+      // If the tab was refreshed or navigated away while a buy was pending,
+      // treat it as ambiguous until the user reconciles it in Deriv.
+      if (orderResolutionKey && storedOrderState === "pending") {
+        window.sessionStorage.setItem(orderResolutionKey, "unknown");
+      }
+      setOrderResolutionRequired(true);
+    } else {
+      setOrderResolutionRequired(false);
+    }
 
     setQuote(null);
     setStatus("");
@@ -230,6 +246,9 @@ export function useTradingSession(
             } else if (buyRequestRef.current !== null && requestId === buyRequestRef.current) {
               clearTimeoutRef();
               buyRequestRef.current = null;
+              if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
+              setOrderResolutionRequired(false);
+              setQuote(null);
               setBusy(false);
               setStatus(message.error.message ?? "Deriv rejected the order. Check account activity before retrying.");
             } else if (sellRequestRef.current !== null && requestId === sellRequestRef.current.id) {
@@ -322,6 +341,8 @@ export function useTradingSession(
           if (message.msg_type === "buy" && message.buy && buyRequestRef.current !== null && message.req_id === buyRequestRef.current) {
             clearTimeoutRef();
             buyRequestRef.current = null;
+            if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
+            setOrderResolutionRequired(false);
             setBusy(false);
             setQuote(null);
             const contractId = String(message.buy.contract_id ?? "");
@@ -384,13 +405,18 @@ export function useTradingSession(
           if (socketRef.current === localSocket) socketRef.current = null;
           if (refreshTimer) window.clearInterval(refreshTimer);
           refreshTimer = null;
+          if (buyRequestRef.current !== null) {
+            if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "unknown");
+            setOrderResolutionRequired(true);
+            setQuote(null);
+          }
           if (quoteRequestRef.current || buyRequestRef.current !== null || sellRequestRef.current !== null) {
             clearTimeoutRef();
             quoteRequestRef.current = null;
             buyRequestRef.current = null;
             sellRequestRef.current = null;
             setBusy(false);
-            setStatus("The trading connection closed before the request was confirmed. Check account activity before submitting another order.");
+            setStatus("The connection closed before the request was confirmed. Check Deriv directly; the order outcome may be unknown.");
           }
           setSessionState(isRealAccount ? "Real trading disconnected" : "Demo trading disconnected");
         };
@@ -408,6 +434,10 @@ export function useTradingSession(
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
       refreshAccountRef.current = null;
+      if (buyRequestRef.current !== null && orderResolutionKey) {
+        // A navigation during a submitted buy must not silently reset its state.
+        window.sessionStorage.setItem(orderResolutionKey, "unknown");
+      }
       clearTimeoutRef();
       quoteRequestRef.current = null;
       buyRequestRef.current = null;
@@ -420,6 +450,10 @@ export function useTradingSession(
   }, [connected, account?.account_id, account?.account_type, account?.currency, realTradingEnabled]);
 
   function requestQuote(input: TradeInput) {
+    if (orderResolutionRequired) {
+      setStatus("Order entry is paused because a previous buy has an unknown outcome. Check open positions and account statement in Deriv before unlocking.");
+      return;
+    }
     const activeSocket = socketRef.current;
     const accountType = (account?.account_type ?? "").toLowerCase();
     const isDemoAccount = accountType === "demo";
@@ -478,6 +512,10 @@ export function useTradingSession(
   }
 
   function confirmQuote() {
+    if (orderResolutionRequired || buyRequestRef.current !== null) {
+      setStatus("Order entry is paused until the previous submission outcome is resolved.");
+      return;
+    }
     const activeSocket = socketRef.current;
     if (!quote || !activeSocket || activeSocket.readyState !== WebSocket.OPEN || busy) {
       setStatus("Request a fresh quote and wait for it to arrive before confirming.");
@@ -510,19 +548,36 @@ export function useTradingSession(
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     const reqId = ++sequenceRef.current;
     buyRequestRef.current = reqId;
+    if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "pending");
     setBusy(true);
     setStatus("Submitting the confirmed " + (isRealAccount ? "real-money" : "demo") + " order to Deriv…");
     activeSocket.send(JSON.stringify({ buy: quote.id, price: quote.askPrice, req_id: reqId }));
+    setQuote(null);
     timeoutRef.current = setTimeout(() => {
       if (buyRequestRef.current !== reqId) return;
       buyRequestRef.current = null;
+      if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "unknown");
+      setOrderResolutionRequired(true);
+      setQuote(null);
       setBusy(false);
-      setStatus("Deriv did not confirm the order in time. Check account activity before trying again to avoid a duplicate.");
+      refreshAfterTimeout();
+      setStatus("Deriv did not confirm the order in time. Trading is paused; reconcile positions and statement in Deriv before unlocking.");
     }, 20_000);
   }
 
   function refreshAccountNow() {
     refreshAccountRef.current?.();
+  }
+
+  function acknowledgeOrderResolution() {
+    if (!orderResolutionRequired) return;
+    const confirmed = window.confirm(
+      "Before unlocking, open Deriv directly and reconcile open positions and account statement around the submission time. Only continue if you have resolved the outcome and are sure no duplicate trade will be placed. If anything is unclear, cancel and keep trading paused."
+    );
+    if (!confirmed) return;
+    if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
+    setOrderResolutionRequired(false);
+    setStatus("Manual reconciliation acknowledged. Request a fresh quote before trading.");
   }
 
   function sellPosition(contractId: string) {
@@ -566,5 +621,9 @@ export function useTradingSession(
     }
   }
 
-  return { sessionState, status, busy, quote, positions, activity, balance, realizedProfit, requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow };
+  return {
+    sessionState, status, busy, quote, positions, activity, balance, realizedProfit,
+    orderResolutionRequired, acknowledgeOrderResolution,
+    requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow,
+  };
 }
