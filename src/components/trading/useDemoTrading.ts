@@ -90,7 +90,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
   useEffect(() => {
     let cancelled = false;
     let localSocket: WebSocket | null = null;
-    let refreshTimer: ReturnType<typeof window.setInterval> | null = null;
+    let refreshTimer: number | null = null;
 
     const clearTimeoutRef = () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -142,6 +142,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       };
     }
 
+    const activeAccount = account;
     setSessionState("Opening secure demo trading session");
 
     async function connect() {
@@ -149,7 +150,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
         const response = await fetch("/api/auth/deriv/demo-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ account_id: account.account_id }),
+          body: JSON.stringify({ account_id: activeAccount.account_id }),
           cache: "no-store",
         });
         const data = await response.json() as { url?: string; error?: string };
@@ -214,7 +215,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
           if (message.msg_type === "balance" && message.balance) {
             setBalance({
               balance: numeric(message.balance.balance),
-              currency: String(message.balance.currency ?? account.currency ?? ""),
+              currency: String(message.balance.currency ?? activeAccount.currency ?? ""),
             });
             return;
           }
@@ -274,7 +275,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
               contractType: input.contractType,
               stake: input.stake,
               duration: input.duration,
-              currency: account.currency ?? "USD",
+              currency: activeAccount.currency ?? "USD",
             });
             setBusy(false);
             setStatus("Fresh quote received from Deriv. Review the price and potential payout, then confirm the demo order.");
@@ -376,7 +377,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       return;
     }
     if (!Number.isFinite(input.stake) || input.stake < 1 || input.stake > 1000) {
-      setStatus("Enter a stake between 1 and 1,000 " + (account.currency ?? "USD") + ".");
+      setStatus("Enter a stake between 1 and 1,000 " + (activeAccount.currency ?? "USD") + ".");
       return;
     }
     if (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 86400) {
@@ -395,7 +396,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       amount: input.stake,
       basis: "stake",
       contract_type: input.contractType,
-      currency: account.currency ?? "USD",
+      currency: activeAccount.currency ?? "USD",
       duration: input.duration,
       duration_unit: "s",
       underlying_symbol: input.symbol,
