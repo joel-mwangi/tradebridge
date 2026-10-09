@@ -33,7 +33,11 @@ export default function LoginPage() {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) setMessage(error.message);
-      else window.location.assign("/");
+      else {
+        const requested = new URLSearchParams(window.location.search).get("next");
+        const destination = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/";
+        window.location.assign(destination);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
     } finally {
