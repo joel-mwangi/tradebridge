@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchDerivAccounts } from "@/lib/deriv/accounts";
 import { getAuthenticatedDerivContext } from "@/lib/deriv/authenticated";
 import { getOwnedDerivAccountIds } from "@/lib/deriv/ownership";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -94,66 +93,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "account_not_linked" }, { status: 403, headers });
   }
 
-  if (!body.enabled) {
-    try {
-      const admin = createAdminClient();
-      const { error } = await admin
-        .from("deriv_live_trading_consents")
-        .update({ enabled: false })
-        .eq("user_id", context.userId)
-        .eq("deriv_account_id", accountId);
-
-      if (error) return NextResponse.json({ error: "live_consent_write_failed" }, { status: 503, headers });
-      return NextResponse.json({ enabled: false }, { headers });
-    } catch {
-      return NextResponse.json({ error: "live_consent_write_unavailable" }, { status: 503, headers });
-    }
+  if (body.enabled) {
+    // Acknowledgement alone is not a risk control. Never record new consent
+    // while TradeBridge cannot enforce stake/loss limits on the server.
+    return NextResponse.json({
+      error: "real_execution_gateway_unavailable",
+      message: "Real-money consent cannot be enabled until a server-side execution gateway enforces risk limits.",
+    }, { status: 503, headers });
   }
-
-  const maxStake = Number(body.max_stake);
-  const maxDailyLoss = Number(body.max_daily_loss);
-  if (body.acknowledgement !== ACKNOWLEDGEMENT_VERSION) {
-    return NextResponse.json({ error: "risk_acknowledgement_required" }, { status: 400, headers });
-  }
-  if (!Number.isFinite(maxStake) || maxStake < 1 || maxStake > 10000) {
-    return NextResponse.json({ error: "invalid_max_stake" }, { status: 400, headers });
-  }
-  if (!Number.isFinite(maxDailyLoss) || maxDailyLoss < 1 || maxDailyLoss > 100000) {
-    return NextResponse.json({ error: "invalid_max_daily_loss" }, { status: 400, headers });
-  }
-
-  const accountsResult = await fetchDerivAccounts(context.token);
-  if (!accountsResult.ok) {
-    return NextResponse.json(
-      { error: accountsResult.error === "unauthorized" ? "token_expired" : "account_verification_failed" },
-      { status: accountsResult.error === "unauthorized" ? 401 : accountsResult.error === "forbidden" ? 403 : 502, headers },
-    );
-  }
-
-  const account = accountsResult.accounts.find((item) => item.account_id === accountId);
-  if (!account) return NextResponse.json({ error: "account_not_found" }, { status: 404, headers });
-  if ((account.account_type ?? "").toLowerCase() !== "real") {
-    return NextResponse.json({ error: "real_account_required" }, { status: 403, headers });
-  }
-
-  const row = {
-    user_id: context.userId,
-    deriv_account_id: accountId,
-    enabled: true,
-    acknowledgement_version: ACKNOWLEDGEMENT_VERSION,
-    acknowledged_at: new Date().toISOString(),
-    max_stake: maxStake,
-    max_daily_loss: maxDailyLoss,
-  };
 
   try {
     const admin = createAdminClient();
     const { error } = await admin
       .from("deriv_live_trading_consents")
-      .upsert(row, { onConflict: "user_id,deriv_account_id" });
+      .update({ enabled: false })
+      .eq("user_id", context.userId)
+      .eq("deriv_account_id", accountId);
 
     if (error) return NextResponse.json({ error: "live_consent_write_failed" }, { status: 503, headers });
-    return NextResponse.json({ enabled: true, max_stake: maxStake, max_daily_loss: maxDailyLoss }, { headers });
+    return NextResponse.json({ enabled: false }, { headers });
   } catch {
     return NextResponse.json({ error: "live_consent_write_unavailable" }, { status: 503, headers });
   }
