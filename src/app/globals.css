@@ -3,3 +3,7 @@
 .connect-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.signup-link{font-size:12px;font-weight:700;color:#16876f;white-space:nowrap}.signup-link:hover{text-decoration:underline}.side-status .status-dot{background:#dfa747}.side-status:has(small:first-child){color:white}@media(max-width:560px){.connect-actions{align-items:stretch;flex-direction:column;gap:12px}.signup-link{text-align:center}}
 
 .account-select{display:block;max-width:100%;margin-top:12px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font-size:11px}
+
+.market>strong{display:grid;gap:4px;text-align:right;font-size:11px;font-variant-numeric:tabular-nums;max-width:100px;overflow-wrap:anywhere}
+.quote-change{display:block;font-size:9px;color:#8d99a7;font-weight:500}
+.live-price{grid-column:1/-1;font:800 25px Manrope,sans-serif;color:var(--ink);padding:12px 0 5px;font-variant-numeric:tabular-nums}
