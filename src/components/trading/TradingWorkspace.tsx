@@ -134,7 +134,7 @@ export default function TradingWorkspace() {
           : eligible[0]?.account_id ?? returnedAccounts.find(isRealAccount)?.account_id ?? returnedAccounts[0]?.account_id ?? "");
         if (firstAuthMessage) setAuthMessage(firstAuthMessage);
         else if (data.connected && eligible.length > 0) setAuthMessage("Deriv connected. Demo and real accounts are checked against your linked account ownership.");
-        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Deriv connected. A linked real account is available; live order entry stays locked until you accept the risk disclosure.");
+        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Deriv connected. Your linked Real account is read-only in TradeBridge; use a Demo account to place trades.");
         else if (data.connected) setAuthMessage("Deriv connected, but no supported Options account was returned. Refresh or reconnect Deriv.");
         else setAuthMessage(accountErrorMessage(data.error));
       })
