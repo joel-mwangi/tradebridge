@@ -22,11 +22,13 @@ export default function DemoTradeTicket({
   const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("60");
-  const isDemo = (account?.account_type ?? "").toLowerCase() === "demo";
+  const accountType = (account?.account_type ?? "").toLowerCase();
+  const isDemo = accountType === "demo";
+  const isRealAccount = accountType === "real";
   const ready = connected && isDemo && sessionState === "Demo trading connected" && Boolean(market);
 
   function submitQuote() {
-    if (!market) return;
+    if (!connected || !isDemo || !market) return;
     const stakeValue = Number(stake);
     const durationValue = Number(duration);
     requestQuote({ symbol: market.symbol, contractType: direction, stake: stakeValue, duration: durationValue });
@@ -36,14 +38,15 @@ export default function DemoTradeTicket({
 
   return <section className={styles.ticketPanel} id="ticket">
     <div className={styles.panelHeading}>
-      <div><p className={styles.eyebrow}>ORDER ENTRY</p><h2>Demo trade ticket</h2><p className={styles.panelSubtext}>Quote first. Confirm second.</p></div>
-      <span className={styles.demoLock}>DEMO ONLY</span>
+      <div><p className={styles.eyebrow}>ORDER ENTRY</p><h2>{isRealAccount ? "Real account · read-only" : "Demo trade ticket"}</h2><p className={styles.panelSubtext}>{isRealAccount ? "Real-money order placement is disabled." : "Quote first. Confirm second."}</p></div>
+      <span className={isRealAccount ? styles.realLock : styles.demoLock}>{isRealAccount ? "READ-ONLY" : "DEMO ONLY"}</span>
     </div>
+    {isRealAccount && <div className={styles.accountModeNotice} role="note"><strong>Real account is view-only</strong><span>Your account is listed for visibility, but TradeBridge does not send real-money orders. Switch to a Demo account to request quotes and trade using virtual funds.</span></div>}
     <div className={styles.tradeMarket}>
       <span className={styles.tradeMarketIcon}>{market?.market === "forex" ? "FX" : "↗"}</span>
       <div><strong>{market?.name ?? "Select a market"}</strong><small>{market?.symbol ?? "No active market selected"}</small></div>
     </div>
-    <fieldset className={styles.directionField}>
+    <fieldset className={styles.directionField} disabled={!connected || !isDemo}>
       <legend>Market direction</legend>
       <div className={styles.directionChoices}>
         <button type="button" className={direction === "CALL" ? styles.callSelected : styles.callButton} onClick={() => setDirection("CALL")} aria-pressed={direction === "CALL"}>
@@ -58,20 +61,20 @@ export default function DemoTradeTicket({
     <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake amount</label>
     <div className={styles.inputShell}>
       <span>{account?.currency ?? "—"}</span>
-      <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max="1000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="stake-note" />
+      <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max="1000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="stake-note" disabled={!connected || !isDemo} />
     </div>
     <div className={styles.presets} aria-label="Stake presets">
-      {["1", "5", "10", "25"].map((value) => <button key={value} type="button" className={stake === value ? styles.presetActive : styles.preset} onClick={() => setStake(value)}>{value} {account?.currency ?? ""}</button>)}
+      {["1", "5", "10", "25"].map((value) => <button key={value} type="button" className={stake === value ? styles.presetActive : styles.preset} onClick={() => setStake(value)} disabled={!connected || !isDemo}>{value} {account?.currency ?? ""}</button>)}
     </div>
     <p className={styles.fieldHint} id="stake-note">Use virtual funds only. Deriv validates the minimum stake for the selected market and currency.</p>
 
     <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Contract duration</label>
     <div className={styles.inputShell}>
-      <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max="86400" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="duration-note" />
+      <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max="86400" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="duration-note" disabled={!connected || !isDemo} />
       <span>seconds</span>
     </div>
     <div className={styles.presets} aria-label="Duration presets">
-      {[{ label: "1 min", value: "60" }, { label: "5 min", value: "300" }, { label: "10 min", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)}>{value.label}</button>)}
+      {[{ label: "1 min", value: "60" }, { label: "5 min", value: "300" }, { label: "10 min", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!connected || !isDemo}>{value.label}</button>)}
     </div>
     <p className={styles.fieldHint} id="duration-note">Duration must be between 1 and 86,400 seconds. The quote response determines the actual offered price and payout.</p>
 
@@ -96,6 +99,7 @@ export default function DemoTradeTicket({
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate demo trading.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an eligible demo account before requesting a quote.</p>}
-    {connected && account && !isDemo && <p className={styles.inlineHint}>TradeBridge restricts orders to demo accounts; real-money accounts cannot place orders here.</p>}
+    {connected && isRealAccount && <p className={styles.inlineHint}>Real-money quotes and orders are disabled. Switch to a Demo account to trade with virtual funds.</p>}
+    {connected && account && !isDemo && !isRealAccount && <p className={styles.inlineHint}>This account type is not eligible for trading. Select a Demo account.</p>}
   </section>;
 }
