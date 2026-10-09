@@ -88,8 +88,7 @@ export default function TradingWorkspace() {
           setAccounts([]);
           setAuthMessage("Could not verify the Deriv connection. Check your connection, then reconnect Deriv.");
         }
-      })
-      ;
+      });
 
     return () => { active = false; };
   }, []);
