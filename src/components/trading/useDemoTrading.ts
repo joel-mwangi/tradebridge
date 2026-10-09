@@ -90,7 +90,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
   useEffect(() => {
     let cancelled = false;
     let localSocket: WebSocket | null = null;
-    let refreshTimer: ReturnType<typeof setInterval> | null = null;
+    let refreshTimer: ReturnType<typeof window.setInterval> | null = null;
 
     const clearTimeoutRef = () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -143,7 +143,6 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
     }
 
     setSessionState("Opening secure demo trading session");
-    let localSequence = sequenceRef.current;
 
     async function connect() {
       try {
@@ -206,7 +205,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
               setBusy(false);
               setStatus(message.error.message ?? "Deriv rejected the demo order. No successful confirmation was received.");
             } else {
-              setSessionState("Demo session connected with an API warning");
+              // An account-summary failure must not disable an authenticated trading session.
               setStatus(message.error.message ?? "Deriv could not load one of the account panels.");
             }
             return;
@@ -351,7 +350,6 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       buyRequestRef.current = null;
       if (socketRef.current === localSocket) socketRef.current = null;
       localSocket?.close();
-      sequenceRef.current = localSequence;
     };
     // The account ID, connection state, and currency define this authenticated socket.
     // eslint-disable-next-line react-hooks/exhaustive-deps
