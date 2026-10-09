@@ -1,19 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchDerivAccounts } from "@/lib/deriv/accounts";
+import { getAuthenticatedDerivContext } from "@/lib/deriv/authenticated";
+import { getOwnedDerivAccountIds } from "@/lib/deriv/ownership";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const API_BASE = "https://api.derivws.com";
+const headers = { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" };
+
+function clearDerivCookies(response: NextResponse) {
+  response.cookies.delete("tradebridge_deriv_access_token");
+  response.cookies.delete("tradebridge_deriv_owner");
+}
 
 export async function POST(request: NextRequest) {
-  const headers = {
-    "Cache-Control": "no-store, max-age=0",
-    Pragma: "no-cache",
-  };
-  const token = request.cookies.get("tradebridge_deriv_access_token")?.value;
-  if (!token) {
-    return NextResponse.json({ error: "not_connected" }, { status: 401, headers });
+  const context = await getAuthenticatedDerivContext(request);
+  if (!context.ok) {
+    const response = NextResponse.json({ error: context.error }, { status: context.error === "configuration" ? 503 : 401, headers });
+    if (context.error !== "not_connected") clearDerivCookies(response);
+    return response;
   }
 
   let accountId: unknown;
@@ -30,20 +36,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_account" }, { status: 400, headers });
   }
 
-  const accountsResult = await fetchDerivAccounts(token);
+  const accountsResult = await fetchDerivAccounts(context.token);
   if (!accountsResult.ok) {
     const response = NextResponse.json(
       { error: accountsResult.error === "unauthorized" ? "token_expired" : "account_verification_failed" },
       { status: accountsResult.error === "unauthorized" ? 401 : accountsResult.error === "forbidden" ? 403 : 502, headers },
     );
-    if (accountsResult.error === "unauthorized") response.cookies.delete("tradebridge_deriv_access_token");
+    if (accountsResult.error === "unauthorized") clearDerivCookies(response);
     return response;
   }
 
-  const account = accountsResult.accounts.find((item) => item.account_id === accountId);
-  if (!account) {
-    return NextResponse.json({ error: "account_not_found" }, { status: 404, headers });
+  const ownership = await getOwnedDerivAccountIds(context.supabase, context.userId, [accountId]);
+  if (ownership.error || !ownership.accountIds) {
+    return NextResponse.json({ error: "account_linking_unavailable" }, { status: 503, headers });
   }
+  if (!ownership.accountIds.has(accountId)) {
+    return NextResponse.json({ error: "account_not_linked" }, { status: 403, headers });
+  }
+
+  const account = accountsResult.accounts.find((item) => item.account_id === accountId);
+  if (!account) return NextResponse.json({ error: "account_not_found" }, { status: 404, headers });
   if ((account.account_type ?? "").toLowerCase() !== "demo") {
     return NextResponse.json({ error: "demo_accounts_only" }, { status: 403, headers });
   }
@@ -53,10 +65,7 @@ export async function POST(request: NextRequest) {
       `${API_BASE}/trading/v1/options/accounts/${encodeURIComponent(accountId)}/otp`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+        headers: { Authorization: `Bearer ${context.token}`, Accept: "application/json" },
         cache: "no-store",
         signal: AbortSignal.timeout(12_000),
       },
@@ -64,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     if (response.status === 401) {
       const failed = NextResponse.json({ error: "token_expired" }, { status: 401, headers });
-      failed.cookies.delete("tradebridge_deriv_access_token");
+      clearDerivCookies(failed);
       return failed;
     }
     if (!response.ok) {
@@ -72,12 +81,8 @@ export async function POST(request: NextRequest) {
     }
 
     const payload: unknown = await response.json();
-    const root = typeof payload === "object" && payload !== null
-      ? payload as { data?: unknown }
-      : {};
-    const data = typeof root.data === "object" && root.data !== null
-      ? root.data as { url?: unknown }
-      : {};
+    const root = typeof payload === "object" && payload !== null ? payload as { data?: unknown } : {};
+    const data = typeof root.data === "object" && root.data !== null ? root.data as { url?: unknown } : {};
     if (typeof data.url !== "string" || !data.url.startsWith("wss://api.derivws.com/")) {
       return NextResponse.json({ error: "invalid_demo_session" }, { status: 502, headers });
     }
