@@ -81,7 +81,7 @@ The OAuth access token stays in a server-only HttpOnly cookie and is never expos
 - Every TradeBridge entry still needs a fresh quote, expires after 30 seconds in the UI, and requires a separate confirm action. Early sales also require a separate confirmation.
 - Real-money entry is disabled in the current build. Existing saved consent can be revoked, but it cannot enable a Real trading socket.
 - Disconnect attempts to revoke stored consent and clears local authorization cookies. Persistent revocation requires the server-only `SUPABASE_SERVICE_ROLE_KEY`; if Supabase is unavailable, cookie clearing still proceeds but the server cannot confirm the database update.
-- An ambiguous Demo buy timeout/connection loss pauses further entries for that account in the current browser tab. Before unlocking, reconcile open contracts and statement activity directly in Deriv; do not assume a missing UI confirmation means the trade failed.
+- An ambiguous Demo buy or early-sale timeout/connection loss pauses TradeBridge order actions for that account across tabs in the same browser profile. The lock is a client-side safety interlock, not broker-side idempotency and not a guarantee across devices or cleared browser storage. Before unlocking, reconcile open contracts and statement activity directly in Deriv; do not assume a missing UI confirmation means the order failed.
 - No live order has been placed as part of development or CI verification. Real trading must not be enabled until a server-side execution gateway exists and the complete provider integration is smoke-tested.
 - Deriv may change its API schemas, permitted contracts, account statuses, or authorization requirements; verify the current provider documentation before extending supported contract types.
 
