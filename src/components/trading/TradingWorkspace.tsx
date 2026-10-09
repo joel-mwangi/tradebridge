@@ -429,11 +429,14 @@ export default function TradingWorkspace() {
           currency={currency}
           accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
           busy={trading.busy}
+          activityLoading={trading.activityLoading}
+          activityHasMore={trading.activityHasMore}
           onSell={trading.sellPosition}
           onRefresh={trading.refreshAccount}
+          onLoadMore={trading.loadMoreActivity}
         />
 
-        <footer className={styles.footer}><span>TradeBridge · Quotes, balances, and positions from Deriv</span><span>Deriv Options · Explicit consent and confirmation required for live orders</span></footer>
+        <footer className={styles.footer}><span>TradeBridge · Quotes, balances, and positions from Deriv</span><span>Deriv Options · Demo orders only; Real accounts are read-only</span></footer>
       </div>
     </section>
 
