@@ -1,6 +1,6 @@
 # TradeBridge
 
-A Next.js trading workspace with a Deriv OAuth 2.0 Authorization Code + PKCE flow and server-side retrieval of authenticated Options account details. Account balances are fetched from Deriv when a valid session is present. Live tick prices are streamed from Deriv's public WebSocket. Account-specific positions/P&L, historical charting, proposal quotes, and trade execution are not implemented.
+A Next.js trading workspace with a Deriv OAuth 2.0 Authorization Code + PKCE flow and server-side retrieval of authenticated Options account details. Account balances are fetched from Deriv when a valid session is present. Live tick prices are streamed from Deriv's public WebSocket. Account-specific positions/P&L and historical charting are not implemented. The trade ticket supports fresh proposal quotes and explicitly confirmed demo-only orders; real-money trading remains disabled.
 
 ## Stack
 - Next.js App Router, React, and TypeScript
@@ -48,7 +48,9 @@ The PKCE verifier and OAuth state are stored in short-lived HttpOnly cookies. Th
 - [x] Retrieve account details and balances from Deriv; clear the local token cookie when Deriv returns 401
 - [x] Live public tick streaming for the dashboard's selected markets
 - [ ] Account-specific positions/P&L and transaction history
-- [ ] Proposal quotes, WebSocket OTP flow, and explicit demo-first trade confirmation workflow
+- [x] Generate a short-lived WebSocket OTP URL only after server-side verification that the chosen account is a demo account
+- [x] Request fresh proposal quotes and require a separate confirmation before placing a demo order
+- [ ] Account-specific positions/P&L, transaction history, and historical charting
 - [ ] Automated tests and production security review
 
 ## Important limitations
@@ -57,4 +59,4 @@ The PKCE verifier and OAuth state are stored in short-lived HttpOnly cookies. Th
 - Account balances and market tick prices are live API responses when available. Historical charts, open positions, and P/L remain unavailable placeholders, never fabricated as live data.
 - Test with a Deriv demo account before considering real-money workflows.
 - Verify Deriv API and partnership/markup terms before charging users or enabling a markup.
-- Never execute an order without a fresh quote, server-side validation, risk checks, and explicit user confirmation.
+- The trade ticket is intentionally demo-only; the server rejects OTP requests for real accounts. Do not enable real-money trading without server-side risk limits, robust quote/order validation, idempotency, audit logging, and a reviewed confirmation workflow.
