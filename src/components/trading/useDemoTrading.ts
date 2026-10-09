@@ -71,6 +71,34 @@ function startOfLocalDayEpoch(): number {
   return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
 }
 
+function readOrderResolution(key: string | null): string | null {
+  if (!key) return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    // If storage is unavailable, fail closed for this session.
+    return "unknown";
+  }
+}
+
+function writeOrderResolution(key: string | null, value: "pending" | "unknown") {
+  if (!key) return;
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // In-memory lock still protects the active React session.
+  }
+}
+
+function clearOrderResolution(key: string | null) {
+  if (!key) return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // In-memory reconciliation state will still remain active until cleared.
+  }
+}
+
 export function useTradingSession(
   connected: boolean,
   account: DerivAccount | null,
@@ -86,7 +114,7 @@ export function useTradingSession(
   const [activity, setActivity] = useState<AccountActivity[]>([]);
   const [balance, setBalance] = useState(EMPTY_BALANCE);
   const [realizedProfit, setRealizedProfit] = useState<number | null>(null);
-  const [orderResolutionRequired, setOrderResolutionRequired] = useState(false);
+  const [orderResolutionRequired, setOrderResolutionRequired] = useState(true);
   const orderResolutionKey = account?.account_id
     ? `tradebridge:order-resolution-required:${account.account_id}`
     : null;
@@ -133,12 +161,12 @@ export function useTradingSession(
       });
     };
 
-    const storedOrderState = orderResolutionKey ? window.sessionStorage.getItem(orderResolutionKey) : null;
+    const storedOrderState = readOrderResolution(orderResolutionKey);
     if (storedOrderState) {
       // If the tab was refreshed or navigated away while a buy was pending,
       // treat it as ambiguous until the user reconciles it in Deriv.
-      if (orderResolutionKey && storedOrderState === "pending") {
-        window.sessionStorage.setItem(orderResolutionKey, "unknown");
+      if (storedOrderState === "pending") {
+        writeOrderResolution(orderResolutionKey, "unknown");
       }
       setOrderResolutionRequired(true);
     } else {
@@ -246,7 +274,7 @@ export function useTradingSession(
             } else if (buyRequestRef.current !== null && requestId === buyRequestRef.current) {
               clearTimeoutRef();
               buyRequestRef.current = null;
-              if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
+              if (orderResolutionKey) clearOrderResolution(orderResolutionKey);
               setOrderResolutionRequired(false);
               setQuote(null);
               setBusy(false);
@@ -347,13 +375,13 @@ export function useTradingSession(
             if (!contractId) {
               // A success-shaped response without a contract ID is not proof
               // that the order failed. Keep the account locked for reconciliation.
-              if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "unknown");
+              if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
               setOrderResolutionRequired(true);
               setStatus("Deriv returned a buy response without a contract ID. Order entry is paused; reconcile positions and statement before retrying.");
               refreshAccount();
               return;
             }
-            if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
+            if (orderResolutionKey) clearOrderResolution(orderResolutionKey);
             setOrderResolutionRequired(false);
             setStatus((isRealAccount ? "Real-money trade" : "Demo trade") + " confirmed by Deriv. Contract " + contractId + " is being added to your account activity.");
             const monitorId = nextId();
@@ -410,7 +438,7 @@ export function useTradingSession(
           if (refreshTimer) window.clearInterval(refreshTimer);
           refreshTimer = null;
           if (buyRequestRef.current !== null) {
-            if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "unknown");
+            if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
             setOrderResolutionRequired(true);
             setQuote(null);
           }
@@ -440,7 +468,7 @@ export function useTradingSession(
       refreshAccountRef.current = null;
       if (buyRequestRef.current !== null && orderResolutionKey) {
         // A navigation during a submitted buy must not silently reset its state.
-        window.sessionStorage.setItem(orderResolutionKey, "unknown");
+        writeOrderResolution(orderResolutionKey, "unknown");
       }
       clearTimeoutRef();
       quoteRequestRef.current = null;
@@ -552,7 +580,7 @@ export function useTradingSession(
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     const reqId = ++sequenceRef.current;
     buyRequestRef.current = reqId;
-    if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "pending");
+    if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "pending");
     setBusy(true);
     setStatus("Submitting the confirmed " + (isRealAccount ? "real-money" : "demo") + " order to Deriv…");
     activeSocket.send(JSON.stringify({ buy: quote.id, price: quote.askPrice, req_id: reqId }));
@@ -560,7 +588,7 @@ export function useTradingSession(
     timeoutRef.current = setTimeout(() => {
       if (buyRequestRef.current !== reqId) return;
       buyRequestRef.current = null;
-      if (orderResolutionKey) window.sessionStorage.setItem(orderResolutionKey, "unknown");
+      if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
       setOrderResolutionRequired(true);
       setQuote(null);
       setBusy(false);
@@ -579,7 +607,7 @@ export function useTradingSession(
       "Before unlocking, open Deriv directly and reconcile open positions and account statement around the submission time. Only continue if you have resolved the outcome and are sure no duplicate trade will be placed. If anything is unclear, cancel and keep trading paused."
     );
     if (!confirmed) return;
-    if (orderResolutionKey) window.sessionStorage.removeItem(orderResolutionKey);
+    if (orderResolutionKey) clearOrderResolution(orderResolutionKey);
     setOrderResolutionRequired(false);
     setStatus("Manual reconciliation acknowledged. Request a fresh quote before trading.");
   }
