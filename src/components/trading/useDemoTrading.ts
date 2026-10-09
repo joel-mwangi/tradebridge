@@ -377,7 +377,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       return;
     }
     if (!Number.isFinite(input.stake) || input.stake < 1 || input.stake > 1000) {
-      setStatus("Enter a stake between 1 and 1,000 " + (activeAccount.currency ?? "USD") + ".");
+      setStatus("Enter a stake between 1 and 1,000 " + (account.currency ?? "USD") + ".");
       return;
     }
     if (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 86400) {
@@ -396,7 +396,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       amount: input.stake,
       basis: "stake",
       contract_type: input.contractType,
-      currency: activeAccount.currency ?? "USD",
+      currency: account.currency ?? "USD",
       duration: input.duration,
       duration_unit: "s",
       underlying_symbol: input.symbol,
