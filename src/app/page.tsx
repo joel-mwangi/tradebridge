@@ -39,6 +39,13 @@ export default function Home() {
     currency: string;
   } | null>(null);
   const tradeSocket = useRef<WebSocket | null>(null);
+  const tradeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTradeRequestId = useRef<number | null>(null);
+
+  function clearTradeTimeout() {
+    if (tradeTimeout.current) clearTimeout(tradeTimeout.current);
+    tradeTimeout.current = null;
+  }
   const activeAccount = accounts.find((account) => account.account_id === selectedAccountId) ?? accounts[0];
 
   async function requestDemoQuote() {
@@ -57,6 +64,8 @@ export default function Home() {
       return;
     }
 
+    clearTradeTimeout();
+    pendingTradeRequestId.current = null;
     setTradeBusy(true);
     setTradeStatus("Requesting a demo trading session…");
     setQuote(null);
@@ -82,6 +91,7 @@ export default function Home() {
       const socket = new WebSocket(data.url);
       tradeSocket.current = socket;
       socket.onopen = () => {
+        pendingTradeRequestId.current = 71;
         socket.send(JSON.stringify({
           proposal: 1,
           amount: stake,
@@ -94,21 +104,34 @@ export default function Home() {
           req_id: 71,
         }));
         setTradeStatus("Requesting a fresh demo quote…");
+        clearTradeTimeout();
+        tradeTimeout.current = setTimeout(() => {
+          pendingTradeRequestId.current = null;
+          setTradeBusy(false);
+          setTradeStatus("Deriv did not return a quote in time. Request a fresh quote and try again.");
+          socket.close();
+        }, 15_000);
       };
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as {
             msg_type?: string;
+            req_id?: number;
             proposal?: { id?: string; ask_price?: number | string; payout?: number | string };
             buy?: { contract_id?: number | string; buy_price?: number | string };
             error?: { message?: string };
           };
+          if (typeof message.req_id === "number" && message.req_id !== pendingTradeRequestId.current) return;
           if (message.error) {
+            clearTradeTimeout();
+            pendingTradeRequestId.current = null;
             setTradeBusy(false);
             setTradeStatus(message.error.message ?? "Deriv rejected the request.");
             return;
           }
           if (message.msg_type === "proposal" && message.proposal) {
+            clearTradeTimeout();
+            pendingTradeRequestId.current = null;
             const id = message.proposal.id;
             const askPrice = Number(message.proposal.ask_price);
             const rawPayout = message.proposal.payout;
@@ -132,13 +155,29 @@ export default function Home() {
             setTradeStatus("Fresh demo quote ready. Review it, then confirm the demo trade.");
           }
           if (message.msg_type === "buy" && message.buy) {
+            clearTradeTimeout();
+            pendingTradeRequestId.current = null;
             const contractId = message.buy.contract_id;
             setTradeBusy(false);
             setQuote(null);
             setTradeStatus(contractId
-              ? `Demo trade placed successfully. Contract ID: ${contractId}.`
+              ? `Demo trade placed successfully. Contract ID: ${contractId}. Refreshing account details…`
               : "Deriv received the demo order. Check your account activity for its status.");
             socket.close();
+            if (contractId) {
+              fetch("/api/auth/deriv/accounts", { cache: "no-store" })
+                .then(async (response) => {
+                  if (!response.ok) return;
+                  const data = await response.json() as { accounts?: typeof accounts };
+                  if (data.accounts) {
+                    setAccounts(data.accounts);
+                    setTradeStatus(`Demo trade placed successfully. Contract ID: ${contractId}. Account details refreshed.`);
+                  }
+                })
+                .catch(() => {
+                  setTradeStatus(`Demo trade placed successfully. Contract ID: ${contractId}. Account refresh failed; reload to check your balance.`);
+                });
+            }
           }
         } catch {
           setTradeBusy(false);
@@ -146,11 +185,19 @@ export default function Home() {
         }
       };
       socket.onerror = () => {
+        clearTradeTimeout();
+        pendingTradeRequestId.current = null;
         setTradeBusy(false);
-        setTradeStatus("Demo trading connection failed. Please retry.");
+        setTradeStatus("Demo trading connection failed. Please request a fresh quote and retry.");
       };
       socket.onclose = () => {
+        clearTradeTimeout();
         if (tradeSocket.current === socket) tradeSocket.current = null;
+        if (pendingTradeRequestId.current !== null) {
+          pendingTradeRequestId.current = null;
+          setTradeBusy(false);
+          setTradeStatus("The demo trading connection closed before Deriv confirmed the request. Check account activity before retrying.");
+        }
       };
     } catch {
       setTradeBusy(false);
@@ -163,6 +210,8 @@ export default function Home() {
       setTradeStatus("Request a fresh quote before confirming.");
       return;
     }
+    clearTradeTimeout();
+    pendingTradeRequestId.current = 72;
     setTradeBusy(true);
     setTradeStatus("Submitting your confirmed demo order…");
     tradeSocket.current.send(JSON.stringify({
@@ -170,6 +219,12 @@ export default function Home() {
       price: quote.askPrice,
       req_id: 72,
     }));
+    tradeTimeout.current = setTimeout(() => {
+      pendingTradeRequestId.current = null;
+      setTradeBusy(false);
+      setTradeStatus("No order confirmation arrived in time. Check Deriv account activity before submitting another order.");
+      tradeSocket.current?.close();
+    }, 20_000);
   }
 
   useEffect(() => {
@@ -257,6 +312,9 @@ export default function Home() {
     if (error) window.history.replaceState({}, "", window.location.pathname);
     return () => {
       active = false;
+      clearTradeTimeout();
+      pendingTradeRequestId.current = null;
+      tradeSocket.current?.close();
       socket.close();
     };
   }, []);
