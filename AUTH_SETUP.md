@@ -16,9 +16,9 @@ Redeploy after saving the variables. Do not commit actual credentials to GitHub.
 In Supabase Dashboard → Authentication → URL Configuration:
 
 - Set the Site URL to `https://swigtrade.vercel.app`.
-- Add `https://swigtrade.vercel.app/auth/callback` to the allowed redirect URLs.
+- Add `https://swigtrade.vercel.app/auth/callback` and `https://swigtrade.vercel.app/auth/callback?next=/reset-password` to the allowed redirect URLs.
 - Add the equivalent Preview deployment callback URL(s) if you test authentication on Vercel previews.
-- For local development, allow `http://localhost:3000/auth/callback`.
+- For local development, allow `http://localhost:3000/auth/callback` and `http://localhost:3000/auth/callback?next=/reset-password`.
 
 Enable email/password authentication. If email confirmation is enabled, configure the confirmation email to redirect through the callback URL above. The password-reset flow uses the same callback with `?next=/reset-password`.
 
