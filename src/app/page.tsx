@@ -43,9 +43,9 @@ export default function Home() {
       try {
         const message = JSON.parse(event.data) as {
           msg_type?: string;
-          tick?: { symbol?: string; quote?: number | string };
+          tick?: { symbol?: string; underlying_symbol?: string; quote?: number | string };
         };
-        const symbol = message.tick?.symbol;
+        const symbol = message.tick?.underlying_symbol ?? message.tick?.symbol;
         const quote = Number(message.tick?.quote);
         if (message.msg_type !== "tick" || !symbol || !Number.isFinite(quote)) return;
         setMarketQuotes((current) => ({
