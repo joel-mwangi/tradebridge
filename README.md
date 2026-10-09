@@ -76,9 +76,8 @@ The OAuth access token stays in a server-only HttpOnly cookie and is never expos
 
 ## Risk controls — important limitations
 
-- Real order entry is **off by default** for each linked Real account. The user must acknowledge that real-money stake can be lost before a Real trading session can open.
-- The app defaults to a maximum stake of 10 account-currency units per entry and a daily realized-loss stop of 25. The user can choose lower or higher values within the limits shown in the UI.
-- These stake and daily-loss rules are **TradeBridge UI guardrails**, not Deriv-enforced account limits. Because the authenticated Deriv WebSocket is connected in the browser to support live streaming and trade execution, a determined account owner could bypass client-side stake/loss checks by sending provider messages directly. They must not be described as hard broker-side limits.
+- Real-account order entry is hard-disabled in the current build; acknowledging risk or writing a consent row cannot open a Real trading socket.
+- The former stake cap and daily realized-loss stop were browser-enforced controls only. A server-side gateway must validate every order and maintain authoritative per-account risk state before real-money entry can be safely considered.
 - Every TradeBridge entry still needs a fresh quote, expires after 30 seconds in the UI, and requires a separate confirm action. Early sales also require a separate confirmation.
 - Real-money entry is disabled in the current build. Existing saved consent can be revoked, but it cannot enable a Real trading socket.
 - Disconnect attempts to revoke stored consent and clears local authorization cookies. Persistent revocation requires the server-only `SUPABASE_SERVICE_ROLE_KEY`; if Supabase is unavailable, cookie clearing still proceeds but the server cannot confirm the database update.
