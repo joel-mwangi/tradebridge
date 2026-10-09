@@ -46,13 +46,13 @@ export function useMarketData() {
   const candleRequestsRef = useRef(new Map<number, { key: string; symbol: string; granularity: number }>());
   const requestedCandleKeysRef = useRef(new Set<string>());
 
-  const requestCandles = useCallback((symbol: string, granularity: number) => {
+  const requestCandles = useCallback((symbol: string, granularity: number, force = false) => {
     const activeSocket = socketRef.current;
     if (!symbol || !Number.isInteger(granularity) || granularity < 60
       || !activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
 
     const key = `${symbol}:${granularity}`;
-    if (requestedCandleKeysRef.current.has(key)) return;
+    if (requestedCandleKeysRef.current.has(key) && !force) return;
 
     const reqId = ++candleSequenceRef.current;
     candleRequestsRef.current.set(reqId, { key, symbol, granularity });
