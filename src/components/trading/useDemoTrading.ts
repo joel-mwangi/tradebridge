@@ -94,6 +94,7 @@ export function useTradingSession(
   const sellRequestRef = useRef<{ id: number; contractId: string } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedContractIdsRef = useRef<Set<string>>(new Set());
+  const refreshAccountRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +202,7 @@ export function useTradingSession(
             ? "Connected to your selected real Deriv account. Live orders use real funds; review every order carefully."
             : "Connected to your selected Deriv demo account. Quotes and balances come from Deriv.");
           send({ balance: 1, subscribe: 1, req_id: nextId() });
+          refreshAccountRef.current = refreshAccount;
           refreshAccount();
           refreshTimer = window.setInterval(refreshAccount, 15_000);
         };
@@ -306,6 +308,7 @@ export function useTradingSession(
               stake: input.stake,
               duration: input.duration,
               currency: activeAccount.currency ?? "USD",
+              receivedAt: Date.now(),
             });
             setBusy(false);
             setStatus("Fresh quote received from Deriv. Review the price and potential payout, then confirm the " + (isRealAccount ? "real-money order" : "demo order") + ".");
@@ -398,6 +401,7 @@ export function useTradingSession(
     return () => {
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
+      refreshAccountRef.current = null;
       clearTimeoutRef();
       quoteRequestRef.current = null;
       buyRequestRef.current = null;
@@ -511,6 +515,10 @@ export function useTradingSession(
     }, 20_000);
   }
 
+  function refreshAccountNow() {
+    refreshAccountRef.current?.();
+  }
+
   function sellPosition(contractId: string) {
     const activeSocket = socketRef.current;
     const accountType = (account?.account_type ?? "").toLowerCase();
@@ -552,5 +560,5 @@ export function useTradingSession(
     }
   }
 
-  return { sessionState, status, busy, quote, positions, activity, balance, realizedProfit, requestQuote, confirmQuote, sellPosition };
+  return { sessionState, status, busy, quote, positions, activity, balance, realizedProfit, requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow };
 }
