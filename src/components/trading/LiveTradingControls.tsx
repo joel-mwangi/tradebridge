@@ -6,6 +6,8 @@ import type { DerivAccount } from "./types";
 
 type Props = {
   account: DerivAccount;
+  executionGatewayAvailable: boolean;
+  consentEnabled: boolean;
   enabled: boolean;
   loading: boolean;
   busy: boolean;
@@ -17,8 +19,8 @@ type Props = {
 };
 
 export default function LiveTradingControls({
-  account, enabled, loading, busy, maxStake: initialMaxStake, maxDailyLoss: initialMaxDailyLoss,
-  message, onEnable, onDisable,
+  account, executionGatewayAvailable, consentEnabled, enabled, loading, busy,
+  maxStake: initialMaxStake, maxDailyLoss: initialMaxDailyLoss, message, onEnable, onDisable,
 }: Props) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [maxStake, setMaxStake] = useState(String(initialMaxStake));
@@ -42,10 +44,14 @@ export default function LiveTradingControls({
         <h2 id="live-trading-heading">Real-money trading</h2>
         <p className={styles.panelSubtext}>Account {account.account_id} · {account.currency ?? "account currency"}</p>
       </div>
-      <span className={enabled ? styles.realModeEnabled : styles.realModeLocked}>{enabled ? "LIVE ENABLED" : "LOCKED"}</span>
+      <span className={!executionGatewayAvailable ? styles.realModeLocked : enabled ? styles.realModeEnabled : styles.realModeLocked}>{!executionGatewayAvailable ? "READ ONLY" : enabled ? "LIVE ENABLED" : "LOCKED"}</span>
     </div>
 
-    {enabled ? <div className={styles.liveEnabledMessage} role="status">
+    {!executionGatewayAvailable ? <div className={styles.liveEnabledMessage} role="status">
+      <strong>Real-money order entry is disabled for safety.</strong>
+      <p>TradeBridge currently opens trading WebSockets directly in the browser. That would let an order bypass its app-level stake and daily-loss checks. Real-account trading will remain locked until a server-side execution gateway validates every order and revocation. You can still review your linked account details; use a Demo account to place trades.</p>
+      {consentEnabled && <button type="button" className={styles.secondaryButton} onClick={onDisable} disabled={busy || loading}>{busy ? "Revoking…" : "Revoke saved live consent"}</button>}
+    </div> : enabled ? <div className={styles.liveEnabledMessage} role="status">
       <strong>Live order entry is enabled for this account.</strong>
       <p>Your configured TradeBridge entry cap is {stakeLimit.toLocaleString()} {account.currency ?? ""} per trade; the app also blocks new entries if today's reported realized P/L reaches the {lossLimit.toLocaleString()} {account.currency ?? ""} loss stop. These are app-level guardrails, not broker-enforced account limits.</p>
       <button type="button" className={styles.secondaryButton} onClick={onDisable} disabled={busy || loading}>{busy ? "Updating…" : "Disable live trading"}</button>
@@ -75,7 +81,9 @@ export default function LiveTradingControls({
       </button>
     </>}
 
-    {message && <p className={styles.liveControlMessage} role="status">{message}</p>}
-    <p className={styles.liveControlDisclaimer}>Enabling this switch does not place an order. Every entry still requires a fresh Deriv quote and a separate order confirmation. You can disable live trading here at any time.</p>
+    {executionGatewayAvailable && message && <p className={styles.liveControlMessage} role="status">{message}</p>}
+    <p className={styles.liveControlDisclaimer}>{executionGatewayAvailable
+      ? "Enabling this switch does not place an order. Every entry still requires a fresh Deriv quote and a separate order confirmation. You can disable live trading here at any time."
+      : "This is a deliberate safety lock, not an outage indicator. Do not rely on browser-only risk limits for real-money trading."}</p>
   </section>;
 }
