@@ -60,7 +60,7 @@ function toActivity(raw: Record<string, unknown>): AccountActivity | null {
     action: String(raw.action_type ?? raw.action ?? raw.type ?? "transaction"),
     description: String(raw.longcode ?? raw.description ?? raw.shortcode ?? "Account transaction"),
     amount: numeric(raw.amount),
-    balance: numeric(raw.balance),
+    balance: numeric(raw.balance_after ?? raw.balance),
     currency: String(raw.currency ?? "USD"),
     contractId: raw.contract_id === undefined ? undefined : String(raw.contract_id),
     profit: numeric(raw.profit),
@@ -711,8 +711,9 @@ export function useTradingSession(
   function refreshAfterTimeout() {
     const activeSocket = socketRef.current;
     if (activeSocket?.readyState === WebSocket.OPEN) {
-      activeSocket.send(JSON.stringify({ portfolio: 1, req_id: ++sequenceRef.current }));
-      activeSocket.send(JSON.stringify({ statement: 1, limit: 30, description: 1, req_id: ++sequenceRef.current }));
+      // Use the tracked refresh path so the paginated statement response is
+      // correlated with its request and the loaded history is reconciled.
+      refreshAccountRef.current?.();
       activeSocket.send(JSON.stringify({ balance: 1, req_id: ++sequenceRef.current }));
     }
   }
