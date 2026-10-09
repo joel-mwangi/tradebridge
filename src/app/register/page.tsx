@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import AuthShell from "@/components/auth-shell";
+import GoogleSignInButton from "@/components/google-sign-in-button";
 import { createClient } from "@/lib/supabase/client";
 
 export default function RegisterPage() {
@@ -28,19 +29,23 @@ export default function RegisterPage() {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
-      if (error) setMessage(error.message);
+      if (error) setMessage("We could not create your account with those details. Please review them and try again.");
       else if (!data.session) {
         setSuccess(true);
         setMessage("Account created. Check your email to verify your address, then sign in.");
       } else window.location.assign("/");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to create your account right now.");
+    } catch {
+      setMessage("Unable to create your account right now. Please try again.");
     } finally {
       setBusy(false);
     }
   }
 
   return <AuthShell title="Create your account" subtitle="Your TradeBridge login is separate from connecting your Deriv account.">
+    <div className="auth-social">
+      <GoogleSignInButton />
+      <div className="auth-divider"><span>or sign up with email</span></div>
+    </div>
     <form className="auth-form" onSubmit={submit}>
       <label htmlFor="name">Full name</label>
       <input id="name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} required maxLength={80} />
