@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 
 const markets = [
-  { symbol: "R_100", name: "Volatility 100 Index", change: "+0.82%", tone: "up" },
-  { symbol: "R_50", name: "Volatility 50 Index", change: "+0.24%", tone: "up" },
-  { symbol: "frxEURUSD", name: "EUR/USD", change: "−0.16%", tone: "down" },
-  { symbol: "frxXAUUSD", name: "Gold / USD", change: "+0.41%", tone: "up" },
+  { symbol: "R_100", name: "Volatility 100 Index" },
+  { symbol: "R_50", name: "Volatility 50 Index" },
+  { symbol: "frxEURUSD", name: "EUR/USD" },
+  { symbol: "frxXAUUSD", name: "Gold / USD" },
 ];
 
 export default function Home() {
@@ -21,11 +21,53 @@ export default function Home() {
     status: string | null;
   }>>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [marketQuotes, setMarketQuotes] = useState<Record<string, { quote: number; baseline: number }>>({});
+  const [marketConnection, setMarketConnection] = useState("Connecting to Deriv market data…");
   const [authMessage, setAuthMessage] = useState("");
   const activeAccount = accounts.find((account) => account.account_id === selectedAccountId) ?? accounts[0];
 
   useEffect(() => {
     let active = true;
+    const socket = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
+
+    socket.onopen = () => {
+      if (!active) return;
+      setMarketConnection("Connected · waiting for live ticks");
+      markets.forEach((market, index) => {
+        socket.send(JSON.stringify({ ticks: market.symbol, subscribe: 1, req_id: index + 1 }));
+      });
+    };
+
+    socket.onmessage = (event) => {
+      if (!active) return;
+      try {
+        const message = JSON.parse(event.data) as {
+          msg_type?: string;
+          tick?: { symbol?: string; quote?: number | string };
+        };
+        const symbol = message.tick?.symbol;
+        const quote = Number(message.tick?.quote);
+        if (message.msg_type !== "tick" || !symbol || !Number.isFinite(quote)) return;
+        setMarketQuotes((current) => ({
+          ...current,
+          [symbol]: {
+            quote,
+            baseline: current[symbol]?.baseline ?? quote,
+          },
+        }));
+        setMarketConnection("Live prices");
+      } catch {
+        // Ignore malformed public-stream messages; the UI remains in preview mode.
+      }
+    };
+
+    socket.onerror = () => {
+      if (active) setMarketConnection("Market data unavailable");
+    };
+    socket.onclose = () => {
+      if (active) setMarketConnection("Market data disconnected");
+    };
+
     fetch("/api/auth/deriv/accounts", { cache: "no-store" })
       .then(async (response) => {
         const data = await response.json() as {
@@ -67,7 +109,10 @@ export default function Home() {
     if (error === "invalid_callback") setAuthMessage("We could not verify the Deriv authorization response. Please try again.");
     if (error === "token_exchange") setAuthMessage("Deriv could not complete authorization. Please try again.");
     if (error) window.history.replaceState({}, "", window.location.pathname);
-    return () => { active = false; };
+    return () => {
+      active = false;
+      socket.close();
+    };
   }, []);
 
   return (
@@ -89,9 +134,13 @@ export default function Home() {
             <article className="card"><span>Today’s P/L</span><strong>— <small>USD</small></strong><p>Performance appears after connection</p></article>
           </div>
           <div className="columns">
-            <section className="panel" id="markets"><div className="panel-head"><div><h2>Market watch</h2><p>Choose a market to inspect</p></div><span className="sample">● Sample data</span></div>
-              <div className="market-list">{markets.map(m => <button key={m.symbol} className={selected.symbol === m.symbol ? "market selected" : "market"} onClick={() => setSelected(m)}><span className="symbol">{m.symbol.startsWith("frx") ? (m.symbol === "frxEURUSD" ? "€" : "Au") : "V"}</span><span className="market-title"><b>{m.name}</b><small>{m.symbol}</small></span><strong className={m.tone}>{m.change}</strong></button>)}</div>
-              <div className="chart"><div><small>SELECTED MARKET</small><b>{selected.name}</b></div><span className="sample">Illustrative chart</span><svg viewBox="0 0 600 170" preserveAspectRatio="none" role="img" aria-label="Illustrative market trend, not live data"><defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#21b394" stopOpacity=".2"/><stop offset="100%" stopColor="#21b394" stopOpacity="0"/></linearGradient></defs><path d="M0 125 C35 120 45 90 75 102 S120 132 150 84 S190 96 225 72 S270 92 305 60 S350 80 385 40 S425 59 465 44 S520 60 550 30 S580 40 600 16 L600 170 L0 170Z" fill="url(#fill)"/><path d="M0 125 C35 120 45 90 75 102 S120 132 150 84 S190 96 225 72 S270 92 305 60 S350 80 385 40 S425 59 465 44 S520 60 550 30 S580 40 600 16" fill="none" stroke="#21b394" strokeWidth="3"/></svg><p>Illustrative trend · not live data</p></div>
+            <section className="panel" id="markets"><div className="panel-head"><div><h2>Market watch</h2><p>Choose a market to inspect</p></div><span className="sample">● {marketConnection}</span></div>
+              <div className="market-list">{markets.map(m => {
+                const quote = marketQuotes[m.symbol];
+                const percentage = quote && quote.baseline !== 0 ? ((quote.quote - quote.baseline) / quote.baseline) * 100 : null;
+                return <button key={m.symbol} className={selected.symbol === m.symbol ? "market selected" : "market"} onClick={() => setSelected(m)}><span className="symbol">{m.symbol.startsWith("frx") ? (m.symbol === "frxEURUSD" ? "€" : "Au") : "V"}</span><span className="market-title"><b>{m.name}</b><small>{m.symbol}</small></span><strong className={percentage === null ? "" : percentage >= 0 ? "up" : "down"}>{quote ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(quote.quote) : "—"}<small className="quote-change">{percentage === null ? "Waiting for ticks" : `${percentage >= 0 ? "+" : ""}${percentage.toFixed(2)}%`}</small></strong></button>;
+              })}</div>
+              <div className="chart"><div><small>LATEST LIVE PRICE</small><b>{selected.name}</b></div><span className="sample">{marketConnection}</span><strong className="live-price">{marketQuotes[selected.symbol] ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(marketQuotes[selected.symbol].quote) : "Waiting for tick data…"}</strong><p>Prices stream from Deriv's public market-data WebSocket. No trade has been placed.</p></div>
             </section>
             <section className="panel" id="ticket"><div className="panel-head"><div><h2>Trade ticket</h2><p>Order preview</p></div><span className="ticket-icon">↗</span></div><div className="selected-market"><span className="symbol big">V</span><div><b>{selected.name}</b><small>{selected.symbol}</small></div></div><label>Direction</label><div className="directions"><button className={direction === "Buy" ? "buy chosen" : "buy"} onClick={() => setDirection("Buy")}>↗ Buy</button><button className={direction === "Sell" ? "sell chosen" : "sell"} onClick={() => setDirection("Sell")}>↘ Sell</button></div><label htmlFor="stake">Stake amount</label><div className="amount"><span>$</span><input id="stake" type="number" min="1" defaultValue="10" disabled/><span>USD</span></div><p className="hint">Order controls activate after secure API integration.</p><div className="order-summary"><span>Selected action</span><b className={direction === "Buy" ? "up" : "down"}>{direction} · {selected.symbol}</b></div><button className="execute" disabled>Connect account to continue</button><p className="risk">Trading involves risk. Review contract details and potential loss before confirming any future live order.</p></section>
           </div>
