@@ -69,8 +69,12 @@ export default function TradingWorkspace() {
   const activeAccountIsDemo = isDemoAccount(activeAccount);
   const activeAccountIsReal = (activeAccount?.account_type ?? "").toLowerCase() === "real";
   const trading = useDemoTrading(connected, activeAccount);
-  const currency = trading.balance.currency || activeAccount?.currency || "USD";
-  const liveBalance = trading.balance.balance ?? activeAccount?.balance ?? null;
+  const currency = activeAccountIsDemo
+    ? trading.balance.currency || activeAccount?.currency || "USD"
+    : activeAccount?.currency || "USD";
+  const liveBalance = activeAccountIsDemo
+    ? trading.balance.balance ?? activeAccount?.balance ?? null
+    : activeAccount?.balance ?? null;
 
   useEffect(() => {
     let active = true;
