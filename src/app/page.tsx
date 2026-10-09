@@ -304,6 +304,8 @@ export default function Home() {
         else if (data.error === "token_expired") setAuthMessage("Your Deriv session expired or was revoked. Please connect again.");
         else if (data.error === "insufficient_scope") setAuthMessage("Deriv denied account access. Reconnect and approve the required trading permission.");
         else if (data.error === "deriv_unavailable") setAuthMessage("Deriv could not be reached right now. Please retry shortly.");
+        else if (data.error === "account_mismatch" || data.error === "owner_mismatch") setAuthMessage("This Deriv session does not match the signed-in TradeBridge account. Connect Deriv again.");
+        else if (data.error === "account_linking_unavailable") setAuthMessage("Secure account linking is not ready. Apply the TradeBridge database migrations, then retry.");
       })
       .catch(() => {
         if (active) {
@@ -319,6 +321,11 @@ export default function Home() {
     if (error === "cancelled") setAuthMessage("Deriv authorization was cancelled.");
     if (error === "invalid_callback") setAuthMessage("We could not verify the Deriv authorization response. Please try again.");
     if (error === "token_exchange") setAuthMessage("Deriv could not complete authorization. Please try again.");
+    if (error === "platform_email_unverified") setAuthMessage("Verify your TradeBridge email before connecting Deriv.");
+    if (error === "account_verification_failed") setAuthMessage("Deriv authorization completed, but account details could not be verified. Please retry.");
+    if (error === "account_linking_unavailable") setAuthMessage("Secure account linking is not ready. Apply the TradeBridge database migrations, then retry.");
+    if (error === "account_conflict") setAuthMessage("A Deriv account is already linked to another TradeBridge user. Sign in to the account that originally linked it or contact support.");
+    if (error === "deriv_auth_required") setAuthMessage("Sign in to TradeBridge before connecting Deriv.");
     if (error) window.history.replaceState({}, "", window.location.pathname);
     return () => {
       active = false;
