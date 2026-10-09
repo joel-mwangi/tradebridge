@@ -25,6 +25,8 @@ export default function Home() {
   const [marketNow, setMarketNow] = useState(Date.now());
   const [marketConnection, setMarketConnection] = useState("Connecting to Deriv market data…");
   const [authMessage, setAuthMessage] = useState("");
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
   const [stakeAmount, setStakeAmount] = useState("1");
   const [durationSeconds, setDurationSeconds] = useState("60");
   const [tradeBusy, setTradeBusy] = useState(false);
@@ -229,6 +231,11 @@ export default function Home() {
   }
 
   useEffect(() => {
+    try {
+      setOnboardingOpen(window.localStorage.getItem("tradebridge-onboarding-complete") !== "true");
+    } catch {
+      setOnboardingOpen(false);
+    }
     let active = true;
     const freshnessTimer = window.setInterval(() => setMarketNow(Date.now()), 1_000);
     const socket = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
@@ -323,8 +330,55 @@ export default function Home() {
     };
   }, []);
 
+  function finishOnboarding() {
+    try { window.localStorage.setItem("tradebridge-onboarding-complete", "true"); } catch { /* Onboarding can still be dismissed for this session. */ }
+    setOnboardingOpen(false);
+  }
+
+  function startDerivConnect() {
+    finishOnboarding();
+    window.location.href = "/api/auth/deriv/start";
+  }
+
   return (
     <main className="shell">
+      {onboardingOpen && <div className="onboarding-backdrop">
+        <section className="onboarding-card" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-describedby="onboarding-description">
+          <div className="onboarding-brand"><span className="brand-icon">T</span><span>tradebridge<span className="accent">.</span></span><span className="onboarding-step-count">Step {onboardingStep + 1} of 3</span></div>
+          <div className="onboarding-progress" aria-hidden="true"><span style={{ width: `${((onboardingStep + 1) / 3) * 100}%` }} /></div>
+          {onboardingStep === 0 && <div className="onboarding-copy">
+            <span className="onboarding-illustration" aria-hidden="true">↗</span>
+            <p className="eyebrow">WELCOME TO TRADEBRIDGE</p>
+            <h1 id="onboarding-title">A clearer way to explore markets.</h1>
+            <p id="onboarding-description">Your market watch, verified Deriv account information, and demo trade ticket in one workspace.</p>
+            <div className="onboarding-facts"><span>✓ Live market prices when available</span><span>✓ Quotes reviewed before demo orders</span><span>✓ Real-money trading is disabled</span></div>
+          </div>}
+          {onboardingStep === 1 && <div className="onboarding-copy">
+            <span className="onboarding-illustration" aria-hidden="true">◎</span>
+            <p className="eyebrow">SECURE ACCOUNT CONNECTION</p>
+            <h1 id="onboarding-title">{connected ? "Your Deriv connection is ready." : "Connect your Deriv account."}</h1>
+            <p id="onboarding-description">TradeBridge uses Deriv authorization to retrieve your account details. Sign in on Deriv and review the permissions requested there. Never share your Deriv password with TradeBridge.</p>
+            <div className="onboarding-facts"><span>✓ No separate TradeBridge password</span><span>✓ Choose a demo account to trade</span><span>✓ Real accounts cannot place orders here</span></div>
+          </div>}
+          {onboardingStep === 2 && <div className="onboarding-copy">
+            <span className="onboarding-illustration" aria-hidden="true">☷</span>
+            <p className="eyebrow">YOUR FIRST VISIT</p>
+            <h1 id="onboarding-title">Everything has a familiar place.</h1>
+            <p id="onboarding-description">Use Market watch to choose an instrument, then the Demo trade ticket to set direction, stake, and duration. Review the live quote before you confirm.</p>
+            <div className="onboarding-tour"><div><b>01</b><span><strong>Markets</strong><small>Inspect current prices and freshness.</small></span></div><div><b>02</b><span><strong>Demo trade</strong><small>Get a quote, review, then confirm.</small></span></div><div><b>03</b><span><strong>Activity</strong><small>Trade history will appear when integrated.</small></span></div></div>
+          </div>}
+          <div className="onboarding-actions">
+            <button className="onboarding-skip" onClick={finishOnboarding}>Skip for now</button>
+            <div className="onboarding-next-actions">
+              {onboardingStep > 0 && <button className="secondary" onClick={() => setOnboardingStep((step) => step - 1)}>Back</button>}
+              {onboardingStep === 0 && <button className="primary" onClick={() => setOnboardingStep(1)}>Get started <span aria-hidden="true">→</span></button>}
+              {onboardingStep === 1 && <><button className="secondary" onClick={() => setOnboardingStep(2)}>Explore first</button><button className="primary" onClick={startDerivConnect}>{connected ? "Reconnect Deriv" : "Connect Deriv"} <span aria-hidden="true">↗</span></button></>}
+              {onboardingStep === 2 && <button className="primary" onClick={finishOnboarding}>Open dashboard <span aria-hidden="true">→</span></button>}
+            </div>
+          </div>
+          <p className="onboarding-footnote">Demo trading only · Market prices can be delayed or unavailable.</p>
+        </section>
+      </div>}
       <aside className="sidebar">
         <a className="brand" href="#"><span className="brand-icon">T</span> tradebridge<span className="accent">.</span></a>
         <p className="side-label">WORKSPACE</p>
