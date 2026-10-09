@@ -47,14 +47,27 @@ function formatMoney(value: number | null, currency: string) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value) + (currency ? " " + currency : "");
 }
 
+function isDemoAccount(account: DerivAccount | null | undefined) {
+  return (account?.account_type ?? "").toLowerCase() === "demo";
+}
+
+function accountTypeLabel(account: DerivAccount) {
+  const type = (account.account_type ?? "").toLowerCase();
+  if (type === "demo") return "Demo";
+  if (type === "real") return "Real";
+  return "Other";
+}
+
 export default function TradingWorkspace() {
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [authMessage, setAuthMessage] = useState("Checking your Deriv connection…");
   const { markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket } = useMarketData();
-  const demoAccounts = accounts.filter((item) => (item.account_type ?? "").toLowerCase() === "demo");
-  const activeAccount = demoAccounts.find((item) => item.account_id === selectedAccountId) ?? demoAccounts[0] ?? null;
+  const demoAccounts = accounts.filter(isDemoAccount);
+  const activeAccount = accounts.find((item) => item.account_id === selectedAccountId) ?? demoAccounts[0] ?? accounts[0] ?? null;
+  const activeAccountIsDemo = isDemoAccount(activeAccount);
+  const activeAccountIsReal = (activeAccount?.account_type ?? "").toLowerCase() === "real";
   const trading = useDemoTrading(connected, activeAccount);
   const currency = trading.balance.currency || activeAccount?.currency || "USD";
   const liveBalance = trading.balance.balance ?? activeAccount?.balance ?? null;
@@ -74,12 +87,16 @@ export default function TradingWorkspace() {
         const data = await response.json() as AccountsResponse;
         if (!active) return;
         setConnected(Boolean(data.connected));
-        setAccounts(data.accounts ?? []);
-        const eligible = (data.accounts ?? []).filter((item) => (item.account_type ?? "").toLowerCase() === "demo");
-        setSelectedAccountId((current) => eligible.some((item) => item.account_id === current) ? current : eligible[0]?.account_id ?? "");
+        const returnedAccounts = data.accounts ?? [];
+        setAccounts(returnedAccounts);
+        const eligible = returnedAccounts.filter(isDemoAccount);
+        setSelectedAccountId((current) => returnedAccounts.some((item) => item.account_id === current)
+          ? current
+          : eligible[0]?.account_id ?? returnedAccounts[0]?.account_id ?? "");
         if (firstAuthMessage) setAuthMessage(firstAuthMessage);
         else if (data.connected && eligible.length > 0) setAuthMessage("Deriv connected. Your demo trading account is available.");
-        else if (data.connected) setAuthMessage("Deriv connected, but no linked demo account was returned. Reconnect after switching to a virtual-money account in Deriv.");
+        else if (data.connected && returnedAccounts.length > 0) setAuthMessage("Deriv connected. Your linked real account is visible, but real-money orders are disabled in TradeBridge. Add or reconnect a demo account to trade with virtual funds.");
+        else if (data.connected) setAuthMessage("Deriv connected, but no eligible account was returned. Reconnect Deriv to refresh linked account access.");
         else setAuthMessage(accountErrorMessage(data.error));
       })
       .catch(() => {
@@ -102,15 +119,20 @@ export default function TradingWorkspace() {
       startDerivConnect();
       return;
     }
+    if (!activeAccountIsDemo) setSelectedAccountId(demoAccounts[0].account_id);
     document.getElementById("ticket")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  const demoReady = connected && Boolean(activeAccount);
+  const demoReady = connected && activeAccountIsDemo;
   const accountState = !connected
     ? "Not connected"
-    : activeAccount
+    : activeAccountIsDemo
       ? "Demo account selected"
-      : "Demo account required";
+      : activeAccountIsReal
+        ? "Real account selected · trading disabled"
+        : activeAccount
+          ? "Unsupported account type · trading disabled"
+          : "Demo account required";
 
   return <main className={styles.workspace} id="overview">
     <aside className={styles.sidebar}>
@@ -130,12 +152,12 @@ export default function TradingWorkspace() {
 
     <section className={styles.main}>
       <header className={styles.topbar}>
-        <div className={styles.breadcrumb}>Workspace <b>/</b> Demo trading</div>
+        <div className={styles.breadcrumb}>Workspace <b>/</b> {activeAccountIsReal ? "Real account · read-only" : "Demo trading"}</div>
         <div className={styles.topActions}>
-          {demoAccounts.length > 0 && <label className={styles.activeAccountWrap}>
+          {accounts.length > 0 && <label className={styles.activeAccountWrap}>
             <span className={styles.accountLabel}>ACCOUNT</span>
-            <select className={styles.accountSelect} aria-label="Select demo trading account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
-              {demoAccounts.map((item) => <option value={item.account_id} key={item.account_id}>{item.account_id} · {item.currency ?? "Currency"} · Demo</option>)}
+            <select className={styles.accountSelect} aria-label="Select Deriv account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
+              {accounts.map((item) => <option value={item.account_id} key={item.account_id}>{item.account_id} · {item.currency ?? "Currency"} · {accountTypeLabel(item)}</option>)}
             </select>
           </label>}
           {connected
@@ -147,21 +169,21 @@ export default function TradingWorkspace() {
       <div className={styles.content}>
         <section className={styles.intro}>
           <div className={styles.introMain}>
-            <p className={styles.eyebrow}>YOUR MARKETS, YOUR DEMO ACCOUNT</p>
+            <p className={styles.eyebrow}>{activeAccountIsReal ? "YOUR MARKETS · REAL ACCOUNT READ-ONLY" : "YOUR MARKETS, YOUR DEMO ACCOUNT"}</p>
             <h1 className={styles.title}>Trade with a clearer view.</h1>
-            <p className={styles.subtitle}>Inspect real market prices, review a live Deriv quote, and confirm demo orders. Active positions and account activity are loaded from your selected demo account.</p>
+            <p className={styles.subtitle}>{activeAccountIsReal ? "View your linked real account balance and live market prices. TradeBridge keeps real-money order placement disabled; switch to a Demo account to trade with virtual funds." : "Inspect real market prices, review a live Deriv quote, and confirm demo orders. Active positions and account activity are loaded from your selected demo account."}</p>
           </div>
           <div className={styles.introActions}>
             {!connected && <button className={styles.secondaryButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>}
-            <button className={styles.primaryButton} type="button" onClick={startDemoTrading}>{!connected ? "Connect to start" : demoAccounts.length === 0 ? "Reconnect Deriv" : "Open demo trade ticket"} <span aria-hidden="true">→</span></button>
+            <button className={styles.primaryButton} type="button" onClick={startDemoTrading}>{!connected ? "Connect to start" : demoAccounts.length === 0 ? "Reconnect Deriv" : activeAccountIsDemo ? "Open demo trade ticket" : "Switch to demo to trade"} <span aria-hidden="true">→</span></button>
           </div>
         </section>
 
         <section className={styles.notice} aria-live="polite">
           <span className={styles.noticeIcon}>i</span>
           <div className={styles.noticeCopy}>
-            <strong>{connected ? activeAccount ? "Demo account selected · virtual funds only" : "Deriv connected · demo account required" : "Connect Deriv to activate trading"}</strong>
-            <p>{authMessage}</p>
+            <strong>{!connected ? "Connect Deriv to activate trading" : activeAccountIsDemo ? "Demo account selected · virtual funds only" : activeAccountIsReal ? "Real account selected · read-only mode" : "Deriv connected · demo account required"}</strong>
+            <p>{activeAccountIsReal ? "This account is visible for reference only. Real-money quotes and orders are disabled. Select a Demo account to request quotes and place virtual-fund orders." : authMessage}</p>
           </div>
         </section>
 
@@ -170,11 +192,11 @@ export default function TradingWorkspace() {
           <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Reconnect Deriv ↗</button>
         </section>}
 
-        <section className={styles.statsGrid} aria-label="Demo account summary">
+        <section className={styles.statsGrid} aria-label="Selected account summary">
           <article className={styles.statCard}>
-            <div className={styles.statLabel}><span className={styles.metricAccent}>◉</span> Demo balance</div>
+            <div className={styles.statLabel}><span className={styles.metricAccent}>◉</span> {activeAccountIsDemo ? "Demo balance" : activeAccountIsReal ? "Real balance · read-only" : "Account balance"}</div>
             <strong className={styles.statValue}>{connected && activeAccount ? formatMoney(liveBalance, currency) : "—"}</strong>
-            <p className={styles.statSub}>{activeAccount ? activeAccount.account_id + " · Live account balance" : "Connect and select an eligible demo account"}</p>
+            <p className={styles.statSub}>{activeAccount ? activeAccount.account_id + (activeAccountIsDemo ? " · Demo account balance" : activeAccountIsReal ? " · Real account balance; orders disabled" : " · Trading disabled for this account type") : "Connect and select an eligible account"}</p>
           </article>
           <article className={styles.statCard}>
             <div className={styles.statLabel}><span className={styles.metricAccent}>▤</span> Open positions</div>
@@ -184,7 +206,7 @@ export default function TradingWorkspace() {
           <article className={styles.statCard}>
             <div className={styles.statLabel}><span className={styles.metricAccent}>↗</span> Realized P/L today</div>
             <strong className={styles.statValue}>{demoReady && trading.realizedProfit !== null ? formatMoney(trading.realizedProfit, currency) : "—"}</strong>
-            <p className={styles.statSub}>{demoReady ? "Read from Deriv's daily profit table" : "Available after connecting a demo account"}</p>
+            <p className={styles.statSub}>{demoReady ? "Read from Deriv's daily profit table" : "Available when a demo account is selected"}</p>
           </article>
         </section>
 
