@@ -26,7 +26,6 @@ type PublicMessage = {
     epoch?: number;
   };
   history?: { prices?: Array<number | string>; times?: number[] };
-  candles?: Array<{ epoch?: number; close?: number | string }>;
 };
 
 export function useMarketData() {
@@ -72,10 +71,12 @@ export function useMarketData() {
         }))
         .filter((item) => item.symbol && !item.isTradingSuspended);
 
-      const bySymbol = new Map(candidates.map((item) => [item.symbol, item]));
-      const preferred = PREFERRED_SYMBOLS.map((symbol) => bySymbol.get(symbol)).filter(
-        (item): item is NonNullable<typeof item> => Boolean(item),
-      );
+      const bySymbol = new Map<string, (typeof candidates)[number]>();
+      candidates.forEach((item) => bySymbol.set(item.symbol, item));
+      const preferred = PREFERRED_SYMBOLS.flatMap((symbol) => {
+        const item = bySymbol.get(symbol);
+        return item ? [item] : [];
+      });
       const rest = candidates
         .filter((item) => !PREFERRED_SYMBOLS.includes(item.symbol))
         .sort((a, b) => {
