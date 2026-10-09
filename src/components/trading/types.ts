@@ -24,6 +24,14 @@ export interface MarketSnapshot {
   points: PricePoint[];
 }
 
+export interface MarketCandle {
+  epoch: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 export interface DemoQuote {
   id: string;
   askPrice: number;
