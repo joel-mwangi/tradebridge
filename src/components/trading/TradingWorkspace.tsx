@@ -411,6 +411,8 @@ export default function TradingWorkspace() {
             maxRealStake={maxRealStake}
             maxDailyLoss={maxDailyLoss}
             realizedProfit={trading.realizedProfit}
+            orderResolutionRequired={trading.orderResolutionRequired}
+            acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
             market={selectedMarket}
             sessionState={trading.sessionState}
             status={trading.status}
