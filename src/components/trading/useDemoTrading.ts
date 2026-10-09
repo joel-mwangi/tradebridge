@@ -224,6 +224,16 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
               .map((item) => toPosition(item))
               .filter((item): item is OpenPosition => item !== null);
             setPositions(nextPositions);
+            // Subscribe to each already-open contract so its live profit/status
+            // updates are not limited to contracts placed during this page visit.
+            for (const position of nextPositions) {
+              send({
+                proposal_open_contract: 1,
+                contract_id: Number(position.contractId),
+                subscribe: 1,
+                req_id: nextId(),
+              });
+            }
             return;
           }
 
