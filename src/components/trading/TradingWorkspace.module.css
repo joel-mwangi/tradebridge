@@ -255,6 +255,8 @@
 .activityDetails small:first-of-type { max-width: 300px; }
 .activityAmount { display: grid; gap: 5px; flex-shrink: 0; text-align: right; }
 .activityAmount strong { font-size: 10px; font-variant-numeric: tabular-nums; }
+.statementPagination { display: flex; justify-content: center; margin: 12px 0 4px; }
+.statementPagination button { min-width: 180px; }
 .footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 23px; padding: 15px 2px 0; border-top: 1px solid var(--line); color: #96a2ae; font-size: 9px; line-height: 1.5; }
 .mobileNav { display: none; }
 @media (max-width: 1240px) {

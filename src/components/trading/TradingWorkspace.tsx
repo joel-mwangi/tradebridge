@@ -16,6 +16,8 @@ type AccountsResponse = {
   error?: string;
 };
 
+const REAL_EXECUTION_GATEWAY_AVAILABLE = false;
+
 type LiveConsentResponse = {
   enabled?: boolean;
   max_stake?: number;
@@ -82,7 +84,10 @@ export default function TradingWorkspace() {
   const [liveConsentMessage, setLiveConsentMessage] = useState("");
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
-  const { markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket } = useMarketData();
+  const {
+    markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket,
+    candlesByKey, requestCandles,
+  } = useMarketData();
 
   const demoAccounts = accounts.filter(isDemoAccount);
   const realAccounts = accounts.filter(isRealAccount);
@@ -93,7 +98,8 @@ export default function TradingWorkspace() {
     ?? null;
   const activeAccountIsDemo = isDemoAccount(activeAccount);
   const activeAccountIsReal = isRealAccount(activeAccount);
-  const effectiveLiveTradingEnabled = activeAccountIsReal
+  const effectiveLiveTradingEnabled = REAL_EXECUTION_GATEWAY_AVAILABLE
+    && activeAccountIsReal
     && liveTradingEnabled
     && liveConsentLoadedAccountId === activeAccount?.account_id;
   const trading = useTradingSession(connected, activeAccount, effectiveLiveTradingEnabled, maxRealStake, maxDailyLoss);
@@ -128,7 +134,7 @@ export default function TradingWorkspace() {
           : eligible[0]?.account_id ?? returnedAccounts.find(isRealAccount)?.account_id ?? returnedAccounts[0]?.account_id ?? "");
         if (firstAuthMessage) setAuthMessage(firstAuthMessage);
         else if (data.connected && eligible.length > 0) setAuthMessage("Deriv connected. Demo and real accounts are checked against your linked account ownership.");
-        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Deriv connected. A linked real account is available; live order entry stays locked until you accept the risk disclosure.");
+        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Deriv connected. Your linked Real account is read-only in TradeBridge; use a Demo account to place trades.");
         else if (data.connected) setAuthMessage("Deriv connected, but no supported Options account was returned. Refresh or reconnect Deriv.");
         else setAuthMessage(accountErrorMessage(data.error));
       })
@@ -228,7 +234,7 @@ export default function TradingWorkspace() {
       const data = await response.json() as LiveConsentResponse;
       if (!response.ok) {
         setLiveConsentMessage(data.error === "live_consent_schema_missing"
-          ? "The required Supabase migration has not been applied. Apply the live-trading consent migration, then retry."
+          ? "The required consent table is unavailable. Apply all TradeBridge Supabase migrations, including the consent hardening migration, then reload."
           : data.error === "risk_acknowledgement_required"
             ? "Tick the risk acknowledgement before enabling live trading."
             : data.error === "real_account_required"
@@ -310,7 +316,7 @@ export default function TradingWorkspace() {
 
     <section className={styles.main}>
       <header className={styles.topbar}>
-        <div className={styles.breadcrumb}>Workspace <b>/</b> {activeAccountIsReal ? effectiveLiveTradingEnabled ? "Live trading" : "Real account controls" : "Demo trading"}</div>
+        <div className={styles.breadcrumb}>Workspace <b>/</b> {activeAccountIsReal ? effectiveLiveTradingEnabled ? "Live trading" : "Real account · read-only" : "Demo trading"}</div>
         <div className={styles.topActions}>
           {accounts.length > 0 && <label className={styles.activeAccountWrap}>
             <span className={styles.accountLabel}>ACCOUNT</span>
@@ -332,20 +338,24 @@ export default function TradingWorkspace() {
             <p className={styles.subtitle}>{activeAccountIsReal
               ? effectiveLiveTradingEnabled
                 ? "Monitor real balance, live contract P/L, open positions, and account history. Every entry requires a fresh Deriv quote and a separate confirmation."
-                : "Review your real balance and market prices. Live order entry is locked until you acknowledge the risks and configure a stake cap and daily loss stop."
+                : "Your linked Real account is read-only in TradeBridge. Live orders are disabled until a server-side gateway can enforce stake caps, daily-loss stops, and revocation for every order."
               : "Inspect real market prices, review a live Deriv quote, confirm trades, monitor open contracts, and check account activity. All figures are sourced from Deriv."}</p>
           </div>
           <div className={styles.introActions}>
             {!connected && <button className={styles.secondaryButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>}
-            <button className={styles.primaryButton} type="button" onClick={startTrading}>{!connected ? "Connect to start" : !activeAccount ? "Refresh accounts" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Open live trade ticket" : "Review live controls" : activeAccountIsDemo ? "Open demo trade ticket" : "Switch to demo"} <span aria-hidden="true">→</span></button>
+            <button className={styles.primaryButton} type="button" onClick={startTrading}>{!connected ? "Connect to start" : !activeAccount ? "Refresh accounts" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Open live trade ticket" : "View account safety status" : activeAccountIsDemo ? "Open demo trade ticket" : "Switch to demo"} <span aria-hidden="true">→</span></button>
           </div>
         </section>
 
         <section className={styles.notice} aria-live="polite">
           <span className={styles.noticeIcon}>i</span>
           <div className={styles.noticeCopy}>
-            <strong>{!connected ? "Connect Deriv to activate trading" : activeAccountIsDemo ? "Demo account selected · virtual funds only" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Real account selected · live orders enabled" : "Real account selected · read-only until acknowledged" : "Deriv connected · supported account required"}</strong>
-            <p>{activeAccountIsReal ? liveConsentMessage || "Live account actions require explicit risk acknowledgement." : authMessage}</p>
+            <strong>{!connected ? "Connect Deriv to activate trading" : activeAccountIsDemo ? "Demo account selected · virtual funds only" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Real account selected · live orders enabled" : "Real account selected · read-only; live orders disabled for safety" : "Deriv connected · supported account required"}</strong>
+            <p>{activeAccountIsReal
+              ? REAL_EXECUTION_GATEWAY_AVAILABLE
+                ? liveConsentMessage || "Live account actions require explicit risk acknowledgement."
+                : "Real-money order execution is disabled in this build. Use a Demo account to place trades; a browser-only limit is not a secure live-trading control."
+              : authMessage}</p>
           </div>
         </section>
 
@@ -357,6 +367,8 @@ export default function TradingWorkspace() {
         {connected && activeAccountIsReal && activeAccount && <div id="live-controls">
           <LiveTradingControls
             account={activeAccount}
+            executionGatewayAvailable={REAL_EXECUTION_GATEWAY_AVAILABLE}
+            consentEnabled={liveTradingEnabled}
             enabled={effectiveLiveTradingEnabled}
             loading={liveConsentLoading}
             busy={liveConsentBusy}
@@ -394,6 +406,8 @@ export default function TradingWorkspace() {
             selectedSymbol={selectedSymbol}
             connection={connection}
             onSelect={selectMarket}
+            candlesByKey={candlesByKey}
+            onLoadCandles={requestCandles}
           />
           <DemoTradeTicket
             connected={connected}
@@ -402,6 +416,8 @@ export default function TradingWorkspace() {
             maxRealStake={maxRealStake}
             maxDailyLoss={maxDailyLoss}
             realizedProfit={trading.realizedProfit}
+            orderResolutionRequired={trading.orderResolutionRequired}
+            acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
             market={selectedMarket}
             sessionState={trading.sessionState}
             status={trading.status}
@@ -418,11 +434,14 @@ export default function TradingWorkspace() {
           currency={currency}
           accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
           busy={trading.busy}
+          activityLoading={trading.activityLoading}
+          activityHasMore={trading.activityHasMore}
           onSell={trading.sellPosition}
           onRefresh={trading.refreshAccount}
+          onLoadMore={trading.loadMoreActivity}
         />
 
-        <footer className={styles.footer}><span>TradeBridge · Quotes, balances, and positions from Deriv</span><span>Deriv Options · Explicit consent and confirmation required for live orders</span></footer>
+        <footer className={styles.footer}><span>TradeBridge · Quotes, balances, and positions from Deriv</span><span>Deriv Options · Demo orders only; Real accounts are read-only</span></footer>
       </div>
     </section>
 

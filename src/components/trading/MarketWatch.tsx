@@ -1,7 +1,7 @@
 "use client";
 
 import styles from "./TradingWorkspace.module.css";
-import type { MarketInstrument, MarketSnapshot } from "./types";
+import type { MarketCandle, MarketInstrument, MarketSnapshot } from "./types";
 import PriceChart from "./PriceChart";
 
 type Props = {
@@ -11,6 +11,8 @@ type Props = {
   selectedSymbol: string;
   connection: string;
   onSelect: (symbol: string) => void;
+  candlesByKey: Record<string, MarketCandle[]>;
+  onLoadCandles: (symbol: string, granularity: number) => void;
 };
 
 function displayPrice(value: number, symbol: string) {
@@ -18,7 +20,10 @@ function displayPrice(value: number, symbol: string) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: digits }).format(value);
 }
 
-export default function MarketWatch({ markets, snapshots, selectedMarket, selectedSymbol, connection, onSelect }: Props) {
+export default function MarketWatch({
+  markets, snapshots, selectedMarket, selectedSymbol, connection, onSelect,
+  candlesByKey, onLoadCandles,
+}: Props) {
   return <div className={styles.marketColumn}>
     <section className={styles.marketPanel} id="markets">
       <div className={styles.panelHeading}>
@@ -47,6 +52,11 @@ export default function MarketWatch({ markets, snapshots, selectedMarket, select
         <p>TradeBridge asks Deriv for the instruments currently available for CALL/PUT contracts. No market prices are invented while that request is pending.</p>
       </div>}
     </section>
-    <PriceChart market={selectedMarket} snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined} />
+    <PriceChart
+      market={selectedMarket}
+      snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+      candlesByKey={candlesByKey}
+      onLoadCandles={onLoadCandles}
+    />
   </div>;
 }

@@ -11,6 +11,8 @@ type Props = {
   maxRealStake: number;
   maxDailyLoss: number;
   realizedProfit: number | null;
+  orderResolutionRequired: boolean;
+  acknowledgeOrderResolution: () => void;
   market: MarketInstrument | null;
   sessionState: string;
   status: string;
@@ -22,6 +24,7 @@ type Props = {
 
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
+  orderResolutionRequired, acknowledgeOrderResolution,
   market, sessionState, status, busy, quote, requestQuote, confirmQuote,
 }: Props) {
   const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
@@ -34,7 +37,7 @@ export default function DemoTradeTicket({
   const canTrade = connected && (isDemo || (isRealAccount && realTradingEnabled));
   const expectedSessionState = isRealAccount ? "Real trading connected" : "Demo trading connected";
   const dailyLossReached = isRealAccount && realizedProfit !== null && realizedProfit <= -maxDailyLoss;
-  const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached;
+  const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached && !orderResolutionRequired;
   const maxStake = isRealAccount ? maxRealStake : 1000;
 
   useEffect(() => {
@@ -61,7 +64,7 @@ export default function DemoTradeTicket({
     <div className={styles.panelHeading}>
       <div>
         <p className={styles.eyebrow}>ORDER ENTRY</p>
-        <h2>{isRealAccount ? "Real trade ticket" : "Demo trade ticket"}</h2>
+        <h2>{isRealAccount ? "Real account · read-only" : "Demo trade ticket"}</h2>
         <p className={styles.panelSubtext}>Get a fresh Deriv quote first. Submit only after checking the terms.</p>
       </div>
       <span className={isRealAccount ? (realTradingEnabled ? styles.realLock : styles.realModeLocked) : styles.demoLock}>
@@ -72,8 +75,13 @@ export default function DemoTradeTicket({
     {isRealAccount && <div className={styles.accountModeNotice} role="note">
       <strong>{realTradingEnabled ? "Real-money account" : "Live trading is locked"}</strong>
       <span>{realTradingEnabled
-        ? "Every confirmed order uses real funds. You can lose the full stake. Review the quoted purchase price and potential payout before confirming."
-        : "Use the Live Account Controls panel to acknowledge the risks and enable real-money order entry for this account."}</span>
+        ? "Real-money order entry is disabled until server-side risk controls are available. Use a Demo account to place trades."
+        : "This linked Real account is read-only in TradeBridge. Select a Demo account to place trades."}</span>
+    </div>}
+    {orderResolutionRequired && <div className={styles.riskStopNotice} role="alert">
+      <strong>Previous order outcome unknown — entry paused</strong>
+      <span>Deriv may have accepted the previous order even though TradeBridge did not receive its confirmation. Open Deriv directly and reconcile recent transactions and open contracts before retrying.</span>
+      <button type="button" className={styles.secondaryButton} onClick={acknowledgeOrderResolution}>I checked Deriv account activity</button>
     </div>}
     {dailyLossReached && <div className={styles.riskStopNotice} role="alert">
       <strong>Daily loss stop reached</strong>
@@ -105,7 +113,7 @@ export default function DemoTradeTicket({
     <div className={styles.presets} aria-label="Stake presets">
       {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value} {account?.currency ?? ""}</button>)}
     </div>
-    <p className={styles.fieldHint} id="stake-note">{isRealAccount ? "Per-trade limit: " + maxStake + " " + (account?.currency ?? "") + ". The entire stake may be lost; never trade money you cannot afford to lose." : "Use virtual funds only. Deriv validates minimum stakes for the selected market and currency."}</p>
+    <p className={styles.fieldHint} id="stake-note">{isRealAccount ? "Real-money order entry is currently disabled. The fields are shown for context only." : "Use virtual funds only. Deriv validates minimum stakes for the selected market and currency."}</p>
 
     <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Contract duration</label>
     <div className={styles.inputShell}>
@@ -142,7 +150,7 @@ export default function DemoTradeTicket({
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an account before requesting a quote.</p>}
-    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Live order entry is locked. Enable it in Live Account Controls after reviewing the risk disclosure.</p>}
+    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Real account order entry is read-only and disabled until server-side risk controls are available. Select a Demo account to place trades.</p>}
     {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Live entry waits until Deriv's daily realized P/L has loaded.</p>}
   </section>;
 }
