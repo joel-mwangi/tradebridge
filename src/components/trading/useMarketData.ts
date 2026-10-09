@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { MarketInstrument, MarketSnapshot, PricePoint } from "./types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MarketCandle, MarketInstrument, MarketSnapshot, PricePoint } from "./types";
 
 const PUBLIC_SOCKET = "wss://api.derivws.com/trading/v1/options/ws/public";
 const PREFERRED_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "R_100", "R_50", "frxEURUSD", "frxGBPUSD", "frxXAUUSD"];
@@ -26,13 +26,47 @@ type PublicMessage = {
     epoch?: number;
   };
   history?: { prices?: Array<number | string>; times?: number[] };
+  candles?: Array<{
+    epoch?: number | string;
+    open?: number | string;
+    high?: number | string;
+    low?: number | string;
+    close?: number | string;
+  }>;
 };
 
 export function useMarketData() {
   const [markets, setMarkets] = useState<MarketInstrument[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, MarketSnapshot>>({});
+  const [candlesByKey, setCandlesByKey] = useState<Record<string, MarketCandle[]>>({});
   const [connection, setConnection] = useState("Connecting to Deriv market data");
   const [selectedSymbol, setSelectedSymbol] = useState("");
+  const socketRef = useRef<WebSocket | null>(null);
+  const candleSequenceRef = useRef(50_000);
+  const candleRequestsRef = useRef(new Map<number, { key: string; symbol: string; granularity: number }>());
+  const requestedCandleKeysRef = useRef(new Set<string>());
+
+  const requestCandles = useCallback((symbol: string, granularity: number) => {
+    const activeSocket = socketRef.current;
+    if (!symbol || !Number.isInteger(granularity) || granularity < 60
+      || !activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
+
+    const key = `${symbol}:${granularity}`;
+    if (requestedCandleKeysRef.current.has(key)) return;
+
+    const reqId = ++candleSequenceRef.current;
+    candleRequestsRef.current.set(reqId, { key, symbol, granularity });
+    requestedCandleKeysRef.current.add(key);
+    activeSocket.send(JSON.stringify({
+      ticks_history: symbol,
+      end: "latest",
+      count: 150,
+      style: "candles",
+      granularity,
+      subscribe: 0,
+      req_id: reqId,
+    }));
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -113,6 +147,7 @@ export function useMarketData() {
 
     try {
       socket = new WebSocket(PUBLIC_SOCKET);
+      socketRef.current = socket;
     } catch {
       setConnection("Market data unavailable");
       return;
@@ -133,7 +168,44 @@ export function useMarketData() {
       try {
         const message = JSON.parse(event.data) as PublicMessage;
         if (message.error) {
+          const candleRequest = message.req_id === undefined
+            ? undefined
+            : candleRequestsRef.current.get(message.req_id);
+          if (candleRequest) {
+            candleRequestsRef.current.delete(message.req_id as number);
+            requestedCandleKeysRef.current.delete(candleRequest.key);
+          }
           if (message.req_id === 1) setConnection("Could not load eligible markets");
+          return;
+        }
+
+        if ((message.msg_type === "candles" || message.msg_type === "history") && message.candles) {
+          const request = message.req_id === undefined
+            ? undefined
+            : candleRequestsRef.current.get(message.req_id);
+          if (!request) return;
+          const incoming = message.candles.flatMap((item) => {
+            const epoch = Number(item.epoch);
+            const open = Number(item.open);
+            const high = Number(item.high);
+            const low = Number(item.low);
+            const close = Number(item.close);
+            return Number.isFinite(epoch) && Number.isFinite(open) && Number.isFinite(high)
+              && Number.isFinite(low) && Number.isFinite(close)
+              ? [{ epoch, open, high, low, close }]
+              : [];
+          });
+          setCandlesByKey((current) => {
+            const byTime = new Map<number, MarketCandle>();
+            for (const candle of [...(current[request.key] ?? []), ...incoming]) {
+              byTime.set(candle.epoch, candle);
+            }
+            return {
+              ...current,
+              [request.key]: [...byTime.values()].sort((a, b) => a.epoch - b.epoch).slice(-240),
+            };
+          });
+          candleRequestsRef.current.delete(message.req_id as number);
           return;
         }
 
@@ -178,6 +250,9 @@ export function useMarketData() {
 
     return () => {
       alive = false;
+      if (socketRef.current === socket) socketRef.current = null;
+      candleRequestsRef.current.clear();
+      requestedCandleKeysRef.current.clear();
       socket.close();
     };
   }, []);
@@ -194,5 +269,7 @@ export function useMarketData() {
     selectedMarket,
     selectedSymbol: selectedMarket?.symbol ?? "",
     selectMarket: setSelectedSymbol,
+    candlesByKey,
+    requestCandles,
   };
 }
