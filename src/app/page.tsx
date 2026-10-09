@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const markets = [
   { symbol: "R_100", name: "Volatility 100 Index" },
@@ -11,7 +11,7 @@ const markets = [
 
 export default function Home() {
   const [selected, setSelected] = useState(markets[0]);
-  const [direction, setDirection] = useState<"Buy" | "Sell">("Buy");
+  const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<Array<{
     account_id: string;
@@ -24,7 +24,153 @@ export default function Home() {
   const [marketQuotes, setMarketQuotes] = useState<Record<string, { quote: number; baseline: number }>>({});
   const [marketConnection, setMarketConnection] = useState("Connecting to Deriv market data…");
   const [authMessage, setAuthMessage] = useState("");
+  const [stakeAmount, setStakeAmount] = useState("1");
+  const [durationSeconds, setDurationSeconds] = useState("60");
+  const [tradeBusy, setTradeBusy] = useState(false);
+  const [tradeStatus, setTradeStatus] = useState("");
+  const [quote, setQuote] = useState<{
+    id: string;
+    askPrice: number;
+    payout: number | null;
+    symbol: string;
+    contractType: "CALL" | "PUT";
+    stake: number;
+    duration: number;
+    currency: string;
+  } | null>(null);
+  const tradeSocket = useRef<WebSocket | null>(null);
   const activeAccount = accounts.find((account) => account.account_id === selectedAccountId) ?? accounts[0];
+
+  async function requestDemoQuote() {
+    const stake = Number(stakeAmount);
+    const duration = Number(durationSeconds);
+    if (!connected || !activeAccount) {
+      setTradeStatus("Connect Deriv and select a demo account first.");
+      return;
+    }
+    if ((activeAccount.account_type ?? "").toLowerCase() !== "demo") {
+      setTradeStatus("Trading is restricted to demo accounts in this build. Select a demo account.");
+      return;
+    }
+    if (!Number.isFinite(stake) || stake < 1 || stake > 1000 || !Number.isInteger(duration) || duration < 1 || duration > 86400) {
+      setTradeStatus("Enter a stake from 1 to 1,000 and a duration from 1 to 86,400 seconds.");
+      return;
+    }
+
+    setTradeBusy(true);
+    setTradeStatus("Requesting a demo trading session…");
+    setQuote(null);
+    tradeSocket.current?.close();
+    try {
+      const response = await fetch("/api/auth/deriv/demo-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: activeAccount.account_id }),
+        cache: "no-store",
+      });
+      const data = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !data.url) {
+        setTradeBusy(false);
+        setTradeStatus(data.error === "demo_accounts_only"
+          ? "Only demo accounts can place trades in this build."
+          : data.error === "token_expired"
+            ? "Your Deriv session expired. Connect Deriv again."
+            : "Could not open a demo trading session. Please retry.");
+        return;
+      }
+
+      const socket = new WebSocket(data.url);
+      tradeSocket.current = socket;
+      socket.onopen = () => {
+        socket.send(JSON.stringify({
+          proposal: 1,
+          amount: stake,
+          basis: "stake",
+          contract_type: direction,
+          currency: activeAccount.currency ?? "USD",
+          duration,
+          duration_unit: "s",
+          underlying_symbol: selected.symbol,
+          req_id: 71,
+        }));
+        setTradeStatus("Requesting a fresh demo quote…");
+      };
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data) as {
+            msg_type?: string;
+            proposal?: { id?: string; ask_price?: number | string; payout?: number | string };
+            buy?: { contract_id?: number | string; buy_price?: number | string };
+            error?: { message?: string };
+          };
+          if (message.error) {
+            setTradeBusy(false);
+            setTradeStatus(message.error.message ?? "Deriv rejected the request.");
+            return;
+          }
+          if (message.msg_type === "proposal" && message.proposal) {
+            const id = message.proposal.id;
+            const askPrice = Number(message.proposal.ask_price);
+            const rawPayout = message.proposal.payout;
+            const payout = rawPayout === undefined ? null : Number(rawPayout);
+            if (!id || !Number.isFinite(askPrice) || askPrice <= 0) {
+              setTradeBusy(false);
+              setTradeStatus("Deriv returned an invalid quote. Please request another.");
+              return;
+            }
+            setQuote({
+              id,
+              askPrice,
+              payout: payout !== null && Number.isFinite(payout) ? payout : null,
+              symbol: selected.symbol,
+              contractType: direction,
+              stake,
+              duration,
+              currency: activeAccount.currency ?? "USD",
+            });
+            setTradeBusy(false);
+            setTradeStatus("Fresh demo quote ready. Review it, then confirm the demo trade.");
+          }
+          if (message.msg_type === "buy" && message.buy) {
+            const contractId = message.buy.contract_id;
+            setTradeBusy(false);
+            setQuote(null);
+            setTradeStatus(contractId
+              ? `Demo trade placed successfully. Contract ID: ${contractId}.`
+              : "Deriv received the demo order. Check your account activity for its status.");
+            socket.close();
+          }
+        } catch {
+          setTradeBusy(false);
+          setTradeStatus("Could not read Deriv's response. Please request a fresh quote.");
+        }
+      };
+      socket.onerror = () => {
+        setTradeBusy(false);
+        setTradeStatus("Demo trading connection failed. Please retry.");
+      };
+      socket.onclose = () => {
+        if (tradeSocket.current === socket) tradeSocket.current = null;
+      };
+    } catch {
+      setTradeBusy(false);
+      setTradeStatus("Could not connect to Deriv. Please retry.");
+    }
+  }
+
+  function confirmDemoTrade() {
+    if (!quote || !tradeSocket.current || tradeSocket.current.readyState !== WebSocket.OPEN || tradeBusy) {
+      setTradeStatus("Request a fresh quote before confirming.");
+      return;
+    }
+    setTradeBusy(true);
+    setTradeStatus("Submitting your confirmed demo order…");
+    tradeSocket.current.send(JSON.stringify({
+      buy: quote.id,
+      price: quote.askPrice,
+      req_id: 72,
+    }));
+  }
 
   useEffect(() => {
     let active = true;
@@ -142,7 +288,26 @@ export default function Home() {
               })}</div>
               <div className="chart"><div><small>LATEST LIVE PRICE</small><b>{selected.name}</b></div><span className="sample">{marketConnection}</span><strong className="live-price">{marketQuotes[selected.symbol] ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(marketQuotes[selected.symbol].quote) : "Waiting for tick data…"}</strong><p>Prices stream from Deriv's public market-data WebSocket. No trade has been placed.</p></div>
             </section>
-            <section className="panel" id="ticket"><div className="panel-head"><div><h2>Trade ticket</h2><p>Order preview</p></div><span className="ticket-icon">↗</span></div><div className="selected-market"><span className="symbol big">V</span><div><b>{selected.name}</b><small>{selected.symbol}</small></div></div><label>Direction</label><div className="directions"><button className={direction === "Buy" ? "buy chosen" : "buy"} onClick={() => setDirection("Buy")}>↗ Buy</button><button className={direction === "Sell" ? "sell chosen" : "sell"} onClick={() => setDirection("Sell")}>↘ Sell</button></div><label htmlFor="stake">Stake amount</label><div className="amount"><span>$</span><input id="stake" type="number" min="1" defaultValue="10" disabled/><span>USD</span></div><p className="hint">Order controls activate after secure API integration.</p><div className="order-summary"><span>Selected action</span><b className={direction === "Buy" ? "up" : "down"}>{direction} · {selected.symbol}</b></div><button className="execute" disabled>Connect account to continue</button><p className="risk">Trading involves risk. Review contract details and potential loss before confirming any future live order.</p></section>
+            <section className="panel" id="ticket">
+              <div className="panel-head"><div><h2>Demo trade ticket</h2><p>Quotes and orders are demo-only</p></div><span className="ticket-icon">↗</span></div>
+              <div className="selected-market"><span className="symbol big">V</span><div><b>{selected.name}</b><small>{selected.symbol}</small></div></div>
+              <label>Contract direction</label>
+              <div className="directions">
+                <button className={direction === "CALL" ? "buy chosen" : "buy"} onClick={() => { setDirection("CALL"); setQuote(null); }}>↑ Higher (Call)</button>
+                <button className={direction === "PUT" ? "sell chosen" : "sell"} onClick={() => { setDirection("PUT"); setQuote(null); }}>↓ Lower (Put)</button>
+              </div>
+              <label htmlFor="stake">Stake amount ({activeAccount?.currency ?? "USD"})</label>
+              <div className="amount"><span>{activeAccount?.currency ?? "USD"}</span><input id="stake" type="number" min="1" max="1000" step="1" value={stakeAmount} onChange={(event) => { setStakeAmount(event.target.value); setQuote(null); }} /><span>Stake</span></div>
+              <label htmlFor="duration">Duration (seconds)</label>
+              <div className="amount"><input id="duration" type="number" min="1" max="86400" step="1" value={durationSeconds} onChange={(event) => { setDurationSeconds(event.target.value); setQuote(null); }} /><span>sec</span></div>
+              <p className="hint">Real-money order placement is disabled. This ticket only requests quotes and places orders on a Deriv demo account.</p>
+              {quote && <div className="demo-quote"><strong>Fresh demo quote</strong><span>Stake: {quote.stake} {quote.currency}</span><span>Price: {quote.askPrice} {quote.currency}</span>{quote.payout !== null && <span>Potential payout: {quote.payout} {quote.currency}</span>}<span>{quote.contractType === "CALL" ? "Higher" : "Lower"} · {quote.symbol} · {quote.duration}s</span></div>}
+              {tradeStatus && <p className="trade-status" role="status">{tradeStatus}</p>}
+              <button className="execute" onClick={requestDemoQuote} disabled={tradeBusy || !connected || (activeAccount?.account_type ?? "").toLowerCase() !== "demo"}>{tradeBusy ? "Working…" : "Get fresh demo quote"}</button>
+              {quote && <button className="primary confirm-demo" onClick={confirmDemoTrade} disabled={tradeBusy}>Confirm demo trade</button>}
+              {!connected && <p className="risk">Connect Deriv to enable demo trading.</p>}
+              {connected && (activeAccount?.account_type ?? "").toLowerCase() !== "demo" && <p className="risk">Select a demo account. Real accounts cannot be traded from this build.</p>}
+            </section>
           </div>
           <section className="panel activity" id="activity"><div className="panel-head"><div><h2>Recent activity</h2><p>Account events and order history</p></div></div><div className="empty"><span>◷</span><b>Your activity will appear here</b><p>Connect a Deriv account to load verified transactions.</p></div></section>
           <footer><span>TradeBridge · Built for clarity</span><span>Preview build · No live trading</span></footer>
