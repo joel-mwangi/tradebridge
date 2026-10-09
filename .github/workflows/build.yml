@@ -26,6 +26,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Trading safety regression tests
+        run: npm test
+
       - name: Type-check
         run: npx tsc --noEmit
 
