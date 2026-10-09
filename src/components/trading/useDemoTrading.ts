@@ -211,7 +211,7 @@ export function useTradingSession(
         : !account
           ? "No account selected"
           : isRealAccount
-            ? "Real trading is locked until you explicitly enable it"
+            ? "Real account is read-only in TradeBridge"
             : "This account type is not supported for trading");
       return () => {
         cancelled = true;
@@ -537,7 +537,7 @@ export function useTradingSession(
     const isRealAccount = accountType === "real";
     if (!connected || !account || (!isDemoAccount && !(isRealAccount && realTradingEnabled))) {
       setStatus(isRealAccount
-        ? "Enable live trading and accept the risk disclosure before requesting a real-money quote."
+        ? "Real-money order entry is disabled until server-side risk controls are available. Select a Demo account to place trades."
         : "Select a verified, supported Deriv account before requesting a quote.");
       return;
     }
