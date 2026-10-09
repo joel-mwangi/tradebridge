@@ -11,6 +11,8 @@ type Props = {
   maxRealStake: number;
   maxDailyLoss: number;
   realizedProfit: number | null;
+  orderResolutionRequired: boolean;
+  acknowledgeOrderResolution: () => void;
   market: MarketInstrument | null;
   sessionState: string;
   status: string;
@@ -22,6 +24,7 @@ type Props = {
 
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
+  orderResolutionRequired, acknowledgeOrderResolution,
   market, sessionState, status, busy, quote, requestQuote, confirmQuote,
 }: Props) {
   const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
@@ -34,7 +37,7 @@ export default function DemoTradeTicket({
   const canTrade = connected && (isDemo || (isRealAccount && realTradingEnabled));
   const expectedSessionState = isRealAccount ? "Real trading connected" : "Demo trading connected";
   const dailyLossReached = isRealAccount && realizedProfit !== null && realizedProfit <= -maxDailyLoss;
-  const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached;
+  const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached && !orderResolutionRequired;
   const maxStake = isRealAccount ? maxRealStake : 1000;
 
   useEffect(() => {
@@ -74,6 +77,11 @@ export default function DemoTradeTicket({
       <span>{realTradingEnabled
         ? "Every confirmed order uses real funds. You can lose the full stake. Review the quoted purchase price and potential payout before confirming."
         : "Use the Live Account Controls panel to acknowledge the risks and enable real-money order entry for this account."}</span>
+    </div>}
+    {orderResolutionRequired && <div className={styles.riskStopNotice} role="alert">
+      <strong>Previous order outcome unknown — entry paused</strong>
+      <span>Deriv may have accepted the previous order even though TradeBridge did not receive its confirmation. Open Deriv directly and reconcile recent transactions and open contracts before retrying.</span>
+      <button type="button" className={styles.secondaryButton} onClick={acknowledgeOrderResolution}>I checked Deriv account activity</button>
     </div>}
     {dailyLossReached && <div className={styles.riskStopNotice} role="alert">
       <strong>Daily loss stop reached</strong>
@@ -142,7 +150,7 @@ export default function DemoTradeTicket({
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an account before requesting a quote.</p>}
-    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Live order entry is locked. Enable it in Live Account Controls after reviewing the risk disclosure.</p>}
+    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Real account order entry is read-only and disabled until server-side risk controls are available. Select a Demo account to place trades.</p>}
     {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Live entry waits until Deriv's daily realized P/L has loaded.</p>}
   </section>;
 }
