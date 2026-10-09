@@ -1,21 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import AuthShell from "@/components/auth-shell";
 
 export default function LoginPage() {
-  const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(params.get("error") === "configuration"
-    ? "Platform authentication is not configured yet. Add the Supabase environment variables in Vercel."
-    : params.get("error") === "callback"
-      ? "We could not complete sign-in. Please try again."
-      : "");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "configuration") {
+      setMessage("Platform authentication is not configured yet. Add the Supabase environment variables in Vercel.");
+    } else if (params.get("error") === "callback") {
+      setMessage("We could not complete sign-in. Please try again.");
+    } else if (params.get("signed_out") === "1") {
+      setMessage("You have signed out of TradeBridge.");
+    } else if (params.get("password_updated") === "1") {
+      setMessage("Your password has been updated. Sign in with your new password.");
+    }
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +47,7 @@ export default function LoginPage() {
       <input id="email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required />
       <label htmlFor="password">Password</label>
       <input id="password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required />
-      {message && <p className="auth-message" role="alert">{message}</p>}
+      {message && <p className="auth-message" role="status">{message}</p>}
       <button className="primary auth-submit" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       <div className="auth-links"><Link href="/forgot-password">Forgot password?</Link><span>New to TradeBridge? <Link href="/register">Create account</Link></span></div>
     </form>
