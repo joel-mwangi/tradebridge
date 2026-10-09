@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import styles from "./TradingWorkspace.module.css";
 import type { DemoQuote, DerivAccount, MarketInstrument } from "./types";
 
@@ -24,13 +24,6 @@ export default function DemoTradeTicket({
   const [duration, setDuration] = useState("60");
   const isDemo = (account?.account_type ?? "").toLowerCase() === "demo";
   const ready = connected && isDemo && sessionState === "Demo trading connected" && Boolean(market);
-
-  useEffect(() => {
-    if (quote && (quote.symbol !== market?.symbol || quote.contractType !== direction || String(quote.stake) !== stake || String(quote.duration) !== duration)) {
-      // The quote belongs to the exact inputs submitted. Changing the visible inputs
-      // requires a fresh quote before the user can confirm a different order.
-    }
-  }, [quote, market?.symbol, direction, stake, duration]);
 
   function submitQuote() {
     if (!market) return;
