@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AccountActivity, DemoQuote, DerivAccount, OpenPosition } from "./types";
 
 const EMPTY_BALANCE = { balance: null as number | null, currency: "" };
+const STATEMENT_PAGE_SIZE = 30;
 
 type TradeInput = {
   symbol: string;
@@ -18,7 +19,7 @@ type ApiMessage = {
   error?: { message?: string; code?: string };
   balance?: { balance?: number | string; currency?: string };
   portfolio?: { contracts?: Array<Record<string, unknown>> };
-  statement?: { transactions?: Array<Record<string, unknown>> };
+  statement?: { count?: number; transactions?: Array<Record<string, unknown>> };
   profit_table?: { transactions?: Array<Record<string, unknown>> };
   proposal?: { id?: string; ask_price?: number | string; payout?: number | string };
   buy?: { contract_id?: number | string; buy_price?: number | string };
@@ -112,6 +113,8 @@ export function useTradingSession(
   const [quote, setQuote] = useState<DemoQuote | null>(null);
   const [positions, setPositions] = useState<OpenPosition[]>([]);
   const [activity, setActivity] = useState<AccountActivity[]>([]);
+  const [activityHasMore, setActivityHasMore] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
   const [balance, setBalance] = useState(EMPTY_BALANCE);
   const [realizedProfit, setRealizedProfit] = useState<number | null>(null);
   const [orderResolutionRequired, setOrderResolutionRequired] = useState(true);
@@ -122,6 +125,8 @@ export function useTradingSession(
   const socketRef = useRef<WebSocket | null>(null);
   const sequenceRef = useRef(100);
   const quoteRequestRef = useRef<{ id: number; input: TradeInput } | null>(null);
+  const statementRequestRef = useRef<{ id: number; offset: number; limit: number } | null>(null);
+  const loadedStatementCountRef = useRef(STATEMENT_PAGE_SIZE);
   const buyRequestRef = useRef<number | null>(null);
   const sellRequestRef = useRef<{ id: number; contractId: string } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -147,10 +152,15 @@ export function useTradingSession(
     };
     const refreshAccount = () => {
       const portfolioId = nextId();
-      const statementId = nextId();
       const profitId = nextId();
       send({ portfolio: 1, req_id: portfolioId });
-      send({ statement: 1, limit: 30, description: 1, req_id: statementId });
+      if (!statementRequestRef.current) {
+        const statementId = nextId();
+        const limit = Math.max(STATEMENT_PAGE_SIZE, Math.min(loadedStatementCountRef.current, 999));
+        statementRequestRef.current = { id: statementId, offset: 0, limit };
+        setActivityLoading(true);
+        send({ statement: 1, limit, offset: 0, description: 1, req_id: statementId });
+      }
       send({
         profit_table: 1,
         description: 1,
@@ -177,6 +187,10 @@ export function useTradingSession(
     setStatus("");
     setPositions([]);
     setActivity([]);
+    setActivityHasMore(false);
+    setActivityLoading(false);
+    statementRequestRef.current = null;
+    loadedStatementCountRef.current = STATEMENT_PAGE_SIZE;
     setRealizedProfit(null);
     setBalance({ balance: account?.balance ?? null, currency: account?.currency ?? "" });
     quoteRequestRef.current = null;
@@ -265,6 +279,12 @@ export function useTradingSession(
 
           if (message.error) {
             const requestId = message.req_id;
+            if (statementRequestRef.current && requestId === statementRequestRef.current.id) {
+              statementRequestRef.current = null;
+              setActivityLoading(false);
+              setStatus("Deriv could not load statement history. Check the connection and retry.");
+              return;
+            }
             if (quoteRequestRef.current && requestId === quoteRequestRef.current.id) {
               clearTimeoutRef();
               quoteRequestRef.current = null;
@@ -321,12 +341,34 @@ export function useTradingSession(
             return;
           }
 
-          if (message.msg_type === "statement" && message.statement) {
-            const nextActivity = (message.statement.transactions ?? [])
+          if (message.msg_type === "statement" && message.statement
+            && statementRequestRef.current && message.req_id === statementRequestRef.current.id) {
+            const request = statementRequestRef.current;
+            statementRequestRef.current = null;
+            setActivityLoading(false);
+            const rawTransactions = message.statement.transactions ?? [];
+            const nextActivity = rawTransactions
               .map((item) => toActivity(item))
-              .filter((item): item is AccountActivity => item !== null)
-              .sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
-            setActivity(nextActivity);
+              .filter((item): item is AccountActivity => item !== null);
+
+            const hasMore = typeof message.statement.count === "number"
+              ? request.offset + rawTransactions.length < message.statement.count
+              : rawTransactions.length >= request.limit;
+
+            if (request.offset === 0) {
+              const sorted = nextActivity.sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+              setActivity(sorted);
+              loadedStatementCountRef.current = Math.max(STATEMENT_PAGE_SIZE, sorted.length);
+            } else {
+              setActivity((current) => {
+                const unique = new Map<string, AccountActivity>();
+                for (const item of [...current, ...nextActivity]) unique.set(item.id, item);
+                const merged = [...unique.values()].sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+                loadedStatementCountRef.current = Math.max(STATEMENT_PAGE_SIZE, merged.length);
+                return merged;
+              });
+            }
+            setActivityHasMore(hasMore);
             return;
           }
 
@@ -437,6 +479,8 @@ export function useTradingSession(
           if (socketRef.current === localSocket) socketRef.current = null;
           if (refreshTimer) window.clearInterval(refreshTimer);
           refreshTimer = null;
+          statementRequestRef.current = null;
+          setActivityLoading(false);
           if (buyRequestRef.current !== null) {
             if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
             setOrderResolutionRequired(true);
@@ -466,6 +510,7 @@ export function useTradingSession(
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
       refreshAccountRef.current = null;
+      statementRequestRef.current = null;
       if (buyRequestRef.current !== null && orderResolutionKey) {
         // A navigation during a submitted buy must not silently reset its state.
         writeOrderResolution(orderResolutionKey, "unknown");
@@ -601,6 +646,25 @@ export function useTradingSession(
     refreshAccountRef.current?.();
   }
 
+  function loadMoreActivity() {
+    const activeSocket = socketRef.current;
+    if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN || activityLoading
+      || !activityHasMore || statementRequestRef.current) return;
+    const offset = activity.length;
+    const limit = STATEMENT_PAGE_SIZE;
+    const id = ++sequenceRef.current;
+    statementRequestRef.current = { id, offset, limit };
+    setActivityLoading(true);
+    setStatus("Loading more account activity…");
+    activeSocket.send(JSON.stringify({
+      statement: 1,
+      limit,
+      offset,
+      description: 1,
+      req_id: id,
+    }));
+  }
+
   function acknowledgeOrderResolution() {
     if (!orderResolutionRequired) return;
     const confirmed = window.confirm(
@@ -656,6 +720,7 @@ export function useTradingSession(
   return {
     sessionState, status, busy, quote, positions, activity, balance, realizedProfit,
     orderResolutionRequired, acknowledgeOrderResolution,
+    activityHasMore, activityLoading, loadMoreActivity,
     requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow,
   };
 }
