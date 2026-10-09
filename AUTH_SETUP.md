@@ -34,7 +34,24 @@ Enable email/password authentication. Under Authentication → Sign In / Provide
 
 The middleware verifies sessions server-side and protects dashboard pages and API routes. Unauthenticated API requests receive HTTP 401. Deriv OAuth remains a separate connection.
 
-## 4. Verify after deployment
+## 4. Identity consistency and Deriv account linking
+
+- The Supabase Auth user UUID is the canonical TradeBridge identity. A Google or email/password login must resolve to that same Supabase user; do not merge users by comparing email strings in application code.
+- Supabase Auth manages provider identity linking. Keep provider email verification enabled. If a user signs in with a different Google identity/email, require that user to authenticate and link identities through the supported Supabase flow rather than silently merging accounts.
+- TradeBridge requires a verified platform email before starting Deriv authorization. The Deriv email does not need to match the platform email: Deriv's stable `account_id` is the external account identifier, and Deriv's email is not treated as proof of TradeBridge ownership.
+- The callback associates every returned Deriv account ID with the authenticated Supabase user UUID. A Deriv account ID is unique in `public.deriv_account_links`; an account already linked to another TradeBridge user cannot be silently reassigned.
+- Deriv access tokens remain in HttpOnly cookies and are additionally bound to the current TradeBridge user UUID. Account and demo-session APIs re-check the authenticated user and persisted account ownership server-side. Do not move Deriv tokens into localStorage, client state, or logs.
+
+## 5. Apply the database migrations
+
+The migration files are committed to the repository but are **not automatically applied** to your remote Supabase project. Apply them to the correct project in order before testing account linking:
+
+1. `supabase/migrations/20261009100000_create_tradebridge_profiles.sql`
+2. `supabase/migrations/20261009103000_link_deriv_accounts_to_users.sql`
+
+Use the Supabase CLI linked to project ref `ujelblflzfqgccldxaom` and apply the migrations through your normal migration workflow, or run the SQL in the Supabase SQL Editor in the same order. Do not reset the database. If your project's Data API settings require per-table exposure, expose `public.deriv_account_links` to the Data API after applying the migration; its SQL grants and RLS policies still restrict access to each user's own rows.
+
+## 6. Verify after deployment
 
 1. Open the site in a private/incognito window. The dashboard should redirect to `/login`.
 2. Register a test user and verify the email if confirmation is enabled.
