@@ -450,7 +450,7 @@ export function useTradingSession(
   }, [connected, account?.account_id, account?.account_type, account?.currency, realTradingEnabled]);
 
   function requestQuote(input: TradeInput) {
-    if (orderResolutionRequired) {
+    if (orderResolutionRequired || buyRequestRef.current !== null) {
       setStatus("Order entry is paused because a previous buy has an unknown outcome. Check open positions and account statement in Deriv before unlocking.");
       return;
     }
