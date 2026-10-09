@@ -75,9 +75,9 @@ function startOfLocalDayEpoch(): number {
 function readOrderResolution(key: string | null): string | null {
   if (!key) return null;
   try {
-    return window.sessionStorage.getItem(key);
+    return window.localStorage.getItem(key);
   } catch {
-    // If storage is unavailable, fail closed for this session.
+    // If storage is unavailable, fail closed rather than assuming the order failed.
     return "unknown";
   }
 }
@@ -85,16 +85,16 @@ function readOrderResolution(key: string | null): string | null {
 function writeOrderResolution(key: string | null, value: "pending" | "unknown") {
   if (!key) return;
   try {
-    window.sessionStorage.setItem(key, value);
+    window.localStorage.setItem(key, value);
   } catch {
-    // In-memory lock still protects the active React session.
+    // The in-memory lock protects this tab; cross-tab persistence is best-effort.
   }
 }
 
 function clearOrderResolution(key: string | null) {
   if (!key) return;
   try {
-    window.sessionStorage.removeItem(key);
+    window.localStorage.removeItem(key);
   } catch {
     // In-memory reconciliation state will still remain active until cleared.
   }
@@ -133,6 +133,32 @@ export function useTradingSession(
   const closedContractIdsRef = useRef<Set<string>>(new Set());
   const subscribedContractIdsRef = useRef<Set<string>>(new Set());
   const refreshAccountRef = useRef<(() => void) | null>(null);
+
+  // Persist unresolved provider outcomes across tabs and browser restarts. The
+  // "storage" event keeps other open tabs locked when one tab submits an order.
+  useEffect(() => {
+    if (!orderResolutionKey) {
+      setOrderResolutionRequired(false);
+      return;
+    }
+
+    const stored = readOrderResolution(orderResolutionKey);
+    setOrderResolutionRequired(Boolean(stored));
+
+    const syncResolutionState = (event: StorageEvent) => {
+      if (event.key !== orderResolutionKey) return;
+      const unresolved = event.newValue !== null;
+      setOrderResolutionRequired(unresolved);
+      if (unresolved) {
+        setQuote(null);
+        setBusy(false);
+        setStatus("Trade actions are paused because another TradeBridge tab has an unresolved order outcome. Reconcile it in Deriv before unlocking.");
+      }
+    };
+
+    window.addEventListener("storage", syncResolutionState);
+    return () => window.removeEventListener("storage", syncResolutionState);
+  }, [orderResolutionKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -439,6 +465,14 @@ export function useTradingSession(
             sellRequestRef.current = null;
             setBusy(false);
             setQuote(null);
+            const returnedContractId = String(message.sell.contract_id ?? "");
+            if (returnedContractId !== soldContractId) {
+              if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+              setOrderResolutionRequired(true);
+              setStatus("Deriv's sale response did not identify the expected contract. Order actions are paused; reconcile the contract and statement directly in Deriv.");
+              refreshAccount();
+              return;
+            }
             setStatus("Deriv confirmed the sale of contract " + soldContractId + ". Balance, positions, and history are refreshing.");
             refreshAccount();
             return;
@@ -481,7 +515,9 @@ export function useTradingSession(
           refreshTimer = null;
           statementRequestRef.current = null;
           setActivityLoading(false);
-          if (buyRequestRef.current !== null) {
+          if (buyRequestRef.current !== null || sellRequestRef.current !== null) {
+            // A socket closing while an order is in-flight leaves its outcome
+            // ambiguous, regardless of whether it was a buy or early sale.
             if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
             setOrderResolutionRequired(true);
             setQuote(null);
@@ -527,8 +563,11 @@ export function useTradingSession(
   }, [connected, account?.account_id, account?.account_type, account?.currency, realTradingEnabled]);
 
   function requestQuote(input: TradeInput) {
-    if (orderResolutionRequired || buyRequestRef.current !== null) {
-      setStatus("Order entry is paused because a previous buy has an unknown outcome. Check open positions and account statement in Deriv before unlocking.");
+    const persistedResolution = readOrderResolution(orderResolutionKey);
+    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+      setOrderResolutionRequired(true);
+      setQuote(null);
+      setStatus("Trade entry is paused because a previous order has an unknown outcome. Reconcile open positions and account statement directly in Deriv before unlocking.");
       return;
     }
     const activeSocket = socketRef.current;
@@ -589,8 +628,11 @@ export function useTradingSession(
   }
 
   function confirmQuote() {
-    if (orderResolutionRequired || buyRequestRef.current !== null) {
-      setStatus("Order entry is paused until the previous submission outcome is resolved.");
+    const persistedResolution = readOrderResolution(orderResolutionKey);
+    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+      setOrderResolutionRequired(true);
+      setQuote(null);
+      setStatus("Trade entry is paused because a previous order has an unknown outcome. Reconcile open positions and account statement directly in Deriv before unlocking.");
       return;
     }
     const activeSocket = socketRef.current;
@@ -677,6 +719,12 @@ export function useTradingSession(
   }
 
   function sellPosition(contractId: string) {
+    const persistedResolution = readOrderResolution(orderResolutionKey);
+    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+      setOrderResolutionRequired(true);
+      setStatus("Order actions are paused because a previous submission has an unknown outcome. Reconcile it directly in Deriv before submitting another order.");
+      return;
+    }
     const activeSocket = socketRef.current;
     const accountType = (account?.account_type ?? "").toLowerCase();
     const canTrade = accountType === "demo" || (accountType === "real" && realTradingEnabled);
@@ -702,8 +750,11 @@ export function useTradingSession(
     timeoutRef.current = setTimeout(() => {
       if (sellRequestRef.current?.id !== reqId) return;
       sellRequestRef.current = null;
+      if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+      setOrderResolutionRequired(true);
+      setQuote(null);
       setBusy(false);
-      setStatus("Deriv did not confirm the sale in time. Check positions and statement before trying again.");
+      setStatus("Deriv did not confirm the sale in time. Order actions are paused; reconcile the contract in Deriv before unlocking.");
       refreshAfterTimeout();
     }, 20_000);
   }
