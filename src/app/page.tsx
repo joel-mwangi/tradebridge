@@ -331,15 +331,16 @@ export default function Home() {
         <nav><a className="nav active" href="#overview">▦ <span>Overview</span></a><a className="nav" href="#markets">⌁ <span>Markets</span></a><a className="nav" href="#ticket">↗ <span>Trade</span></a><a className="nav" href="#activity">◷ <span>Activity</span></a></nav>
         <div className="side-status"><span className="status-dot" /><div><strong>Deriv connection</strong><small>{connected ? "Authorized session" : "Not connected"}</small></div></div>
       </aside>
+      <nav className="mobile-nav" aria-label="Main navigation"><a href="#overview" aria-label="Overview">▦<span>Home</span></a><a href="#markets" aria-label="Markets">⌁<span>Markets</span></a><a href="#ticket" aria-label="Trade">↗<span>Trade</span></a><a href="#activity" aria-label="Activity">◷<span>Activity</span></a></nav>
       <section className="main" id="overview">
         <header className="topbar"><span>Workspace <b>/</b> Overview</span><div><span className="demo-tag">● Demo environment</span><span className="avatar">JM</span></div></header>
         <div className="content">
           <div className="intro"><div><p className="eyebrow">YOUR TRADING WORKSPACE</p><h1>Trade with a clearer view.</h1><p className="muted">Markets, account information, and activity in one workspace.</p></div>{connected ? <form action="/api/auth/deriv/disconnect" method="post"><button className="primary" type="submit">Disconnect Deriv</button></form> : <div className="connect-actions"><button className="primary" onClick={() => { window.location.href = "/api/auth/deriv/start"; }}>Connect Deriv ↗</button><a className="signup-link" href="/api/auth/deriv/start?mode=signup">Create account</a></div>}</div>
           <section className="notice"><span className="notice-icon">i</span><div><strong>{connected ? "Deriv connected — demo trading only" : "No verified Deriv session"}</strong><p>{authMessage || "Market prices are live when the Deriv stream is available. Demo orders require a fresh quote and separate confirmation; real-money orders are disabled."}</p></div><b>DEMO</b></section>
           <div className="stats">
-            <article className="card"><span>Account balance</span><strong>{activeAccount?.balance !== null && activeAccount?.balance !== undefined ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(activeAccount.balance) : "—"} <small>{activeAccount?.currency ?? ""}</small></strong><p>{activeAccount ? `${activeAccount.account_type ?? "Trading"} account · ${activeAccount.account_id}` : connected ? "No account details were returned" : "Connect Deriv to load verified balance"}</p>{accounts.length > 1 && <select className="account-select" aria-label="Select Deriv account" value={activeAccount?.account_id ?? ""} onChange={(event) => { setSelectedAccountId(event.target.value); setQuote(null); tradeSocket.current?.close(); setTradeStatus(""); }}>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.account_id} · {account.account_type ?? "Account"}</option>)}</select>}</article>
-            <article className="card"><span>Open positions</span><strong>—</strong><p>No live positions loaded</p></article>
-            <article className="card"><span>Today’s P/L</span><strong>— <small>USD</small></strong><p>Performance appears after connection</p></article>
+            <article className="card"><span>Available balance</span><strong>{activeAccount?.balance !== null && activeAccount?.balance !== undefined ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(activeAccount.balance) : "—"} <small>{activeAccount?.currency ?? ""}</small></strong><p>{activeAccount ? `${activeAccount.account_type ?? "Trading"} account · ${activeAccount.account_id}` : connected ? "No account details were returned" : "Connect Deriv to load verified balance"}</p>{accounts.length > 1 && <select className="account-select" aria-label="Select Deriv account" value={activeAccount?.account_id ?? ""} onChange={(event) => { setSelectedAccountId(event.target.value); setQuote(null); tradeSocket.current?.close(); setTradeStatus(""); }}>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.account_id} · {account.account_type ?? "Account"}</option>)}</select>}</article>
+            <article className="card"><span>Open positions</span><strong className="metric-placeholder">Not available</strong><p>Position tracking is not connected yet.</p></article>
+            <article className="card"><span>Today’s profit / loss</span><strong className="metric-placeholder">Not available</strong><p>Profit and loss tracking is not integrated yet.</p></article>
           </div>
           <div className="columns">
             <section className="panel" id="markets"><div className="panel-head"><div><h2>Market watch</h2><p>Choose a market to inspect</p></div><span className="sample">● {marketConnection}</span></div>
@@ -359,11 +360,15 @@ export default function Home() {
                 <button className={direction === "CALL" ? "buy chosen" : "buy"} onClick={() => { setDirection("CALL"); setQuote(null); }}>↑ Higher (Call)</button>
                 <button className={direction === "PUT" ? "sell chosen" : "sell"} onClick={() => { setDirection("PUT"); setQuote(null); }}>↓ Lower (Put)</button>
               </div>
-              <label htmlFor="stake">Stake amount ({activeAccount?.currency ?? "USD"})</label>
-              <div className="amount"><span>{activeAccount?.currency ?? "USD"}</span><input id="stake" type="number" min="1" max="1000" step="1" value={stakeAmount} onChange={(event) => { setStakeAmount(event.target.value); setQuote(null); }} /><span>Stake</span></div>
-              <label htmlFor="duration">Duration (seconds)</label>
-              <div className="amount"><input id="duration" type="number" min="1" max="86400" step="1" value={durationSeconds} onChange={(event) => { setDurationSeconds(event.target.value); setQuote(null); }} /><span>sec</span></div>
-              <p className="hint">Real-money order placement is disabled. This ticket only requests quotes and places orders on a Deriv demo account.</p>
+              <label htmlFor="stake">Stake amount</label>
+              <div className="amount"><span>{activeAccount?.currency ?? "USD"}</span><input id="stake" aria-describedby="stake-help" type="number" min="1" max="1000" step="1" value={stakeAmount} onChange={(event) => { setStakeAmount(event.target.value); setQuote(null); }} /><span>per trade</span></div>
+              <p id="stake-help" className="field-help">Choose a common amount or enter your own (1–1,000 {activeAccount?.currency ?? "USD"}).</p>
+              <div className="quick-values" aria-label="Suggested stake amounts">{["1", "5", "10", "25"].map((amount) => <button key={amount} type="button" className={stakeAmount === amount ? "quick-value active" : "quick-value"} onClick={() => { setStakeAmount(amount); setQuote(null); }}>{amount} {activeAccount?.currency ?? "USD"}</button>)}</div>
+              <label htmlFor="duration">Contract duration</label>
+              <div className="amount"><input id="duration" aria-describedby="duration-help" type="number" min="1" max="86400" step="1" value={durationSeconds} onChange={(event) => { setDurationSeconds(event.target.value); setQuote(null); }} /><span>seconds</span></div>
+              <div className="quick-values" aria-label="Suggested contract durations">{[{label:"1 min",value:"60"},{label:"5 min",value:"300"},{label:"10 min",value:"600"}].map((preset) => <button key={preset.value} type="button" className={durationSeconds === preset.value ? "quick-value active" : "quick-value"} onClick={() => { setDurationSeconds(preset.value); setQuote(null); }}>{preset.label}</button>)}</div>
+              <p id="duration-help" className="field-help">Duration is entered in seconds. Choose a preset or enter 1–86,400 seconds.</p>
+              <p className="hint"><strong>Demo mode.</strong> Real-money orders are disabled. You’ll review a quote before confirming any demo trade.</p>
               {quote && <div className="demo-quote"><strong>Fresh demo quote</strong><span>Stake: {quote.stake} {quote.currency}</span><span>Price: {quote.askPrice} {quote.currency}</span>{quote.payout !== null && <span>Potential payout: {quote.payout} {quote.currency}</span>}<span>{quote.contractType === "CALL" ? "Higher" : "Lower"} · {quote.symbol} · {quote.duration}s</span></div>}
               {tradeStatus && <p className="trade-status" role="status">{tradeStatus}</p>}
               <button className="execute" onClick={requestDemoQuote} disabled={tradeBusy || !connected || (activeAccount?.account_type ?? "").toLowerCase() !== "demo"}>{tradeBusy ? "Working…" : "Get fresh demo quote"}</button>
@@ -372,7 +377,7 @@ export default function Home() {
               {connected && (activeAccount?.account_type ?? "").toLowerCase() !== "demo" && <p className="risk">Select a demo account. Real accounts cannot be traded from this build.</p>}
             </section>
           </div>
-          <section className="panel activity" id="activity"><div className="panel-head"><div><h2>Recent activity</h2><p>Account events and order history</p></div></div><div className="empty"><span>◷</span><b>Your activity will appear here</b><p>Transaction history is not integrated yet.</p></div></section>
+          <section className="panel activity" id="activity"><div className="panel-head"><div><h2>Recent activity</h2><p>Account events and order history</p></div></div><div className="empty"><span>◷</span><b>Trade history isn’t connected yet</b><p>Once account activity is integrated, your recent trades and transaction details will appear here.</p></div></section>
           <footer><span>TradeBridge · Built for clarity</span><span>Demo orders only · Real-money trading disabled</span></footer>
         </div>
       </section>
