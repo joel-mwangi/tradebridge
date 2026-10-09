@@ -16,6 +16,8 @@ type AccountsResponse = {
   error?: string;
 };
 
+const REAL_EXECUTION_GATEWAY_AVAILABLE = false;
+
 type LiveConsentResponse = {
   enabled?: boolean;
   max_stake?: number;
@@ -93,7 +95,8 @@ export default function TradingWorkspace() {
     ?? null;
   const activeAccountIsDemo = isDemoAccount(activeAccount);
   const activeAccountIsReal = isRealAccount(activeAccount);
-  const effectiveLiveTradingEnabled = activeAccountIsReal
+  const effectiveLiveTradingEnabled = REAL_EXECUTION_GATEWAY_AVAILABLE
+    && activeAccountIsReal
     && liveTradingEnabled
     && liveConsentLoadedAccountId === activeAccount?.account_id;
   const trading = useTradingSession(connected, activeAccount, effectiveLiveTradingEnabled, maxRealStake, maxDailyLoss);
@@ -344,8 +347,12 @@ export default function TradingWorkspace() {
         <section className={styles.notice} aria-live="polite">
           <span className={styles.noticeIcon}>i</span>
           <div className={styles.noticeCopy}>
-            <strong>{!connected ? "Connect Deriv to activate trading" : activeAccountIsDemo ? "Demo account selected · virtual funds only" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Real account selected · live orders enabled" : "Real account selected · read-only until acknowledged" : "Deriv connected · supported account required"}</strong>
-            <p>{activeAccountIsReal ? liveConsentMessage || "Live account actions require explicit risk acknowledgement." : authMessage}</p>
+            <strong>{!connected ? "Connect Deriv to activate trading" : activeAccountIsDemo ? "Demo account selected · virtual funds only" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Real account selected · live orders enabled" : "Real account selected · read-only; live orders disabled for safety" : "Deriv connected · supported account required"}</strong>
+            <p>{activeAccountIsReal
+              ? REAL_EXECUTION_GATEWAY_AVAILABLE
+                ? liveConsentMessage || "Live account actions require explicit risk acknowledgement."
+                : "Real-money order execution is disabled in this build. Use a Demo account to place trades; a browser-only limit is not a secure live-trading control."
+              : authMessage}</p>
           </div>
         </section>
 
@@ -357,6 +364,8 @@ export default function TradingWorkspace() {
         {connected && activeAccountIsReal && activeAccount && <div id="live-controls">
           <LiveTradingControls
             account={activeAccount}
+            executionGatewayAvailable={REAL_EXECUTION_GATEWAY_AVAILABLE}
+            consentEnabled={liveTradingEnabled}
             enabled={effectiveLiveTradingEnabled}
             loading={liveConsentLoading}
             busy={liveConsentBusy}
