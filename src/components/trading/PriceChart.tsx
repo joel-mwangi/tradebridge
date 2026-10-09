@@ -8,7 +8,7 @@ type Props = {
   market: MarketInstrument | null;
   snapshot?: MarketSnapshot;
   candlesByKey: Record<string, MarketCandle[]>;
-  onLoadCandles: (symbol: string, granularity: number) => void;
+  onLoadCandles: (symbol: string, granularity: number, force?: boolean) => void;
 };
 
 const WINDOWS = [
@@ -212,7 +212,7 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
       <p>{view === "candles"
         ? "Candles are OHLC bars returned by Deriv for the selected interval. If they do not load, switch chart type and try again."
         : allPoints.length === 0 ? "The chart appears when Deriv returns historical or live ticks. No sample prices are drawn." : "At least two real price points are needed to draw a line chart."}</p>
-      {view === "candles" && <button type="button" className={styles.panelActionButton} onClick={() => onLoadCandles(market.symbol, granularity)}>Retry candle history</button>}
+      {view === "candles" && <button type="button" className={styles.panelActionButton} onClick={() => onLoadCandles(market.symbol, granularity, true)}>Retry candle history</button>}
     </div>}
     <p className={styles.chartFootnote}>{view === "candles"
       ? "Candlesticks show open, high, low, and close prices returned by Deriv. The quote above is the separate live tick feed."
