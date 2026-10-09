@@ -84,7 +84,10 @@ export default function TradingWorkspace() {
   const [liveConsentMessage, setLiveConsentMessage] = useState("");
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
-  const { markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket } = useMarketData();
+  const {
+    markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket,
+    candlesByKey, requestCandles,
+  } = useMarketData();
 
   const demoAccounts = accounts.filter(isDemoAccount);
   const realAccounts = accounts.filter(isRealAccount);
@@ -403,6 +406,8 @@ export default function TradingWorkspace() {
             selectedSymbol={selectedSymbol}
             connection={connection}
             onSelect={selectMarket}
+            candlesByKey={candlesByKey}
+            onLoadCandles={requestCandles}
           />
           <DemoTradeTicket
             connected={connected}
