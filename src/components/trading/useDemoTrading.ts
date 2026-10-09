@@ -94,6 +94,7 @@ export function useTradingSession(
   const sellRequestRef = useRef<{ id: number; contractId: string } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedContractIdsRef = useRef<Set<string>>(new Set());
+  const subscribedContractIdsRef = useRef<Set<string>>(new Set());
   const refreshAccountRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -138,6 +139,7 @@ export function useTradingSession(
     buyRequestRef.current = null;
     sellRequestRef.current = null;
     closedContractIdsRef.current.clear();
+    subscribedContractIdsRef.current.clear();
     clearTimeoutRef();
 
     const accountType = (account?.account_type ?? "").toLowerCase();
@@ -260,6 +262,8 @@ export function useTradingSession(
             // Subscribe to each already-open contract so its live profit/status
             // updates are not limited to contracts placed during this page visit.
             for (const position of nextPositions) {
+              if (subscribedContractIdsRef.current.has(position.contractId)) continue;
+              subscribedContractIdsRef.current.add(position.contractId);
               send({
                 proposal_open_contract: 1,
                 contract_id: Number(position.contractId),
@@ -328,6 +332,7 @@ export function useTradingSession(
             }
             setStatus((isRealAccount ? "Real-money trade" : "Demo trade") + " confirmed by Deriv. Contract " + contractId + " is being added to your account activity.");
             const monitorId = nextId();
+            subscribedContractIdsRef.current.add(contractId);
             send({ proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1, req_id: monitorId });
             refreshAccount();
             return;
@@ -351,6 +356,7 @@ export function useTradingSession(
             const terminalStates = new Set(["won", "lost", "sold", "expired", "cancelled"]);
             const isClosed = terminalStates.has(position.status.toLowerCase()) || raw.is_sold === 1 || raw.is_expired === 1;
             if (isClosed) {
+              subscribedContractIdsRef.current.delete(position.contractId);
               setPositions((current) => current.filter((item) => item.contractId !== position.contractId));
               if (!closedContractIdsRef.current.has(position.contractId)) {
                 closedContractIdsRef.current.add(position.contractId);
@@ -368,7 +374,7 @@ export function useTradingSession(
 
         localSocket.onerror = () => {
           if (cancelled) return;
-          setSessionState("Demo trading connection failed");
+          setSessionState(isRealAccount ? "Real trading connection failed" : "Demo trading connection failed");
           setStatus("The authenticated Deriv WebSocket failed. Refresh the session or reconnect Deriv, then retry.");
           setBusy(false);
         };
@@ -425,7 +431,7 @@ export function useTradingSession(
       return;
     }
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) {
-      setStatus("The authenticated demo session is still connecting. Wait until it shows connected, then request a quote.");
+      setStatus("The authenticated trading session is still connecting. Wait until it shows connected, then request a quote.");
       return;
     }
     const allowedStake = isRealAccount ? maxRealStake : 1000;
