@@ -33,6 +33,7 @@ export interface DemoQuote {
   stake: number;
   duration: number;
   currency: string;
+  receivedAt: number;
 }
 
 export interface OpenPosition {
