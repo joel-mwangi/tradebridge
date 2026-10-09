@@ -21,7 +21,8 @@ export default function Home() {
     status: string | null;
   }>>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
-  const [marketQuotes, setMarketQuotes] = useState<Record<string, { quote: number; baseline: number }>>({});
+  const [marketQuotes, setMarketQuotes] = useState<Record<string, { quote: number; baseline: number; updatedAt: number }>>({});
+  const [marketNow, setMarketNow] = useState(Date.now());
   const [marketConnection, setMarketConnection] = useState("Connecting to Deriv market data…");
   const [authMessage, setAuthMessage] = useState("");
   const [stakeAmount, setStakeAmount] = useState("1");
@@ -229,6 +230,7 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
+    const freshnessTimer = window.setInterval(() => setMarketNow(Date.now()), 1_000);
     const socket = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
 
     socket.onopen = () => {
@@ -254,6 +256,7 @@ export default function Home() {
           [symbol]: {
             quote,
             baseline: current[symbol]?.baseline ?? quote,
+            updatedAt: Date.now(),
           },
         }));
         setMarketConnection("Live prices");
@@ -312,6 +315,7 @@ export default function Home() {
     if (error) window.history.replaceState({}, "", window.location.pathname);
     return () => {
       active = false;
+      window.clearInterval(freshnessTimer);
       clearTradeTimeout();
       pendingTradeRequestId.current = null;
       tradeSocket.current?.close();
@@ -342,9 +346,10 @@ export default function Home() {
               <div className="market-list">{markets.map(m => {
                 const quote = marketQuotes[m.symbol];
                 const percentage = quote && quote.baseline !== 0 ? ((quote.quote - quote.baseline) / quote.baseline) * 100 : null;
-                return <button key={m.symbol} className={selected.symbol === m.symbol ? "market selected" : "market"} onClick={() => { setSelected(m); setQuote(null); tradeSocket.current?.close(); setTradeStatus(""); }}><span className="symbol">{m.symbol.startsWith("frx") ? (m.symbol === "frxEURUSD" ? "€" : "Au") : "V"}</span><span className="market-title"><b>{m.name}</b><small>{m.symbol}</small></span><strong className={percentage === null ? "" : percentage >= 0 ? "up" : "down"}>{quote ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(quote.quote) : "—"}<small className="quote-change">{percentage === null ? "Waiting for ticks" : `${percentage >= 0 ? "+" : ""}${percentage.toFixed(2)}%`}</small></strong></button>;
+                const isFresh = Boolean(quote && marketNow - quote.updatedAt <= 15_000);
+                return <button key={m.symbol} className={selected.symbol === m.symbol ? "market selected" : "market"} onClick={() => { setSelected(m); setQuote(null); tradeSocket.current?.close(); setTradeStatus(""); }}><span className="symbol">{m.symbol.startsWith("frx") ? (m.symbol === "frxEURUSD" ? "€" : "Au") : "V"}</span><span className="market-title"><b>{m.name}</b><small>{m.symbol}</small></span><strong className={!isFresh ? "" : percentage === null ? "" : percentage >= 0 ? "up" : "down"}>{quote ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(quote.quote) : "—"}<small className="quote-change">{!quote ? "Waiting for ticks" : !isFresh ? "Price stale" : percentage === null ? "Since page opened" : `${percentage >= 0 ? "+" : ""}${percentage.toFixed(2)}% since open`}</small></strong></button>;
               })}</div>
-              <div className="chart"><div><small>LATEST LIVE PRICE</small><b>{selected.name}</b></div><span className="sample">{marketConnection}</span><strong className="live-price">{marketQuotes[selected.symbol] ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(marketQuotes[selected.symbol].quote) : "Waiting for tick data…"}</strong><p>Live prices from Deriv's public market-data WebSocket. Orders require a separate demo confirmation.</p></div>
+              <div className="chart"><div><small>{marketQuotes[selected.symbol] && marketNow - marketQuotes[selected.symbol].updatedAt <= 15_000 ? "LATEST LIVE PRICE" : "LATEST RECEIVED PRICE"}</small><b>{selected.name}</b></div><span className="sample">{marketQuotes[selected.symbol] ? marketNow - marketQuotes[selected.symbol].updatedAt <= 15_000 ? "● Live" : "● Stale" : marketConnection}</span><strong className="live-price">{marketQuotes[selected.symbol] ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(marketQuotes[selected.symbol].quote) : "Waiting for tick data…"}</strong><p>Prices are streamed from Deriv. Percentage changes are measured from the first tick received after this page opened, not from the official daily open. Orders require a separate demo confirmation.</p></div>
             </section>
             <section className="panel" id="ticket">
               <div className="panel-head"><div><h2>Demo trade ticket</h2><p>Quotes and orders are demo-only</p></div><span className="ticket-icon">↗</span></div>
