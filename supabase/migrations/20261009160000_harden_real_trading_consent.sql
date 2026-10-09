@@ -13,11 +13,4 @@ drop policy if exists "Users can read their own live trading consent" on public.
 
 create policy "Users can read their own live trading consent"
   on public.deriv_live_trading_consents for select to authenticated
-  using ((select auth.uid()));
-
--- The policy above must scope by the owning user, not merely by a non-null
--- authenticated identity.
-drop policy if exists "Users can read their own live trading consent" on public.deriv_live_trading_consents;
-create policy "Users can read their own live trading consent"
-  on public.deriv_live_trading_consents for select to authenticated
   using ((select auth.uid()) = user_id);
