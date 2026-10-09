@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
 import type { DemoQuote, DerivAccount, MarketInstrument } from "./types";
 
 type Props = {
   connected: boolean;
   account: DerivAccount | null;
+  realTradingEnabled: boolean;
+  maxRealStake: number;
+  maxDailyLoss: number;
+  realizedProfit: number | null;
   market: MarketInstrument | null;
   sessionState: string;
   status: string;
@@ -17,37 +21,72 @@ type Props = {
 };
 
 export default function DemoTradeTicket({
-  connected, account, market, sessionState, status, busy, quote, requestQuote, confirmQuote,
+  connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
+  market, sessionState, status, busy, quote, requestQuote, confirmQuote,
 }: Props) {
   const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("60");
+  const [now, setNow] = useState(Date.now());
   const accountType = (account?.account_type ?? "").toLowerCase();
   const isDemo = accountType === "demo";
   const isRealAccount = accountType === "real";
-  const ready = connected && isDemo && sessionState === "Demo trading connected" && Boolean(market);
+  const canTrade = connected && (isDemo || (isRealAccount && realTradingEnabled));
+  const expectedSessionState = isRealAccount ? "Real trading connected" : "Demo trading connected";
+  const dailyLossReached = isRealAccount && realizedProfit !== null && realizedProfit <= -maxDailyLoss;
+  const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached;
+  const maxStake = isRealAccount ? maxRealStake : 1000;
+
+  useEffect(() => {
+    if (!quote) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [quote]);
 
   function submitQuote() {
-    if (!connected || !isDemo || !market) return;
+    if (!ready || !market) return;
     const stakeValue = Number(stake);
     const durationValue = Number(duration);
     requestQuote({ symbol: market.symbol, contractType: direction, stake: stakeValue, duration: durationValue });
   }
 
-  const quoteMatchesForm = Boolean(quote && quote.symbol === market?.symbol && quote.contractType === direction && quote.stake === Number(stake) && quote.duration === Number(duration));
+  const quoteMatchesForm = Boolean(
+    quote && quote.symbol === market?.symbol && quote.contractType === direction
+    && quote.stake === Number(stake) && quote.duration === Number(duration),
+  );
+  const quoteSecondsRemaining = quote ? Math.max(0, Math.ceil((30_000 - (now - quote.receivedAt)) / 1000)) : 0;
+  const quoteExpired = Boolean(quote && quoteSecondsRemaining <= 0);
 
   return <section className={styles.ticketPanel} id="ticket">
     <div className={styles.panelHeading}>
-      <div><p className={styles.eyebrow}>ORDER ENTRY</p><h2>{isRealAccount ? "Real account · read-only" : "Demo trade ticket"}</h2><p className={styles.panelSubtext}>{isRealAccount ? "Real-money order placement is disabled." : "Quote first. Confirm second."}</p></div>
-      <span className={isRealAccount ? styles.realLock : styles.demoLock}>{isRealAccount ? "READ-ONLY" : "DEMO ONLY"}</span>
+      <div>
+        <p className={styles.eyebrow}>ORDER ENTRY</p>
+        <h2>{isRealAccount ? "Real trade ticket" : "Demo trade ticket"}</h2>
+        <p className={styles.panelSubtext}>Get a fresh Deriv quote first. Submit only after checking the terms.</p>
+      </div>
+      <span className={isRealAccount ? (realTradingEnabled ? styles.realLock : styles.realModeLocked) : styles.demoLock}>
+        {isRealAccount ? (realTradingEnabled ? "REAL MONEY" : "LOCKED") : "DEMO ONLY"}
+      </span>
     </div>
-    {isRealAccount && <div className={styles.accountModeNotice} role="note"><strong>Real account is view-only</strong><span>Your account is listed for visibility, but TradeBridge does not send real-money orders. Switch to a Demo account to request quotes and trade using virtual funds.</span></div>}
+
+    {isRealAccount && <div className={styles.accountModeNotice} role="note">
+      <strong>{realTradingEnabled ? "Real-money account" : "Live trading is locked"}</strong>
+      <span>{realTradingEnabled
+        ? "Every confirmed order uses real funds. You can lose the full stake. Review the quoted purchase price and potential payout before confirming."
+        : "Use the Live Account Controls panel to acknowledge the risks and enable real-money order entry for this account."}</span>
+    </div>}
+    {dailyLossReached && <div className={styles.riskStopNotice} role="alert">
+      <strong>Daily loss stop reached</strong>
+      <span>Today's reported realized P/L is {realizedProfit} {account?.currency ?? ""}. TradeBridge is blocking new live entries at your configured stop of {maxDailyLoss} {account?.currency ?? ""}.</span>
+    </div>}
+
     <div className={styles.tradeMarket}>
       <span className={styles.tradeMarketIcon}>{market?.market === "forex" ? "FX" : "↗"}</span>
       <div><strong>{market?.name ?? "Select a market"}</strong><small>{market?.symbol ?? "No active market selected"}</small></div>
     </div>
-    <fieldset className={styles.directionField} disabled={!connected || !isDemo}>
-      <legend>Market direction</legend>
+
+    <fieldset className={styles.directionField} disabled={!ready || busy}>
+      <legend>Contract direction</legend>
       <div className={styles.directionChoices}>
         <button type="button" className={direction === "CALL" ? styles.callSelected : styles.callButton} onClick={() => setDirection("CALL")} aria-pressed={direction === "CALL"}>
           <span>↗</span><span><strong>Higher</strong><small>Call</small></span>
@@ -61,45 +100,49 @@ export default function DemoTradeTicket({
     <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake amount</label>
     <div className={styles.inputShell}>
       <span>{account?.currency ?? "—"}</span>
-      <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max="1000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="stake-note" disabled={!connected || !isDemo} />
+      <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="stake-note" disabled={!ready || busy} />
     </div>
     <div className={styles.presets} aria-label="Stake presets">
-      {["1", "5", "10", "25"].map((value) => <button key={value} type="button" className={stake === value ? styles.presetActive : styles.preset} onClick={() => setStake(value)} disabled={!connected || !isDemo}>{value} {account?.currency ?? ""}</button>)}
+      {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value} {account?.currency ?? ""}</button>)}
     </div>
-    <p className={styles.fieldHint} id="stake-note">Use virtual funds only. Deriv validates the minimum stake for the selected market and currency.</p>
+    <p className={styles.fieldHint} id="stake-note">{isRealAccount ? "Per-trade limit: " + maxStake + " " + (account?.currency ?? "") + ". The entire stake may be lost; never trade money you cannot afford to lose." : "Use virtual funds only. Deriv validates minimum stakes for the selected market and currency."}</p>
 
     <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Contract duration</label>
     <div className={styles.inputShell}>
-      <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max="86400" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="duration-note" disabled={!connected || !isDemo} />
+      <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max="86400" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="duration-note" disabled={!ready || busy} />
       <span>seconds</span>
     </div>
     <div className={styles.presets} aria-label="Duration presets">
-      {[{ label: "1 min", value: "60" }, { label: "5 min", value: "300" }, { label: "10 min", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!connected || !isDemo}>{value.label}</button>)}
+      {[{ label: "1 min", value: "60" }, { label: "5 min", value: "300" }, { label: "10 min", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
     </div>
-    <p className={styles.fieldHint} id="duration-note">Duration must be between 1 and 86,400 seconds. The quote response determines the actual offered price and payout.</p>
+    <p className={styles.fieldHint} id="duration-note">Duration is in seconds. Deriv returns the actual offered price and potential payout for the selected contract.</p>
 
-    {quote && quoteMatchesForm && <div className={styles.quoteCard} role="status">
-      <div className={styles.quoteCardHeader}><span>DERIV QUOTE</span><strong>Fresh quote</strong></div>
+    {quote && quoteMatchesForm && <div className={isRealAccount ? styles.liveQuoteCard : styles.quoteCard} role="status">
+      <div className={styles.quoteCardHeader}><span>DERIV QUOTE</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
       <div className={styles.quoteMetrics}>
         <div><small>Stake</small><strong>{quote.stake.toLocaleString()} {quote.currency}</strong></div>
-        <div><small>Price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
+        <div><small>Purchase price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
         <div><small>Potential payout</small><strong>{quote.payout === null ? "Not returned" : quote.payout.toLocaleString() + " " + quote.currency}</strong></div>
       </div>
       <p>{quote.contractType === "CALL" ? "Higher" : "Lower"} · {quote.symbol} · {quote.duration} seconds</p>
-      <button type="button" className={styles.confirmButton} onClick={confirmQuote} disabled={!ready || busy}>Confirm demo trade <span>→</span></button>
-      <small className={styles.quoteWarning}>Confirmation sends a real order to your Deriv demo account. It uses virtual funds but can still change your demo balance.</small>
+      <button type="button" className={isRealAccount ? styles.confirmLiveButton : styles.confirmButton} onClick={confirmQuote} disabled={!ready || busy || quoteExpired}>
+        {isRealAccount ? "Confirm real-money trade" : "Confirm demo trade"} <span>→</span>
+      </button>
+      <small className={styles.quoteWarning}>{isRealAccount
+        ? "This action sends a live order to Deriv and can immediately lose real money. Review the quoted stake and potential payout. Confirmation cannot guarantee a profit."
+        : "Confirmation sends an order to your Deriv demo account and can change your virtual balance."}</small>
     </div>}
 
     <div className={styles.ticketStatus} role="status">
-      <span className={sessionState === "Demo trading connected" ? styles.statusDotConnected : styles.statusDot} />
+      <span className={sessionState === expectedSessionState ? styles.statusDotConnected : styles.statusDot} />
       <div><strong>{sessionState}</strong>{status && <p>{status}</p>}</div>
     </div>
-    <button type="button" className={styles.getQuoteButton} onClick={submitQuote} disabled={!ready || busy || !market}>
-      {busy ? "Waiting for Deriv…" : quoteMatchesForm ? "Request a new quote" : "Get demo quote"}
+    <button type="button" className={isRealAccount ? styles.getLiveQuoteButton : styles.getQuoteButton} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 86400}>
+      {busy ? "Waiting for Deriv…" : quoteMatchesForm && !quoteExpired ? "Request a new quote" : isRealAccount ? "Get live quote" : "Get demo quote"}
     </button>
-    {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate demo trading.</p>}
-    {connected && !account && <p className={styles.inlineHint}>Select an eligible demo account before requesting a quote.</p>}
-    {connected && isRealAccount && <p className={styles.inlineHint}>Real-money quotes and orders are disabled. Switch to a Demo account to trade with virtual funds.</p>}
-    {connected && account && !isDemo && !isRealAccount && <p className={styles.inlineHint}>This account type is not eligible for trading. Select a Demo account.</p>}
+    {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
+    {connected && !account && <p className={styles.inlineHint}>Select an account before requesting a quote.</p>}
+    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Live order entry is locked. Enable it in Live Account Controls after reviewing the risk disclosure.</p>}
+    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Live entry waits until Deriv's daily realized P/L has loaded.</p>}
   </section>;
 }

@@ -136,6 +136,53 @@
 .accountModeNotice { display: grid; gap: 5px; margin: 0 0 13px; padding: 11px 12px; border: 1px solid #f0d7b4; border-radius: 8px; background: #fffaf2; color: #80551f; font-size: 10px; line-height: 1.55; }
 .accountModeNotice strong { font-size: 10px; }
 .accountModeNotice span { color: #886d4c; }
+.liveControls { margin: 0 0 18px; padding: 19px; border: 1px solid #efcfaa; border-radius: 12px; background: #fffdf9; box-shadow: 0 4px 14px #152e3f04; }
+.liveControlsHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 13px; }
+.liveControlsHeader h2 { margin: 0; color: #273b4d; font-size: 15px; font-weight: 850; letter-spacing: -.25px; }
+.realModeEnabled, .realModeLocked { flex-shrink: 0; padding: 7px 9px; border-radius: 99px; font-size: 9px; font-weight: 850; letter-spacing: .6px; }
+.realModeEnabled { background: #fff0ed; color: #aa3528; }
+.realModeLocked { background: #f4f1ec; color: #786c5c; }
+.riskFields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); column-gap: 15px; align-items: end; }
+.riskFields .fieldHint { grid-column: auto; margin-top: 6px; }
+.riskAcknowledgement { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 13px; border: 1px solid #eddac3; border-radius: 9px; background: #fff8ed; color: #76572f; font-size: 11px; line-height: 1.55; cursor: pointer; }
+.riskAcknowledgement input { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; accent-color: #b64f2c; }
+.enableLiveButton { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; margin-top: 12px; padding: 0 14px; border: 1px solid #ac3c30; border-radius: 8px; background: #b84638; color: white; font-size: 11px; font-weight: 850; }
+.enableLiveButton:hover:not(:disabled) { background: #983328; }
+.enableLiveButton:disabled { cursor: not-allowed; opacity: .48; }
+.liveEnabledMessage { padding: 13px; border: 1px solid #e8c8b5; border-radius: 9px; background: #fff6f1; }
+.liveEnabledMessage strong { color: #8d3529; font-size: 11px; }
+.liveEnabledMessage p { margin: 6px 0 12px; color: #795a4c; font-size: 10px; line-height: 1.6; }
+.liveControlMessage { margin: 10px 0 0; color: #6f5944; font-size: 10px; line-height: 1.55; overflow-wrap: anywhere; }
+.liveControlDisclaimer { margin: 13px 0 0; color: #8a7b69; font-size: 9px; line-height: 1.6; }
+.riskStopNotice { display: grid; gap: 5px; margin: 0 0 13px; padding: 11px 12px; border: 1px solid #ebc1bd; border-radius: 8px; background: #fff2f0; color: #a6342b; font-size: 10px; line-height: 1.5; }
+.riskStopNotice span { color: #87534d; }
+.liveQuoteCard { margin-top: 16px; padding: 13px; border: 1px solid #ebc2b5; border-radius: 10px; background: #fff7f4; }
+.liveQuoteCard .quoteCardHeader { color: #875348; }
+.liveQuoteCard .quoteMetrics>div:last-child { border-top-color: #f2d9d1; }
+.liveQuoteCard .quoteMetrics small { color: #9a796f; }
+.liveQuoteCard .quoteMetrics strong { color: #6f3a30; }
+.liveQuoteCard>p { margin: 11px 0 0; color: #815b52; font-size: 9px; }
+.confirmLiveButton { display: flex; align-items: center; justify-content: space-between; gap: 9px; width: 100%; min-height: 43px; margin-top: 12px; padding: 0 13px; border: 1px solid #a5372d; border-radius: 8px; background: #b84638; color: #fff; font-size: 11px; font-weight: 850; }
+.confirmLiveButton:hover:not(:disabled) { background: #97342b; }
+.confirmLiveButton:disabled { cursor: not-allowed; opacity: .48; }
+.getLiveQuoteButton { display: flex; justify-content: center; align-items: center; width: 100%; min-height: 45px; margin-top: 11px; border: 1px solid #af4135; border-radius: 8px; background: #b84638; color: #fff; font-size: 11px; font-weight: 850; }
+.getLiveQuoteButton:hover:not(:disabled) { background: #97342b; }
+.getLiveQuoteButton:disabled { cursor: not-allowed; opacity: .48; }
+.panelActions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.panelActionButton { flex-shrink: 0; min-height: 30px; padding: 0 9px; border: 1px solid #dce5eb; border-radius: 7px; background: #fff; color: #637588; font-size: 9px; font-weight: 750; }
+.panelActionButton:hover:not(:disabled) { border-color: #b9ded1; background: #f4fbf8; color: #176c59; }
+.panelActionButton:disabled { opacity: .5; cursor: not-allowed; }
+.positionManage { display: grid; justify-items: end; gap: 9px; max-width: 100%; }
+.sellPositionButton { min-height: 30px; padding: 0 10px; border: 1px solid #e7b5ab; border-radius: 7px; background: #fff6f4; color: #a53b30; font-size: 9px; font-weight: 850; }
+.sellPositionButton:hover:not(:disabled) { background: #ffe9e4; }
+.sellPositionButton:disabled { opacity: .5; cursor: not-allowed; }
+.sellConfirm { width: min(100%, 360px); padding: 11px; border: 1px solid #eac7ba; border-radius: 8px; background: #fff8f5; }
+.sellConfirm strong { color: #8c3b30; font-size: 10px; }
+.sellConfirm p { margin: 6px 0 9px; color: #85665d; font-size: 9px; line-height: 1.55; }
+.sellConfirm>div { display: flex; flex-wrap: wrap; gap: 6px; }
+.sellConfirmButton { min-height: 31px; padding: 0 10px; border: 1px solid #af4035; border-radius: 7px; background: #b84638; color: #fff; font-size: 9px; font-weight: 850; }
+.sellConfirmButton:disabled { cursor: not-allowed; opacity: .5; }
+.statementFootnote { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #edf1f4; color: #98a4af; font-size: 9px; line-height: 1.55; }
 .ticketPanel button:disabled, .ticketPanel input:disabled { cursor: not-allowed; opacity: .56; }
 .tradeMarket { display: flex; align-items: center; gap: 11px; padding: 13px 0 16px; margin-bottom: 16px; border-bottom: 1px solid #edf1f4; }
 .tradeMarketIcon { width: 40px; height: 40px; background: #eaf8f3; color: #12866a; font-size: 14px; }
@@ -249,6 +296,14 @@
   .statCard:first-child { grid-column: 1/-1; }
   .statValue { font-size: 22px; margin: 9px 0 5px; }
   .notice { padding: 11px; }
+  .liveControls { padding: 13px; border-radius: 10px; }
+  .riskFields { grid-template-columns: minmax(0,1fr); }
+  .riskFields .fieldHint { margin-bottom: 4px; }
+  .liveControlsHeader { align-items: center; }
+  .positionManage { width: 100%; justify-items: stretch; }
+  .positionManage .positionNumbers { justify-content: flex-end; }
+  .sellConfirm { width: 100%; }
+  .panelActions { gap: 4px; }
   .marketColumn { display: flex; flex-direction: column; }
   .marketPanel, .chartPanel, .ticketPanel, .activityPanel { padding: 13px; border-radius: 10px; }
   .panelHeading { flex-direction: row; gap: 8px; }

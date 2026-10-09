@@ -22,6 +22,7 @@ type ApiMessage = {
   profit_table?: { transactions?: Array<Record<string, unknown>> };
   proposal?: { id?: string; ask_price?: number | string; payout?: number | string };
   buy?: { contract_id?: number | string; buy_price?: number | string };
+  sell?: { contract_id?: number | string; sold_for?: number | string };
   proposal_open_contract?: Record<string, unknown>;
 };
 
@@ -70,7 +71,13 @@ function startOfLocalDayEpoch(): number {
   return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
 }
 
-export function useDemoTrading(connected: boolean, account: DerivAccount | null) {
+export function useTradingSession(
+  connected: boolean,
+  account: DerivAccount | null,
+  realTradingEnabled = false,
+  maxRealStake = 10,
+  maxDailyLoss = 25,
+) {
   const [sessionState, setSessionState] = useState("Select a verified demo account to connect trading");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -84,8 +91,11 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
   const sequenceRef = useRef(100);
   const quoteRequestRef = useRef<{ id: number; input: TradeInput } | null>(null);
   const buyRequestRef = useRef<number | null>(null);
+  const sellRequestRef = useRef<{ id: number; contractId: string } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedContractIdsRef = useRef<Set<string>>(new Set());
+  const subscribedContractIdsRef = useRef<Set<string>>(new Set());
+  const refreshAccountRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,15 +137,24 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
     setBalance({ balance: account?.balance ?? null, currency: account?.currency ?? "" });
     quoteRequestRef.current = null;
     buyRequestRef.current = null;
+    sellRequestRef.current = null;
     closedContractIdsRef.current.clear();
+    subscribedContractIdsRef.current.clear();
     clearTimeoutRef();
 
-    if (!connected || !account || (account.account_type ?? "").toLowerCase() !== "demo") {
+    const accountType = (account?.account_type ?? "").toLowerCase();
+    const isDemoAccount = accountType === "demo";
+    const isRealAccount = accountType === "real";
+    const canOpenSession = isDemoAccount || (isRealAccount && realTradingEnabled);
+
+    if (!connected || !account || !canOpenSession) {
       setSessionState(!connected
-        ? "Connect Deriv to enable demo trading"
+        ? "Connect Deriv to enable trading"
         : !account
-          ? "No demo account selected"
-          : "Real-money accounts are disabled");
+          ? "No account selected"
+          : isRealAccount
+            ? "Real trading is locked until you explicitly enable it"
+            : "This account type is not supported for trading");
       return () => {
         cancelled = true;
         clearTimeoutRef();
@@ -143,11 +162,12 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
     }
 
     const activeAccount = account;
-    setSessionState("Opening secure demo trading session");
+    const sessionLabel = isRealAccount ? "Live trading" : "Demo trading";
+    setSessionState("Opening secure " + sessionLabel.toLowerCase() + " session");
 
     async function connect() {
       try {
-        const response = await fetch("/api/auth/deriv/demo-session", {
+        const response = await fetch("/api/auth/deriv/trade-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ account_id: activeAccount.account_id }),
@@ -160,12 +180,16 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
             ? "Your Deriv authorization expired. Reconnect Deriv to continue."
             : data.error === "account_linking_unavailable"
               ? "Secure account linking is unavailable. Apply the required database migrations, then retry."
-              : data.error === "account_not_linked" || data.error === "account_mismatch"
-                ? "This demo account is not linked to the signed-in TradeBridge user."
-                : data.error === "demo_accounts_only"
-                  ? "Deriv rejected this account because it is not a demo account."
-                  : "Could not open the authenticated demo session. Check Deriv permissions and retry.";
-          setSessionState("Demo session unavailable");
+              : data.error === "live_consent_schema_missing"
+                ? "Apply the live-trading consent migration in Supabase before enabling real trades."
+                : data.error === "live_consent_required"
+                  ? "Explicitly acknowledge the live-trading risk disclosure to enable this real account."
+                  : data.error === "account_not_linked" || data.error === "account_mismatch"
+                    ? "This account is not linked to the signed-in TradeBridge user."
+                    : data.error === "unsupported_account_type"
+                      ? "This account type is not supported for Options trading."
+                      : "Could not open the authenticated trading session. Check Deriv permissions and retry.";
+          setSessionState(isRealAccount ? "Live trading session unavailable" : "Demo session unavailable");
           setStatus(message);
           return;
         }
@@ -175,9 +199,12 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
 
         localSocket.onopen = () => {
           if (cancelled) return;
-          setSessionState("Demo trading connected");
-          setStatus("Connected to your selected Deriv demo account. Quotes and balances come from Deriv.");
+          setSessionState(isRealAccount ? "Real trading connected" : "Demo trading connected");
+          setStatus(isRealAccount
+            ? "Connected to your selected real Deriv account. Live orders use real funds; review every order carefully."
+            : "Connected to your selected Deriv demo account. Quotes and balances come from Deriv.");
           send({ balance: 1, subscribe: 1, req_id: nextId() });
+          refreshAccountRef.current = refreshAccount;
           refreshAccount();
           refreshTimer = window.setInterval(refreshAccount, 15_000);
         };
@@ -204,7 +231,14 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
               clearTimeoutRef();
               buyRequestRef.current = null;
               setBusy(false);
-              setStatus(message.error.message ?? "Deriv rejected the demo order. No successful confirmation was received.");
+              setStatus(message.error.message ?? "Deriv rejected the order. Check account activity before retrying.");
+            } else if (sellRequestRef.current !== null && requestId === sellRequestRef.current.id) {
+              clearTimeoutRef();
+              const contractId = sellRequestRef.current.contractId;
+              sellRequestRef.current = null;
+              setBusy(false);
+              setStatus(message.error.message ?? "Deriv could not close contract " + contractId + ". The position remains under Deriv's control.");
+              refreshAccount();
             } else {
               // An account-summary failure must not disable an authenticated trading session.
               setStatus(message.error.message ?? "Deriv could not load one of the account panels.");
@@ -228,6 +262,8 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
             // Subscribe to each already-open contract so its live profit/status
             // updates are not limited to contracts placed during this page visit.
             for (const position of nextPositions) {
+              if (subscribedContractIdsRef.current.has(position.contractId)) continue;
+              subscribedContractIdsRef.current.add(position.contractId);
               send({
                 proposal_open_contract: 1,
                 contract_id: Number(position.contractId),
@@ -276,9 +312,10 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
               stake: input.stake,
               duration: input.duration,
               currency: activeAccount.currency ?? "USD",
+              receivedAt: Date.now(),
             });
             setBusy(false);
-            setStatus("Fresh quote received from Deriv. Review the price and potential payout, then confirm the demo order.");
+            setStatus("Fresh quote received from Deriv. Review the price and potential payout, then confirm the " + (isRealAccount ? "real-money order" : "demo order") + ".");
             return;
           }
 
@@ -293,9 +330,21 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
               refreshAccount();
               return;
             }
-            setStatus("Demo trade confirmed by Deriv. Contract " + contractId + " is being added to your account activity.");
+            setStatus((isRealAccount ? "Real-money trade" : "Demo trade") + " confirmed by Deriv. Contract " + contractId + " is being added to your account activity.");
             const monitorId = nextId();
+            subscribedContractIdsRef.current.add(contractId);
             send({ proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1, req_id: monitorId });
+            refreshAccount();
+            return;
+          }
+
+          if (message.msg_type === "sell" && message.sell && sellRequestRef.current && message.req_id === sellRequestRef.current.id) {
+            clearTimeoutRef();
+            const soldContractId = sellRequestRef.current.contractId;
+            sellRequestRef.current = null;
+            setBusy(false);
+            setQuote(null);
+            setStatus("Deriv confirmed the sale of contract " + soldContractId + ". Balance, positions, and history are refreshing.");
             refreshAccount();
             return;
           }
@@ -307,6 +356,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
             const terminalStates = new Set(["won", "lost", "sold", "expired", "cancelled"]);
             const isClosed = terminalStates.has(position.status.toLowerCase()) || raw.is_sold === 1 || raw.is_expired === 1;
             if (isClosed) {
+              subscribedContractIdsRef.current.delete(position.contractId);
               setPositions((current) => current.filter((item) => item.contractId !== position.contractId));
               if (!closedContractIdsRef.current.has(position.contractId)) {
                 closedContractIdsRef.current.add(position.contractId);
@@ -324,7 +374,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
 
         localSocket.onerror = () => {
           if (cancelled) return;
-          setSessionState("Demo trading connection failed");
+          setSessionState(isRealAccount ? "Real trading connection failed" : "Demo trading connection failed");
           setStatus("The authenticated Deriv WebSocket failed. Refresh the session or reconnect Deriv, then retry.");
           setBusy(false);
         };
@@ -334,14 +384,15 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
           if (socketRef.current === localSocket) socketRef.current = null;
           if (refreshTimer) window.clearInterval(refreshTimer);
           refreshTimer = null;
-          if (quoteRequestRef.current || buyRequestRef.current !== null) {
+          if (quoteRequestRef.current || buyRequestRef.current !== null || sellRequestRef.current !== null) {
             clearTimeoutRef();
             quoteRequestRef.current = null;
             buyRequestRef.current = null;
+            sellRequestRef.current = null;
             setBusy(false);
-            setStatus("The trading connection closed before the request was confirmed. Check activity before submitting another order.");
+            setStatus("The trading connection closed before the request was confirmed. Check account activity before submitting another order.");
           }
-          setSessionState("Demo trading disconnected");
+          setSessionState(isRealAccount ? "Real trading disconnected" : "Demo trading disconnected");
         };
       } catch {
         if (!cancelled) {
@@ -356,28 +407,44 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
     return () => {
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
+      refreshAccountRef.current = null;
       clearTimeoutRef();
       quoteRequestRef.current = null;
       buyRequestRef.current = null;
+      sellRequestRef.current = null;
       if (socketRef.current === localSocket) socketRef.current = null;
       localSocket?.close();
     };
     // The account ID, connection state, and currency define this authenticated socket.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, account?.account_id, account?.account_type, account?.currency]);
+  }, [connected, account?.account_id, account?.account_type, account?.currency, realTradingEnabled]);
 
   function requestQuote(input: TradeInput) {
     const activeSocket = socketRef.current;
-    if (!connected || !account || (account.account_type ?? "").toLowerCase() !== "demo") {
-      setStatus("Select a verified demo account. Real-money accounts cannot place orders here.");
+    const accountType = (account?.account_type ?? "").toLowerCase();
+    const isDemoAccount = accountType === "demo";
+    const isRealAccount = accountType === "real";
+    if (!connected || !account || (!isDemoAccount && !(isRealAccount && realTradingEnabled))) {
+      setStatus(isRealAccount
+        ? "Enable live trading and accept the risk disclosure before requesting a real-money quote."
+        : "Select a verified, supported Deriv account before requesting a quote.");
       return;
     }
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) {
-      setStatus("The authenticated demo session is still connecting. Wait until it shows connected, then request a quote.");
+      setStatus("The authenticated trading session is still connecting. Wait until it shows connected, then request a quote.");
       return;
     }
-    if (!Number.isFinite(input.stake) || input.stake < 1 || input.stake > 1000) {
-      setStatus("Enter a stake between 1 and 1,000 " + (account.currency ?? "USD") + ".");
+    const allowedStake = isRealAccount ? maxRealStake : 1000;
+    if (!Number.isFinite(input.stake) || input.stake < 1 || input.stake > allowedStake) {
+      setStatus("Enter a stake between 1 and " + allowedStake.toLocaleString() + " " + (account.currency ?? "USD") + (isRealAccount ? " (your configured live-trading limit)." : "."));
+      return;
+    }
+    if (isRealAccount && realizedProfit === null) {
+      setStatus("Waiting for Deriv to load today's realized profit/loss before allowing a live quote.");
+      return;
+    }
+    if (isRealAccount && realizedProfit !== null && realizedProfit <= -maxDailyLoss) {
+      setStatus("Your configured daily loss stop has been reached. Live entries are blocked for this session; review your account directly with Deriv.");
       return;
     }
     if (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 86400) {
@@ -406,7 +473,7 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       if (quoteRequestRef.current?.id !== reqId) return;
       quoteRequestRef.current = null;
       setBusy(false);
-      setStatus("Deriv did not return a quote in time. Try a different active market or check your demo account permissions.");
+      setStatus("Deriv did not return a quote in time. Check the selected market, account permissions, and connection, then retry.");
     }, 15_000);
   }
 
@@ -416,15 +483,35 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
       setStatus("Request a fresh quote and wait for it to arrive before confirming.");
       return;
     }
-    if (!account || (account.account_type ?? "").toLowerCase() !== "demo") {
-      setStatus("Orders are limited to verified demo accounts.");
+    const accountType = (account?.account_type ?? "").toLowerCase();
+    const isDemoAccount = accountType === "demo";
+    const isRealAccount = accountType === "real";
+    if (!account || (!isDemoAccount && !(isRealAccount && realTradingEnabled))) {
+      setStatus("The selected account is not enabled for trading.");
+      return;
+    }
+    if (isRealAccount && quote.stake > maxRealStake) {
+      setQuote(null);
+      setStatus("The quoted stake exceeds your configured live-trading limit. Request a new quote with a lower stake.");
+      return;
+    }
+    if (isRealAccount && (realizedProfit === null || realizedProfit <= -maxDailyLoss)) {
+      setQuote(null);
+      setStatus(realizedProfit === null
+        ? "Today's realized profit/loss is not available. Live order confirmation is blocked until it loads."
+        : "Your configured daily loss stop has been reached. Live order confirmation is blocked.");
+      return;
+    }
+    if (Date.now() - quote.receivedAt > 30_000) {
+      setQuote(null);
+      setStatus("This quote has expired. Request a fresh quote before confirming a trade.");
       return;
     }
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     const reqId = ++sequenceRef.current;
     buyRequestRef.current = reqId;
     setBusy(true);
-    setStatus("Submitting the confirmed demo order to Deriv…");
+    setStatus("Submitting the confirmed " + (isRealAccount ? "real-money" : "demo") + " order to Deriv…");
     activeSocket.send(JSON.stringify({ buy: quote.id, price: quote.askPrice, req_id: reqId }));
     timeoutRef.current = setTimeout(() => {
       if (buyRequestRef.current !== reqId) return;
@@ -434,5 +521,50 @@ export function useDemoTrading(connected: boolean, account: DerivAccount | null)
     }, 20_000);
   }
 
-  return { sessionState, status, busy, quote, positions, activity, balance, realizedProfit, requestQuote, confirmQuote };
+  function refreshAccountNow() {
+    refreshAccountRef.current?.();
+  }
+
+  function sellPosition(contractId: string) {
+    const activeSocket = socketRef.current;
+    const accountType = (account?.account_type ?? "").toLowerCase();
+    const canTrade = accountType === "demo" || (accountType === "real" && realTradingEnabled);
+    const isOpenPosition = positions.some((position) => position.contractId === contractId);
+    if (!connected || !account || !canTrade || !isOpenPosition) {
+      setStatus("This position is not available to close from the current account session.");
+      return;
+    }
+    if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN || busy) {
+      setStatus("The authenticated trading session is not ready. Check connection status before selling.");
+      return;
+    }
+    if (!/^\d+$/.test(contractId)) {
+      setStatus("Deriv returned an invalid contract ID. Refresh positions before retrying.");
+      return;
+    }
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    const reqId = ++sequenceRef.current;
+    sellRequestRef.current = { id: reqId, contractId };
+    setBusy(true);
+    setStatus("Requesting a market sale for contract " + contractId + "…");
+    activeSocket.send(JSON.stringify({ sell: Number(contractId), price: 0, req_id: reqId }));
+    timeoutRef.current = setTimeout(() => {
+      if (sellRequestRef.current?.id !== reqId) return;
+      sellRequestRef.current = null;
+      setBusy(false);
+      setStatus("Deriv did not confirm the sale in time. Check positions and statement before trying again.");
+      refreshAfterTimeout();
+    }, 20_000);
+  }
+
+  function refreshAfterTimeout() {
+    const activeSocket = socketRef.current;
+    if (activeSocket?.readyState === WebSocket.OPEN) {
+      activeSocket.send(JSON.stringify({ portfolio: 1, req_id: ++sequenceRef.current }));
+      activeSocket.send(JSON.stringify({ statement: 1, limit: 30, description: 1, req_id: ++sequenceRef.current }));
+      activeSocket.send(JSON.stringify({ balance: 1, req_id: ++sequenceRef.current }));
+    }
+  }
+
+  return { sessionState, status, busy, quote, positions, activity, balance, realizedProfit, requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow };
 }
