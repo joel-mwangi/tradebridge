@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
   await supabase.auth.signOut();
   // Clear this browser’s Deriv authorization when the platform identity signs out.
   response.cookies.delete("tradebridge_deriv_access_token");
+  response.cookies.delete("tradebridge_deriv_owner");
   response.cookies.delete("tradebridge_oauth_state");
   response.cookies.delete("tradebridge_pkce_verifier");
   return response;
