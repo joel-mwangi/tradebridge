@@ -234,7 +234,7 @@ export default function TradingWorkspace() {
       const data = await response.json() as LiveConsentResponse;
       if (!response.ok) {
         setLiveConsentMessage(data.error === "live_consent_schema_missing"
-          ? "The required Supabase migration has not been applied. Apply the live-trading consent migration, then retry."
+          ? "The required consent table is unavailable. Apply all TradeBridge Supabase migrations, including the consent hardening migration, then reload."
           : data.error === "risk_acknowledgement_required"
             ? "Tick the risk acknowledgement before enabling live trading."
             : data.error === "real_account_required"
