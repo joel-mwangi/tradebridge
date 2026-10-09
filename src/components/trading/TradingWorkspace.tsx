@@ -313,7 +313,7 @@ export default function TradingWorkspace() {
 
     <section className={styles.main}>
       <header className={styles.topbar}>
-        <div className={styles.breadcrumb}>Workspace <b>/</b> {activeAccountIsReal ? effectiveLiveTradingEnabled ? "Live trading" : "Real account controls" : "Demo trading"}</div>
+        <div className={styles.breadcrumb}>Workspace <b>/</b> {activeAccountIsReal ? effectiveLiveTradingEnabled ? "Live trading" : "Real account · read-only" : "Demo trading"}</div>
         <div className={styles.topActions}>
           {accounts.length > 0 && <label className={styles.activeAccountWrap}>
             <span className={styles.accountLabel}>ACCOUNT</span>
@@ -335,12 +335,12 @@ export default function TradingWorkspace() {
             <p className={styles.subtitle}>{activeAccountIsReal
               ? effectiveLiveTradingEnabled
                 ? "Monitor real balance, live contract P/L, open positions, and account history. Every entry requires a fresh Deriv quote and a separate confirmation."
-                : "Review your real balance and market prices. Live order entry is locked until you acknowledge the risks and configure a stake cap and daily loss stop."
+                : "Your linked Real account is read-only in TradeBridge. Live orders are disabled until a server-side gateway can enforce stake caps, daily-loss stops, and revocation for every order."
               : "Inspect real market prices, review a live Deriv quote, confirm trades, monitor open contracts, and check account activity. All figures are sourced from Deriv."}</p>
           </div>
           <div className={styles.introActions}>
             {!connected && <button className={styles.secondaryButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>}
-            <button className={styles.primaryButton} type="button" onClick={startTrading}>{!connected ? "Connect to start" : !activeAccount ? "Refresh accounts" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Open live trade ticket" : "Review live controls" : activeAccountIsDemo ? "Open demo trade ticket" : "Switch to demo"} <span aria-hidden="true">→</span></button>
+            <button className={styles.primaryButton} type="button" onClick={startTrading}>{!connected ? "Connect to start" : !activeAccount ? "Refresh accounts" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Open live trade ticket" : "View account safety status" : activeAccountIsDemo ? "Open demo trade ticket" : "Switch to demo"} <span aria-hidden="true">→</span></button>
           </div>
         </section>
 
