@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password", "/auth/callback"]);
+const AUTH_ENTRY_PATHS = new Set(["/login", "/register", "/forgot-password"]);
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -9,6 +10,7 @@ export async function middleware(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.has(path);
+  const isAuthEntry = AUTH_ENTRY_PATHS.has(path);
 
   if (!url || !key) {
     if (isPublic) return response;
@@ -34,7 +36,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user }, error } = await supabase.auth.getUser();
   const authenticated = Boolean(user && !error);
 
-  if (isPublic && authenticated) {
+  if (isAuthEntry && authenticated) {
     const redirect = NextResponse.redirect(new URL("/", request.url));
     response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
     return redirect;
