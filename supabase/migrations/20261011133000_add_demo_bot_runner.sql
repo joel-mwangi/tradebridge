@@ -23,6 +23,12 @@ alter table public.trading_bots
 -- Old rows were only browser-side configurations and are not safe to auto-run.
 update public.trading_bots set is_active = false where is_active = true;
 
+-- Prevent two independent strategies from racing the same account. A user must pause
+-- the current bot and reconcile any outstanding contract before arming another.
+create unique index if not exists trading_bots_one_armed_bot_per_account
+  on public.trading_bots (user_id, account_id)
+  where is_active = true and account_id is not null;
+
 -- Users may create/edit strategy parameters but can never activate a bot directly
 -- through PostgREST. Activation always passes through the authenticated server route.
 revoke insert (is_active) on public.trading_bots from authenticated;
