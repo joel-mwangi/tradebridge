@@ -6,7 +6,6 @@ import {
   analyzeSignal,
   backtestStrategy,
   evaluateEntry,
-  MIN_BACKTEST_TRADES,
   STRATEGY_ENGINE_VERSION,
 } from "@/lib/bots/strategy-engine.mjs";
 
@@ -345,6 +344,19 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       return { bot_id: bot.id, result };
     }
 
+    // Disabling a bot blocks new entries, but an existing known contract must still
+    // be polled to settlement. If no trade remains, remove its account credentials
+    // once no other bot on this account is armed.
+    if (!bot.is_active) {
+      const { data: otherActive, error: activeError } = await admin.from("trading_bots").select("id")
+        .eq("user_id", bot.user_id).eq("account_id", bot.account_id).eq("is_active", true).limit(1);
+      if (!activeError && (!otherActive || otherActive.length === 0)) {
+        await admin.from("bot_runner_credentials").delete()
+          .eq("user_id", bot.user_id).eq("account_id", bot.account_id);
+      }
+      return { bot_id: bot.id, result: "paused_no_new_entries" };
+    }
+
     const [portfolioMessage, balanceMessage, historyMessage] = await Promise.all([
       websocketRequest(ws, { portfolio: 1 }),
       websocketRequest(ws, { balance: 1 }),
@@ -486,8 +498,7 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
         expected_return_at_lower_bound: decision.expectedReturnAtLowerBound,
       });
       if (["daily_loss_limit", "daily_trade_limit", "consecutive_loss_limit"].includes(decision.reason)) {
-        await admin.from("trading_bots").update({ is_active: false }).eq("id", bot.id);
-        await writeLog(admin, bot, "bot_paused_risk_limit", { reason: decision.reason });
+        await pauseAccountBots(admin, bot, "bot_paused_risk_limit", { reason: decision.reason });
       }
       return { bot_id: bot.id, result: decision.reason };
     }
@@ -583,26 +594,55 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
 }
 
 export async function GET(request: NextRequest) {
-  const expected = process.env.BOT_RUNNER_SECRET ?? process.env.CRON_SECRET;
-  if (!expected) return jsonError("bot_runner_secret_not_configured", 503);
+  const allowedSecrets = [process.env.BOT_RUNNER_SECRET, process.env.CRON_SECRET]
+    .filter((secret): secret is string => Boolean(secret?.trim()));
+  if (allowedSecrets.length === 0) return jsonError("bot_runner_secret_not_configured", 503);
   const received = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!received || !constantTimeMatches(received, expected)) return jsonError("unauthorized", 401);
+  if (!received || !allowedSecrets.some((secret) => constantTimeMatches(received, secret))) {
+    return jsonError("unauthorized", 401);
+  }
 
   let admin: ReturnType<typeof createAdminClient>;
   try { admin = createAdminClient(); }
   catch { return jsonError("bot_database_not_configured", 503); }
 
-  const { data: bots, error } = await admin.from("trading_bots").select("*").eq("is_active", true).limit(50);
-  if (error) return jsonError("bot_database_unavailable", 503);
+  const [{ data: activeBots, error }, { data: unsettledRows, error: ledgerError }] = await Promise.all([
+    admin.from("trading_bots").select("*").eq("is_active", true).order("last_runner_at", { ascending: true, nullsFirst: true }).limit(50),
+    admin.from("bot_trade_ledger").select("bot_id,status")
+      .in("status", ["open", "pending"]).limit(100),
+  ]);
+  if (error || ledgerError) return jsonError("bot_database_unavailable", 503);
+
+  // Include paused bots only when they still have a known pending/open trade to
+  // reconcile. They must never generate a new entry while disabled.
+  const candidatesById = new Map<string, BotRow>((activeBots ?? []).map((row) => [String(row.id), row as BotRow]));
+  for (const row of unsettledRows ?? []) {
+    const botId = String(row.bot_id);
+    if (candidatesById.has(botId)) continue;
+    const { data: pausedBot, error: pausedBotError } = await admin.from("trading_bots").select("*")
+      .eq("id", botId).eq("is_active", false).maybeSingle();
+    if (pausedBotError) return jsonError("bot_database_unavailable", 503);
+    if (pausedBot) candidatesById.set(botId, pausedBot as BotRow);
+  }
+  const candidates = [...candidatesById.values()].sort((a, b) => {
+    // The database order favours the least recently considered active bots; paused
+    // reconciliation candidates remain eligible but can never open new trades.
+    return Date.parse(String(a.last_runner_at ?? "1970-01-01")) - Date.parse(String(b.last_runner_at ?? "1970-01-01"));
+  });
 
   const results: Array<{ bot_id: string; result: string; contract_id?: string }> = [];
-  for (const candidate of (bots ?? []).slice(0, MAX_BOTS_PER_RUN) as BotRow[]) {
+  for (const candidate of candidates.slice(0, MAX_BOTS_PER_RUN)) {
     const nowIso = new Date().toISOString();
     const leaseToken = randomUUID();
-    await admin.from("bot_runner_leases").delete().eq("bot_id", candidate.id).lt("lease_until", nowIso);
+    if (candidate.account_id) {
+      await admin.from("bot_runner_leases").delete().eq("account_id", candidate.account_id).lt("lease_until", nowIso);
+    } else {
+      await admin.from("bot_runner_leases").delete().eq("bot_id", candidate.id).lt("lease_until", nowIso);
+    }
     const { error: leaseError } = await admin.from("bot_runner_leases").insert({
       bot_id: candidate.id,
       user_id: candidate.user_id,
+      account_id: candidate.account_id,
       lease_token: leaseToken,
       lease_until: new Date(Date.now() + 55_000).toISOString(),
     });
@@ -613,15 +653,16 @@ export async function GET(request: NextRequest) {
 
     try {
       const { data: currentBot, error: reloadError } = await admin.from("trading_bots").select("*")
-        .eq("id", candidate.id).eq("is_active", true).maybeSingle();
+        .eq("id", candidate.id).maybeSingle();
       if (reloadError || !currentBot) {
-        results.push({ bot_id: candidate.id, result: "skipped_bot_no_longer_active" });
+        results.push({ bot_id: candidate.id, result: "skipped_bot_no_longer_exists" });
         continue;
       }
       results.push(await processBot(admin, currentBot as BotRow));
     } catch {
       results.push({ bot_id: candidate.id, result: "runner_error" });
     } finally {
+      await admin.from("trading_bots").update({ last_runner_at: new Date().toISOString() }).eq("id", candidate.id);
       await admin.from("bot_runner_leases").delete().eq("bot_id", candidate.id).eq("lease_token", leaseToken);
     }
   }
@@ -629,7 +670,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     success: true,
     processed: results.length,
-    active_bots_seen: bots?.length ?? 0,
+    active_bots_seen: activeBots?.length ?? 0,
+    reconciliation_candidates_seen: candidates.length,
     max_bots_per_run: MAX_BOTS_PER_RUN,
     engine: STRATEGY_ENGINE_VERSION,
     result_summary: results,
