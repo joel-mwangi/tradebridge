@@ -42,7 +42,7 @@ The endpoint is:
 
 `GET https://<your-production-domain>/api/bots/runner`
 
-It accepts only `Authorization: Bearer <CRON_SECRET>`. It processes at most four bots per invocation, uses a database lease to prevent concurrent duplicate execution, and writes run outcomes to the bot activity log.
+It accepts only `Authorization: Bearer <CRON_SECRET>`. It processes at most one bot per invocation to stay within serverless time limits, prioritizes unsettled trades, uses account-level database leases to prevent concurrent execution, and rotates by last-run time so configured bots are not permanently starved.
 
 **The Vercel project currently uses the Hobby plan**, whose Cron Jobs can only run once per day. A per-minute Vercel Cron configuration would fail deployment, so do not add a one-minute Vercel cron to this project unless its plan changes.
 
@@ -71,7 +71,7 @@ select cron.schedule(
         where name = 'tradebridge_cron_secret'
       )
     ),
-    timeout_milliseconds := 20000
+    timeout_milliseconds := 55000
   );
   $$
 );
