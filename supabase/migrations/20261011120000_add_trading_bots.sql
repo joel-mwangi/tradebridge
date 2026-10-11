@@ -41,7 +41,11 @@ alter table public.bot_logs enable row level security;
 -- Start from no access for anonymous/public clients and grant only the operations
 -- intended below. RLS remains the ownership boundary for every authenticated query.
 revoke all on table public.trading_bots from public, anon, authenticated;
-grant select, insert, update, delete on table public.trading_bots to authenticated;
+grant select, delete on table public.trading_bots to authenticated;
+grant insert (user_id, bot_name, strategy_type, symbol, stake_amount, take_profit_pips, stop_loss_pips, is_active)
+  on table public.trading_bots to authenticated;
+grant update (bot_name, strategy_type, symbol, stake_amount, take_profit_pips, stop_loss_pips, is_active)
+  on table public.trading_bots to authenticated;
 grant all on table public.trading_bots to service_role;
 
 drop policy if exists "Users can read their own trading bots" on public.trading_bots;
