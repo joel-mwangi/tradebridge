@@ -355,20 +355,16 @@ export function useTradingSession(
           if (message.msg_type === "transaction" && message.transaction) {
             const incoming = toActivity(message.transaction);
             if (incoming) {
+              // The transaction stream is an event feed, not the authoritative
+              // current-balance snapshot. Balance subscription messages own
+              // balance state; the periodic refresh reconciles ledger/P&L.
               setActivity((current) => {
                 const unique = new Map<string, AccountActivity>();
                 for (const item of [incoming, ...current]) unique.set(item.id, item);
-                return [...unique.values()].sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+                return [...unique.values()]
+                  .sort((a, b) => (b.time ?? 0) - (a.time ?? 0))
+                  .slice(0, 500);
               });
-              if (incoming.balance !== null) {
-                setBalance((current) => ({
-                  balance: incoming.balance,
-                  currency: incoming.currency || current.currency || activeAccount.currency || "",
-                }));
-              }
-              // A streamed transaction can precede its statement row. Refresh
-              // the ledger and open positions without waiting for the timer.
-              refreshAccount();
             }
             return;
           }
