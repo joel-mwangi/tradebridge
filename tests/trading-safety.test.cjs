@@ -83,7 +83,7 @@ test("risk gates use broker daily account P&L and reject incomplete history", ()
   assert.match(botRunnerRoute, /profit_table: 1/);
   assert.match(botRunnerRoute, /statement: 1/);
   assert.match(botRunnerRoute, /trade_skipped_incomplete_account_pnl/);
-  assert.match(botRunnerRoute, /dailyPnl: brokerDailyPnl/);
+  assert.match(botRunnerRoute, /const dailyPnl = brokerDailyPnl/);
   assert.match(botRunnerRoute, /maxStakeFraction: 0\.01/);
   assert.match(botRunnerRoute, /daily_loss_limit/);
 });
