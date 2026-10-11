@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import BotManager from "./BotManager";
 import DemoTradeTicket from "./DemoTradeTicket";
@@ -94,7 +93,6 @@ function accountTypeLabel(account: DerivAccount) {
 }
 
 export default function TradingWorkspace({ page }: { page: WorkspacePage }) {
-  const router = useRouter();
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -111,10 +109,6 @@ export default function TradingWorkspace({ page }: { page: WorkspacePage }) {
     const saved = localStorage.getItem("tradebridge_theme");
     if (saved === "light" || saved === "dark") setTheme(saved);
   }, []);
-
-  function navigateTo(target: WorkspacePage) {
-    router.push("/" + target);
-  }
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
@@ -234,21 +228,6 @@ export default function TradingWorkspace({ page }: { page: WorkspacePage }) {
 
   function startDerivConnect() {
     window.location.href = "/api/auth/deriv/start";
-  }
-
-  function startTrading() {
-    if (!connected || !activeAccount) {
-      startDerivConnect();
-      return;
-    }
-    if (activeAccountIsReal && !effectiveLiveTradingEnabled) {
-      navigateTo("trade");
-      return;
-    }
-    if (!activeAccountIsDemo && !activeAccountIsReal && demoAccounts.length > 0) {
-      setSelectedAccountId(demoAccounts[0].account_id);
-    }
-    navigateTo("trade");
   }
 
   async function enableLiveTrading(stakeLimit: number, dailyLossLimit: number) {
