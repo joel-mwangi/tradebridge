@@ -61,12 +61,27 @@ export async function POST(request: NextRequest) {
       .eq("is_active", true);
     if (stopError) return NextResponse.json({ error: "bot_pause_failed" }, { status: 503, headers });
 
-    const { error: credentialError } = await admin
+    const { data: unresolvedTrades, error: tradeError } = await admin
+      .from("bot_trade_ledger")
+      .select("account_id,status")
+      .eq("user_id", user.id)
+      .in("status", ["pending", "open"])
+      .limit(200);
+    if (tradeError) return NextResponse.json({ error: "bot_ledger_unavailable" }, { status: 503, headers });
+    const accountsWithOpenTrades = new Set((unresolvedTrades ?? []).map((row) => String(row.account_id)));
+    const { data: savedCredentials, error: savedCredentialsError } = await admin
       .from("bot_runner_credentials")
-      .delete()
+      .select("account_id")
       .eq("user_id", user.id);
-    if (credentialError) {
-      return NextResponse.json({ error: "bots_paused_credentials_cleanup_failed" }, { status: 503, headers });
+    if (savedCredentialsError) return NextResponse.json({ error: "bot_credentials_unavailable" }, { status: 503, headers });
+
+    // Keep a short-lived credential only while a known order needs settlement.
+    // Paused bots will not open new positions.
+    for (const credential of savedCredentials ?? []) {
+      if (accountsWithOpenTrades.has(String(credential.account_id))) continue;
+      const { error: deleteError } = await admin.from("bot_runner_credentials")
+        .delete().eq("user_id", user.id).eq("account_id", credential.account_id);
+      if (deleteError) return NextResponse.json({ error: "bots_paused_credentials_cleanup_failed" }, { status: 503, headers });
     }
 
     for (const bot of activeBots ?? []) {
@@ -99,14 +114,18 @@ export async function POST(request: NextRequest) {
     if (pauseError) return NextResponse.json({ error: "bot_pause_failed" }, { status: 503, headers });
 
     if (bot.account_id) {
-      const { data: otherActive, error: activeError } = await admin
-        .from("trading_bots")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("account_id", bot.account_id)
-        .eq("is_active", true)
-        .limit(1);
-      if (!activeError && (!otherActive || otherActive.length === 0)) {
+      const [{ data: otherActive, error: activeError }, { data: unsettled, error: unsettledError }] = await Promise.all([
+        admin.from("trading_bots").select("id")
+          .eq("user_id", user.id).eq("account_id", bot.account_id)
+          .eq("is_active", true).limit(1),
+        admin.from("bot_trade_ledger").select("id")
+          .eq("user_id", user.id).eq("account_id", bot.account_id)
+          .in("status", ["pending", "open"]).limit(1),
+      ]);
+      // On a state-check failure, keep the credential and fail closed. The bot is
+      // already paused, and cleanup can be retried without disrupting settlement.
+      if (!activeError && !unsettledError && (!otherActive || otherActive.length === 0)
+        && (!unsettled || unsettled.length === 0)) {
         await admin.from("bot_runner_credentials").delete()
           .eq("user_id", user.id).eq("account_id", bot.account_id);
       }
@@ -118,6 +137,26 @@ export async function POST(request: NextRequest) {
 
   if (typeof bot.account_id !== "string" || !bot.account_id) {
     return NextResponse.json({ error: "demo_account_required" }, { status: 400, headers });
+  }
+
+  const [{ data: otherActive, error: activeBotError }, { data: unsettledTrades, error: unsettledError }] = await Promise.all([
+    admin.from("trading_bots").select("id")
+      .eq("user_id", user.id).eq("account_id", bot.account_id).eq("is_active", true)
+      .neq("id", bot.id).limit(1),
+    admin.from("bot_trade_ledger").select("id,status")
+      .eq("user_id", user.id).eq("account_id", bot.account_id)
+      .in("status", ["pending", "open", "unknown"]).limit(1),
+  ]);
+  if (activeBotError || unsettledError) {
+    return NextResponse.json({ error: "bot_account_state_unavailable" }, { status: 503, headers });
+  }
+  if (otherActive && otherActive.length > 0) {
+    return NextResponse.json({ error: "another_bot_armed_on_account" }, { status: 409, headers });
+  }
+  if (unsettledTrades && unsettledTrades.length > 0) {
+    return NextResponse.json({
+      error: unsettledTrades[0].status === "unknown" ? "unknown_bot_trade_requires_reconciliation" : "open_bot_trade_must_settle",
+    }, { status: 409, headers });
   }
 
   let context = await getAuthenticatedDerivContext(request);
@@ -174,8 +213,23 @@ export async function POST(request: NextRequest) {
     .eq("id", bot.id)
     .eq("user_id", user.id);
   if (activateError) {
-    await admin.from("bot_runner_credentials").delete().eq("user_id", user.id).eq("account_id", bot.account_id);
-    return NextResponse.json({ error: "bot_activation_failed" }, { status: 503, headers });
+    // Credentials are account-scoped and may belong to a bot that won a concurrent
+    // activation. Never remove them without proving no bot or trade still needs them.
+    const { data: activeAfterFailure } = await admin.from("trading_bots").select("id")
+      .eq("user_id", user.id).eq("account_id", bot.account_id).eq("is_active", true).limit(1);
+    if (!activeAfterFailure || activeAfterFailure.length === 0) {
+      const { data: outstanding } = await admin.from("bot_trade_ledger").select("id")
+        .eq("user_id", user.id).eq("account_id", bot.account_id)
+        .in("status", ["pending", "open"]).limit(1);
+      if (!outstanding || outstanding.length === 0) {
+        await admin.from("bot_runner_credentials").delete().eq("user_id", user.id).eq("account_id", bot.account_id);
+      }
+    }
+    return NextResponse.json({
+      error: activeAfterFailure && activeAfterFailure.length > 0
+        ? "another_bot_armed_on_account"
+        : "bot_activation_failed",
+    }, { status: activeAfterFailure && activeAfterFailure.length > 0 ? 409 : 503, headers });
   }
 
   await logAction(admin, bot as unknown as Record<string, unknown>, "bot_armed", {
