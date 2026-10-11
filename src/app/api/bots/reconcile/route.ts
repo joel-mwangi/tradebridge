@@ -203,6 +203,7 @@ export async function POST(requestObject: NextRequest) {
   const account = accounts.accounts.find((item) => item.account_id === ledger.account_id);
   if (!account) return errorResponse("demo_account_not_found", 404);
   if ((account.account_type ?? "").toLowerCase() !== "demo") return errorResponse("demo_only_reconciliation", 403);
+  if (!account.currency) return errorResponse("account_currency_unavailable", 502);
 
   let ws: WebSocket;
   try { ws = await openDemoSocket(context.token, ledger.account_id); }
@@ -273,7 +274,7 @@ export async function POST(requestObject: NextRequest) {
           user_id: user.id,
           account_id: ledger.account_id,
           encrypted_access_token: encryptedToken,
-          currency: account.currency ?? ledger.account_id,
+          currency: account.currency,
           expires_at: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
           updated_at: now,
         }, { onConflict: "user_id,account_id" });
