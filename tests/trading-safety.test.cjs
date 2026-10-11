@@ -139,3 +139,25 @@ test("bot durations stay within candle-aligned values that can meet the holdout 
   assert.match(botManager, /<select[\s\S]{0,100}id="bot-duration"/);
   assert.match(botManager, /DURATION_OPTIONS\.map/);
 });
+
+
+test("Deriv account session subscribes to authoritative balance and transaction streams", () => {
+  assert.match(tradingHook, /send\(\{ balance: 1, subscribe: 1, req_id: nextId\(\) \}\)/);
+  assert.match(tradingHook, /send\(\{ transaction: 1, subscribe: 1, req_id: nextId\(\) \}\)/);
+  assert.match(tradingHook, /message\.msg_type === "transaction" && message\.transaction/);
+  assert.match(tradingHook, /message\.msg_type === "balance" && message\.balance/);
+});
+
+test("transaction notifications cannot overwrite balance snapshots or trigger a request storm", () => {
+  const transactionHandler = tradingHook.match(/if \(message\.msg_type === "transaction" && message\.transaction\) \{([\s\S]*?)\n          \}\n\n          if \(message\.msg_type === "portfolio"/)?.[1];
+  assert.ok(transactionHandler, "transaction event handler must exist");
+  assert.doesNotMatch(transactionHandler, /setBalance\(/);
+  assert.doesNotMatch(transactionHandler, /refreshAccount\(/);
+  assert.match(transactionHandler, /\.slice\(0, 500\)/);
+});
+
+test("real-account OTP sessions stay disabled until execution is enforced server-side", () => {
+  assert.match(tradeSessionRoute, /if \(accountType === "real"\)[\s\S]{0,250}real_execution_gateway_unavailable/);
+  assert.match(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/demo"/);
+  assert.doesNotMatch(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/real"/);
+});
