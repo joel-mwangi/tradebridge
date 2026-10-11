@@ -204,6 +204,7 @@
   background: var(--panel);
   color: var(--ink);
   text-align: left;
+  text-decoration: none;
   box-shadow: var(--card-shadow);
   transition: border-color .15s ease, transform .15s ease, background .15s ease;
 }
@@ -252,6 +253,7 @@
 
 /* Dedicated route content: keep the market, chart and ticket in one coordinated view. */
 .tradeTicketColumn { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.tradeTicketColumn .ticketPanel { top: 145px; }
 .tradeTicketColumn .tradeTicketWorkspace { max-width: none; }
 .activityGridSingle { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 22px; min-width: 0; }
 .settingsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
@@ -565,6 +567,7 @@
   .settingValue { align-items: flex-start; flex-direction: column; }
   .settingActions { align-items: stretch; flex-direction: column; }
   .tradeTicketColumn { gap: 14px; }
+  .tradeTicketColumn .ticketPanel { position: static; top: auto; }
   .positionRow { align-items: flex-start; flex-direction: column; gap: 12px; }
   .positionNumbers { width: 100%; justify-content: flex-end; }
   .mobileNav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--sidebar-bg); border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.15); }
