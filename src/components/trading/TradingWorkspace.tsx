@@ -581,7 +581,7 @@ export default function TradingWorkspace() {
                   <p className={styles.subtitle}>Create and monitor bot configurations. Enabling a configuration does not execute Deriv trades until a trusted server-side runner is connected.</p>
                 </div>
               </div>
-              <BotManager />
+              <BotManager theme={theme} />
             </section>
           )}
         </div>
