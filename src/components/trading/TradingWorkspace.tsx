@@ -550,6 +550,7 @@ export default function TradingWorkspace() {
                 activity={trading.activity}
                 currency={currency}
                 accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
                 busy={trading.busy}
                 activityLoading={trading.activityLoading}
                 activityHasMore={trading.activityHasMore}
@@ -577,6 +578,7 @@ export default function TradingWorkspace() {
                 activity={trading.activity}
                 currency={currency}
                 accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
                 busy={trading.busy}
                 activityLoading={trading.activityLoading}
                 activityHasMore={trading.activityHasMore}
