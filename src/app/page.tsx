@@ -1,5 +1,5 @@
-import TradingWorkspace from "../components/trading/TradingWorkspace";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <TradingWorkspace />;
+  redirect("/dashboard");
 }
