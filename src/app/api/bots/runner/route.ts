@@ -517,6 +517,18 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       return { bot_id: bot.id, result: decision.reason };
     }
 
+    const { data: freshState, error: freshStateError } = await admin.from("trading_bots")
+      .select("is_active,account_id")
+      .eq("id", bot.id).eq("user_id", bot.user_id).maybeSingle();
+    if (freshStateError || !freshState) {
+      await writeLog(admin, bot, "trade_skipped_state_unavailable", { reason: "bot_state_recheck_failed" });
+      return { bot_id: bot.id, result: "bot_state_recheck_failed" };
+    }
+    if (!freshState.is_active || freshState.account_id !== bot.account_id) {
+      await writeLog(admin, bot, "trade_skipped_bot_paused", { reason: "bot_paused_during_signal_evaluation" });
+      return { bot_id: bot.id, result: "bot_paused_before_order" };
+    }
+
     const idempotencyKey = randomUUID();
     const { data: ledger, error: ledgerError } = await admin.from("bot_trade_ledger").insert({
       idempotency_key: idempotencyKey,
@@ -542,6 +554,18 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       },
     }).select("id").single();
     if (ledgerError || !ledger) throw new Error("bot_order_intent_write_failed");
+
+    const { data: finalState, error: finalStateError } = await admin.from("trading_bots")
+      .select("is_active,account_id")
+      .eq("id", bot.id).eq("user_id", bot.user_id).maybeSingle();
+    if (finalStateError || !finalState || !finalState.is_active || finalState.account_id !== bot.account_id) {
+      await admin.from("bot_trade_ledger").update({
+        status: "rejected",
+        details: { reason: finalStateError ? "pre_order_state_check_failed" : "bot_paused_before_order" },
+      }).eq("id", ledger.id).eq("status", "pending");
+      await writeLog(admin, bot, "trade_skipped_bot_paused", { reason: "bot_paused_before_order" });
+      return { bot_id: bot.id, result: "bot_paused_before_order" };
+    }
 
     let buyMessage: BrokerMessage;
     try {
