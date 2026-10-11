@@ -95,6 +95,7 @@
 }
 .topbarIdentity .brandMark { flex: 0 0 36px; }
 .topbarIdentity .brandWord { white-space: nowrap; }
+.topbarIdentity .brandWord { display: inline; }
 .workspaceContext {
   min-width: 0;
   display: grid;
@@ -500,6 +501,7 @@
   .workspace { display: block; }
   .tabNavWrap { padding: 0 20px; }
   .topbarIdentity .workspaceContext { display: none; }
+  .topbarIdentity .brandWord { display: inline; }
   .sidebar { padding: 24px 10px 16px; }
   .brand { justify-content: center; padding: 0; }
   .brandWord, .sidebarMeta, .navLink span:last-child, .sidebarMetaBottom div { display: none; }
@@ -550,6 +552,15 @@
   .workspaceSection { gap: 16px; }
   .footer { flex-direction: column; gap: 8px; }
 }
+@media (max-width: 420px) {
+  .topbar { gap: 8px; padding: 0 10px; }
+  .topbarIdentity .brandWord { display: none; }
+  .topActions { gap: 6px; }
+  .topActions .secondaryButton, .topActions .connectButton { min-height: 34px; padding: 0 8px; font-size: 10px; }
+  .tabNavWrap { padding: 0 6px; }
+  .workspaceTab { padding: 0 11px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace *, .workspace *::before, .workspace *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
