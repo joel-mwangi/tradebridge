@@ -77,6 +77,8 @@
 .sidebarMetaBottom strong { color: var(--ink); font-size: 11px; font-weight: 700; }
 .sidebarMetaBottom small { color: var(--muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
 
+.botManagerSection { margin-top: 20px; min-width: 0; }
+
 .main { min-width: 0; background: var(--page); }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 70px; padding: 0 32px; border-bottom: 1px solid var(--line); background: var(--topbar-bg); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
 .breadcrumb { color: var(--muted); font-size: 12px; font-weight: 500; }
@@ -360,7 +362,7 @@
   .activityGrid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .positionRow { align-items: flex-start; flex-direction: column; gap: 12px; }
   .positionNumbers { width: 100%; justify-content: flex-end; }
-  .mobileNav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--sidebar-bg); border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.15); }
+  .mobileNav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--sidebar-bg); border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.15); }
   .mobileNav a { min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: 18px; font-weight: 750; }
   .mobileNav a span { font-size: 10px; }
   .mobileNav a:hover, .mobileNav a:focus-visible { background: var(--teal-soft); color: var(--teal); }
