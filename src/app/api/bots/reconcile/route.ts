@@ -144,7 +144,10 @@ function getContractBuyPrice(raw: Record<string, unknown>) {
 function normalizedTerminalStatus(raw: Record<string, unknown>, profit: number) {
   const status = String(raw.status ?? "").toLowerCase();
   if (status === "sold" || raw.is_sold === 1 || raw.is_sold === true) return "sold";
-  return profit >= 0 ? "won" : "lost";
+  if (status === "won") return "won";
+  if (status === "lost") return "lost";
+  // Unknown terminal statuses with zero P/L must not be counted as wins.
+  return profit > 0 ? "won" : "lost";
 }
 
 async function logReconciliation(admin: ReturnType<typeof createAdminClient>, ledger: Ledger, action: string, details: Json) {
@@ -224,7 +227,7 @@ export async function POST(requestObject: NextRequest) {
       if (getContractSymbol(contract) !== ledger.symbol
         || direction !== ledger.direction
         || expectedAsk === null || actualBuy === null || !sameNumber(actualBuy, expectedAsk)
-        || actualStart === null || Math.abs(actualStart - expectedStart) > 10 * 60 * 1000) {
+        || actualStart === null || Math.abs(actualStart - expectedStart) > 3 * 60 * 1000) {
         return errorResponse("contract_does_not_match_unknown_order", 409);
       }
 
@@ -315,6 +318,17 @@ export async function POST(requestObject: NextRequest) {
     const lowerMs = createdAt - 60_000;
     const upperMs = Date.now();
     const expectedAmount = num(ledger.ask_price) ?? num(ledger.stake_amount);
+    const incompleteStatement = statementRows.some((row) =>
+      num(row.transaction_time ?? row.time ?? row.transaction_timestamp) === null
+      || num(row.amount) === null,
+    );
+    const incompleteProfitTable = profitRows.some((row) =>
+      num(row.purchase_time ?? row.transaction_time) === null
+      || num(row.buy_price ?? row.amount) === null,
+    );
+    if (incompleteStatement || incompleteProfitTable) {
+      return errorResponse("broker_history_incomplete_or_open_exposure", 409);
+    }
     const potentiallyMatchingBuy = statementRows.some((row) => {
       const time = num(row.transaction_time ?? row.time ?? row.transaction_timestamp);
       const amount = num(row.amount);
