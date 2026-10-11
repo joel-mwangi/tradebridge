@@ -94,3 +94,40 @@ test("ambiguous bot orders are not retried automatically", () => {
   assert.match(botRunnerRoute, /buy_outcome_ambiguous/);
   assert.match(botRunnerRoute, /do not retry|Do not retry/i);
 });
+
+
+const botReconcileRoute = read("src/app/api/bots/reconcile/route.ts");
+const botManager = read("src/components/trading/BotManager.tsx");
+
+test("unknown bot orders can only be reconciled against the verified Demo account", () => {
+  assert.match(botReconcileRoute, /getAuthenticatedDerivContext/);
+  assert.match(botReconcileRoute, /getOwnedDerivAccountIds/);
+  assert.match(botReconcileRoute, /fetchDerivAccounts/);
+  assert.match(botReconcileRoute, /account_type[\s\S]{0,120}demo/i);
+  assert.match(botReconcileRoute, /url\.pathname !== "\/trading\/v1\/options\/ws\/demo"/);
+  assert.match(botReconcileRoute, /eq\("status", "unknown"\)/);
+});
+
+test("manual contract reconciliation validates symbol, direction, stake and timing", () => {
+  assert.match(botReconcileRoute, /getContractSymbol\(contract\) !== ledger\.symbol/);
+  assert.match(botReconcileRoute, /direction !== ledger\.direction/);
+  assert.match(botReconcileRoute, /sameNumber\(actualBuy, expectedAsk\)/);
+  assert.match(botReconcileRoute, /Math\.abs\(actualStart - expectedStart\)/);
+  assert.match(botReconcileRoute, /broker_verified_contract/);
+});
+
+test("clearing an ambiguous order requires complete broker checks and an empty portfolio", () => {
+  assert.match(botReconcileRoute, /portfolio: 1/);
+  assert.match(botReconcileRoute, /statement: 1/);
+  assert.match(botReconcileRoute, /profit_table: 1/);
+  assert.match(botReconcileRoute, /broker_history_incomplete_or_open_exposure/);
+  assert.match(botReconcileRoute, /possible_purchase_found/);
+  assert.match(botReconcileRoute, /status: "rejected"/);
+});
+
+test("Bot Manager exposes recovery controls for unknown order outcomes", () => {
+  assert.match(botManager, /from\("bot_trade_ledger"\)/);
+  assert.match(botManager, /reconcileUnknownTrade/);
+  assert.match(botManager, /Verify contract/);
+  assert.match(botManager, /Verify no order/);
+});
