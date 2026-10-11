@@ -76,7 +76,7 @@ function pnlClass(value: number | string | null | undefined): string {
 }
 
 function strategyLabel(strategy: StrategyType): string {
-  return STRATEGIES.find((item) => item.value === strategy)?.label ?? strategy.replaceAll("_", " ");
+  return STRATEGIES.find((item) => item.value === strategy)?.label ?? strategy.replace(/_/g, " ");
 }
 
 function logDetails(details: BotLog["details"]): string {
@@ -329,7 +329,7 @@ export default function BotManager() {
 
   return (
     <section className="botManager" aria-labelledby="bot-manager-title">
-      <style jsx>{\`
+      <style jsx>{`
         .botManager {
           --bot-page: #0b1320;
           --bot-panel: #131c2e;
@@ -426,7 +426,7 @@ export default function BotManager() {
           .log { grid-template-columns:1fr; gap:5px; }
           .formRow { grid-template-columns:1fr; }
         }
-      \`}</style>
+      `}</style>
 
       <div className="heading">
         <div>
@@ -657,7 +657,7 @@ export default function BotManager() {
             {logs.map((log) => (
               <div className="log" key={log.id}>
                 <div>
-                  <strong>{log.action.replaceAll("_", " ")} · {botNames.get(log.bot_id) ?? "Bot"}</strong>
+                  <strong>{log.action.replace(/_/g, " ")} · {botNames.get(log.bot_id) ?? "Bot"}</strong>
                   {log.details && <p>{logDetails(log.details)}</p>}
                   <small>{new Date(log.timestamp).toLocaleString()}</small>
                 </div>
