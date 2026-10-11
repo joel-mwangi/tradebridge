@@ -18,8 +18,8 @@
   --input-bg: #1a2438;
   --card-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  display: block;
+  width: 100%;
   background: var(--page);
   color: var(--ink);
   font-family: "DM Sans", Inter, system-ui, sans-serif;
@@ -78,6 +78,175 @@
 .sidebarMetaBottom small { color: var(--muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
 
 .botManagerSection { margin-top: 20px; min-width: 0; }
+
+
+.topbarIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.topbarIdentity .brandMark { flex: 0 0 36px; }
+.topbarIdentity .brandWord { white-space: nowrap; }
+.topbarIdentity .brandWord { display: inline; }
+.workspaceContext {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  margin-left: 5px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+.workspaceContext strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.workspaceContext small {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.tabNavWrap {
+  position: sticky;
+  top: 70px;
+  z-index: 35;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+}
+.workspaceTabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.workspaceTab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 56px;
+  padding: 0 17px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.workspaceTab:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+.workspaceTabActive {
+  border-bottom-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.workspaceTabActive:hover { color: var(--teal); background: var(--teal-soft); }
+.workspaceTabIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  font-size: 17px;
+  line-height: 1;
+}
+.workspaceTab:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -3px;
+}
+.workspaceTabPanel {
+  min-width: 0;
+  outline: none;
+}
+.overviewPage,
+.workspaceSection {
+  min-width: 0;
+  display: grid;
+  gap: 20px;
+}
+.overviewLaunchers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.overviewLauncher {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 13px;
+  min-height: 100px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+  box-shadow: var(--card-shadow);
+  transition: border-color .15s ease, transform .15s ease, background .15s ease;
+}
+.overviewLauncher:hover {
+  border-color: var(--teal);
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+.overviewLauncher > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.overviewLauncher strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+.overviewLauncher small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.launcherIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-size: 20px;
+  font-weight: 800;
+}
+.launcherArrow {
+  color: var(--teal);
+  font-size: 20px;
+  font-weight: 700;
+}
+.tradeTicketWorkspace {
+  width: 100%;
+  max-width: 920px;
+  min-width: 0;
+}
+.botManagerSection { min-width: 0; display: grid; gap: 20px; }
 
 .main { min-width: 0; background: var(--page); }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 70px; padding: 0 32px; border-bottom: 1px solid var(--line); background: var(--topbar-bg); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
@@ -322,14 +491,17 @@
 .mobileNav { display: none; }
 
 @media (max-width: 1240px) {
-  .workspace { grid-template-columns: 210px minmax(0, 1fr); }
+  .workspace { display: block; }
   .topbar { padding: 0 24px; }
   .content { padding: 28px 24px; }
   .marketGrid { grid-template-columns: minmax(0, 1.2fr) minmax(300px, .9fr); gap: 16px; }
   .marketPanel, .chartPanel, .ticketPanel, .activityPanel { padding: 18px; }
 }
 @media (max-width: 1020px) {
-  .workspace { grid-template-columns: 70px minmax(0, 1fr); }
+  .workspace { display: block; }
+  .tabNavWrap { padding: 0 20px; }
+  .topbarIdentity .workspaceContext { display: none; }
+  .topbarIdentity .brandWord { display: inline; }
   .sidebar { padding: 24px 10px 16px; }
   .brand { justify-content: center; padding: 0; }
   .brandWord, .sidebarMeta, .navLink span:last-child, .sidebarMetaBottom div { display: none; }
@@ -341,9 +513,18 @@
   .marketColumn { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 }
 @media (max-width: 720px) {
-  .workspace { display: block; padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+  .workspace { display: block; padding-bottom: 0; }
   .sidebar { display: none; }
-  .topbar { position: sticky; top: 0; z-index: 30; min-height: 60px; padding: 0 16px; background: var(--topbar-bg); backdrop-filter: blur(12px); }
+  .topbar { position: sticky; top: 0; z-index: 40; min-height: 60px; padding: 0 14px; background: var(--topbar-bg); backdrop-filter: blur(12px); }
+  .workspaceContext { display: none; }
+  .topbarIdentity { gap: 8px; }
+  .topbarIdentity .brandMark { flex-basis: 32px; width: 32px; height: 32px; }
+  .topbarIdentity .brandWord { font-size: 16px; }
+  .tabNavWrap { top: 60px; padding: 0 10px; }
+  .workspaceTabs { gap: 2px; }
+  .workspaceTab { min-height: 52px; gap: 7px; padding: 0 13px; font-size: 11px; }
+  .workspaceTabIcon { width: 17px; font-size: 15px; }
+  .workspaceTabPanel { scroll-margin-top: 125px; }
   .topActions { gap: 8px; }
   .activeAccountWrap { max-width: 55vw; }
   .accountLabel { display: none; }
@@ -366,8 +547,20 @@
   .mobileNav a { min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: 18px; font-weight: 750; }
   .mobileNav a span { font-size: 10px; }
   .mobileNav a:hover, .mobileNav a:focus-visible { background: var(--teal-soft); color: var(--teal); }
+  .overviewLaunchers { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .overviewLauncher { min-height: 88px; padding: 14px; }
+  .workspaceSection { gap: 16px; }
   .footer { flex-direction: column; gap: 8px; }
 }
+@media (max-width: 420px) {
+  .topbar { gap: 8px; padding: 0 10px; }
+  .topbarIdentity .brandWord { display: none; }
+  .topActions { gap: 6px; }
+  .topActions .secondaryButton, .topActions .connectButton { min-height: 34px; padding: 0 8px; font-size: 10px; }
+  .tabNavWrap { padding: 0 6px; }
+  .workspaceTab { padding: 0 11px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace *, .workspace *::before, .workspace *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
