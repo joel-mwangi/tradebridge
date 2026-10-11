@@ -70,8 +70,8 @@ export function backtestStrategy(input: BacktestInput): BacktestResult;
 export function evaluateEntry(input: EntryGateInput): EntryGateResult;
 
 export interface HistoricalCandle {
-  epoch: number | string;
-  close: number | string;
+  epoch?: number | string;
+  close?: number | string;
 }
 export interface CandleSeries {
   prices: number[];
