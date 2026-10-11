@@ -174,40 +174,6 @@ async function getAccountOpenLedger(admin: ReturnType<typeof createAdminClient>,
   return (result.data ?? []) as LedgerRow[];
 }
 
-async function getDailyRiskState(admin: ReturnType<typeof createAdminClient>, bot: BotRow) {
-  const today = startOfUtcDay();
-  const [created, settled, recent, lastTrade] = await Promise.all([
-    admin.from("bot_trade_ledger").select("id,status,created_at")
-      .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
-      .gte("created_at", today).neq("status", "rejected").limit(1000),
-    admin.from("bot_trade_ledger").select("realized_pnl,settled_at,status")
-      .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
-      .gte("settled_at", today).not("realized_pnl", "is", null).order("settled_at", { ascending: false }).limit(1000),
-    admin.from("bot_trade_ledger").select("realized_pnl,status,settled_at")
-      .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
-      .not("settled_at", "is", null).not("realized_pnl", "is", null)
-      .order("settled_at", { ascending: false }).limit(10),
-    admin.from("bot_trade_ledger").select("created_at")
-      .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
-      .neq("status", "rejected").order("created_at", { ascending: false }).limit(1),
-  ]);
-  if (created.error || settled.error || recent.error || lastTrade.error) throw new Error("bot_risk_state_unavailable");
-  const dailyPnl = (settled.data ?? []).reduce((sum, row) => sum + (toNumber(row.realized_pnl) ?? 0), 0);
-  let consecutiveLosses = 0;
-  for (const row of recent.data ?? []) {
-    const pnl = toNumber(row.realized_pnl);
-    if (pnl === null || pnl >= 0) break;
-    consecutiveLosses += 1;
-  }
-  const lastAt = lastTrade.data?.[0]?.created_at ? Date.parse(lastTrade.data[0].created_at) : null;
-  return {
-    dailyPnl,
-    tradesToday: (created.data ?? []).length,
-    consecutiveLosses,
-    lastTradeAt: Number.isFinite(lastAt) ? lastAt : null,
-  };
-}
-
 async function obtainDemoSocket(token: string, accountId: string): Promise<WebSocket> {
   const otpResponse = await fetch(
     DERIV_API + "/trading/v1/options/accounts/" + encodeURIComponent(accountId) + "/otp",
