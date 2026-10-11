@@ -77,5 +77,4 @@ export interface CandleSeries {
   prices: number[];
   times: number[];
 }
-export function granularityForDuration(durationSeconds: number): number;
 export function completedCandleSeries(candles: HistoricalCandle[], granularity: number, nowEpoch: number): CandleSeries;
