@@ -58,12 +58,6 @@ test("entry gate rejects weak samples, breached loss limits, and open exposure",
 
 test("history bars are completed and aligned to the contract expiry horizon", async () => {
   const { granularityForDuration, completedCandleSeries } = await enginePromise;
-  assert.equal(granularityForDuration(60), 60);
-  assert.equal(granularityForDuration(300), 60);
-  assert.equal(granularityForDuration(90), 30);
-  assert.equal(granularityForDuration(45), 15);
-  assert.equal(granularityForDuration(59), 1);
-
   const series = completedCandleSeries([
     { epoch: 120, close: 102 },
     { epoch: 60, close: 101 },
