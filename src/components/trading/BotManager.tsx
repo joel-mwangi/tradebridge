@@ -47,6 +47,17 @@ interface BotLog {
   timestamp: string;
 }
 
+interface UnknownBotTrade {
+  id: string;
+  bot_id: string;
+  account_id: string;
+  symbol: string;
+  direction: "CALL" | "PUT";
+  stake_amount: number | string;
+  ask_price: number | string | null;
+  created_at: string;
+}
+
 type BrowserSupabaseClient = ReturnType<typeof createClient>;
 
 interface BotFormState {
@@ -117,7 +128,13 @@ function friendlyError(message: string): string {
   if (code.includes("another_bot_armed_on_account")) return "Only one bot can be armed on this Demo account at a time. Pause the other bot first.";
   if (code.includes("open_bot_trade_must_settle")) return "An earlier bot contract is still open. The runner must reconcile it before a new bot can be armed.";
   if (code.includes("open_trade_for_other_bot")) return "Another bot has an outstanding contract on this account. Open that bot and refresh settlement access first.";
-  if (code.includes("unknown_bot_trade_requires_reconciliation")) return "An earlier order has an unknown outcome. Check Deriv positions and statement history before proceeding; no new trade is allowed.";
+  if (code.includes("unknown_bot_trade_requires_reconciliation")) return "An earlier order has an unknown outcome. Use the broker-verification tools below before attempting any new trade.";
+  if (code.includes("possible_purchase_found")) return "Deriv returned a potentially matching purchase. Enter its contract ID and verify it; TradeBridge will not mark it as absent.";
+  if (code.includes("broker_history_incomplete_or_open_exposure")) return "Deriv could not prove the account had no matching order or open exposure. Verify the transaction directly and enter the contract ID.";
+  if (code.includes("wait_before_confirming_no_order")) return "Wait at least two minutes after the ambiguous order before checking whether it was placed.";
+  if (code.includes("contract_does_not_match_unknown_order")) return "That contract does not match the original symbol, direction, stake or time. Check the contract ID.";
+  if (code.includes("contract_not_found_in_demo_account")) return "Deriv did not return that contract for this Demo account. Recheck the contract ID.";
+  if (code.includes("broker_reconciliation_failed")) return "Deriv verification failed or timed out. The safety lock remains in place; refresh and retry later.";
   if (code.includes("bot_account_state_unavailable")) return "TradeBridge could not safely verify account exposure. Retry after the bot database is available.";
   if (code.includes("deriv_reconnect_required") || code.includes("deriv_authorization_invalid")) return "Reconnect Deriv, select your Demo account, then enable the bot again.";
   if (code.includes("demo_only_runner")) return "Automated bots can only use a verified Demo account.";
@@ -137,6 +154,9 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [demoAccounts, setDemoAccounts] = useState<DemoAccountOption[]>([]);
   const [stoppingAll, setStoppingAll] = useState(false);
+  const [reconcilingLedgerId, setReconcilingLedgerId] = useState<string | null>(null);
+  const [reconcileContractIds, setReconcileContractIds] = useState<Record<string, string>>({});
+  const [unknownTrades, setUnknownTrades] = useState<UnknownBotTrade[]>([]);
   const [bots, setBots] = useState<TradingBot[]>([]);
   const [logs, setLogs] = useState<BotLog[]>([]);
   const [form, setForm] = useState<BotFormState>(INITIAL_FORM);
@@ -157,6 +177,16 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
 
     const nextBots = (botRows ?? []) as unknown as TradingBot[];
     setBots(nextBots);
+
+    const { data: unknownRows, error: unknownError } = await supabase
+      .from("bot_trade_ledger")
+      .select("id,bot_id,account_id,symbol,direction,stake_amount,ask_price,created_at")
+      .eq("user_id", currentUserId)
+      .eq("status", "unknown")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (unknownError) throw new Error(unknownError.message);
+    setUnknownTrades((unknownRows ?? []) as unknown as UnknownBotTrade[]);
 
     if (nextBots.length === 0) {
       setLogs([]);
@@ -407,6 +437,44 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
     }
   }
 
+  async function reconcileUnknownTrade(
+    trade: UnknownBotTrade,
+    resolution: "contract_found" | "no_order",
+  ) {
+    setReconcilingLedgerId(trade.id);
+    setError(null);
+    setMessage(null);
+    try {
+      const contractId = reconcileContractIds[trade.id]?.trim() ?? "";
+      if (resolution === "contract_found" && !/^\\d{1,24}$/.test(contractId)) {
+        throw new Error("valid_contract_id_required");
+      }
+      const response = await fetch("/api/bots/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ledger_id: trade.id,
+          resolution,
+          ...(resolution === "contract_found" ? { contract_id: contractId } : {}),
+        }),
+        cache: "no-store",
+      });
+      const result = await response.json() as { success?: boolean; error?: string; message?: string };
+      if (!response.ok || !result.success) throw new Error(result.error ?? "broker_reconciliation_failed");
+      if (client && userId) await loadData(client, userId);
+      setMessage(result.message ?? "Trade outcome reconciled. The bot remains paused until you review and re-arm it.");
+      setReconcileContractIds((current) => {
+        const next = { ...current };
+        delete next[trade.id];
+        return next;
+      });
+    } catch (reconcileError: unknown) {
+      setError(friendlyError(reconcileError instanceof Error ? reconcileError.message : "broker_reconciliation_failed"));
+    } finally {
+      setReconcilingLedgerId(null);
+    }
+  }
+
   async function refresh() {
     if (!client || !userId) return;
     setError(null);
@@ -526,6 +594,12 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
         .success { padding:10px 12px; border:1px solid var(--bot-success-border); border-radius:8px; background:var(--bot-teal-soft); color:var(--bot-success); font-size:11px; line-height:1.5; }
         .botList { display:grid; gap:10px; }
         .botCard { min-width:0; padding:15px; border:1px solid var(--bot-line); border-radius:11px; background:var(--bot-card); }
+        .reconcilePanel { display:grid; gap:8px; margin-top:12px; padding:12px; border:1px solid rgba(245,158,11,.4); border-radius:9px; background:rgba(245,158,11,.08); }
+        .reconcilePanel > strong { color:var(--bot-amber, #f59e0b); font-size:11px; }
+        .reconcilePanel p, .reconcilePanel small { margin:0; color:var(--bot-muted); font-size:10px; line-height:1.5; }
+        .reconcileControls { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:end; gap:8px; }
+        .reconcileControls .field { min-width:0; }
+        @media (max-width:640px) { .reconcileControls { grid-template-columns:minmax(0,1fr); } .reconcileControls .secondary { width:100%; } }
         .botTop { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
         .botTitle { display:flex; align-items:center; gap:9px; min-width:0; }
         .botTitle h3 { margin:0; color:var(--bot-ink); font-size:13px; font-weight:800; overflow-wrap:anywhere; }
@@ -790,6 +864,46 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
                       {bot.is_active ? "Armed · Demo" : "Inactive"}
                     </span>
                   </div>
+
+                  {unknownTrades.filter((trade) => trade.bot_id === bot.id).map((trade) => (
+                    <div className="reconcilePanel" key={trade.id} role="alert">
+                      <strong>Unknown order outcome — new entries are blocked</strong>
+                      <p>
+                        TradeBridge did not receive a definitive buy response. Verify the Demo account through Deriv before clearing this safety lock.
+                        Expected {trade.direction === "CALL" ? "Higher" : "Lower"} · {trade.symbol} · {asNumber(trade.ask_price ?? trade.stake_amount).toFixed(2)}.
+                      </p>
+                      <div className="reconcileControls">
+                        <div className="field">
+                          <label htmlFor={"reconcile-contract-" + trade.id}>Deriv contract ID</label>
+                          <input
+                            id={"reconcile-contract-" + trade.id}
+                            inputMode="numeric"
+                            placeholder="Enter contract ID from Deriv"
+                            value={reconcileContractIds[trade.id] ?? ""}
+                            onChange={(event) => setReconcileContractIds((current) => ({ ...current, [trade.id]: event.target.value }))}
+                            disabled={reconcilingLedgerId === trade.id}
+                          />
+                        </div>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => void reconcileUnknownTrade(trade, "contract_found")}
+                          disabled={reconcilingLedgerId === trade.id || !/^\\d{1,24}$/.test(reconcileContractIds[trade.id]?.trim() ?? "")}
+                        >
+                          {reconcilingLedgerId === trade.id ? "Checking…" : "Verify contract"}
+                        </button>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => void reconcileUnknownTrade(trade, "no_order")}
+                          disabled={reconcilingLedgerId === trade.id}
+                        >
+                          Verify no order
+                        </button>
+                      </div>
+                      <small>“Verify no order” checks the live Demo portfolio and broker statement/profit history. If the evidence is incomplete or a possible purchase is found, TradeBridge keeps the lock.</small>
+                    </div>
+                  ))}
 
                   <div className="metrics">
                     <div className="metric">
