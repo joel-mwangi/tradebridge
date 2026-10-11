@@ -408,7 +408,6 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
   }
 
   async function refresh() {
-    if (!client || !userId) return;  async function refresh() {
     if (!client || !userId) return;
     setError(null);
     try {
