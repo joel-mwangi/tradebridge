@@ -6,7 +6,6 @@ import {
   analyzeSignal,
   backtestStrategy,
   evaluateEntry,
-  granularityForDuration,
   completedCandleSeries,
   STRATEGY_ENGINE_VERSION,
 } from "@/lib/bots/strategy-engine.mjs";
@@ -339,7 +338,7 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
     }
 
     const nowEpoch = Math.floor(Date.now() / 1000);
-    const candleGranularity = granularityForDuration(Number(bot.duration_seconds));
+    const candleGranularity = 60;
     const [portfolioMessage, balanceMessage, historyMessage, profitTableMessage, statementMessage] = await Promise.all([
       websocketRequest(ws, { portfolio: 1 }),
       websocketRequest(ws, { balance: 1 }),
