@@ -114,6 +114,11 @@ function friendlyError(message: string): string {
   const code = message.toLowerCase();
   if (code.includes("bot_token_encryption_not_configured")) return "Bot token encryption is not configured on the server. Set BOT_TOKEN_ENCRYPTION_KEY to a base64-encoded 32-byte key.";
   if (code.includes("demo_account_required")) return "Select a verified Deriv Demo account in the bot configuration first.";
+  if (code.includes("another_bot_armed_on_account")) return "Only one bot can be armed on this Demo account at a time. Pause the other bot first.";
+  if (code.includes("open_bot_trade_must_settle")) return "An earlier bot contract is still open. The runner must reconcile it before a new bot can be armed.";
+  if (code.includes("open_trade_for_other_bot")) return "Another bot has an outstanding contract on this account. Open that bot and refresh settlement access first.";
+  if (code.includes("unknown_bot_trade_requires_reconciliation")) return "An earlier order has an unknown outcome. Check Deriv positions and statement history before proceeding; no new trade is allowed.";
+  if (code.includes("bot_account_state_unavailable")) return "TradeBridge could not safely verify account exposure. Retry after the bot database is available.";
   if (code.includes("deriv_reconnect_required") || code.includes("deriv_authorization_invalid")) return "Reconnect Deriv, select your Demo account, then enable the bot again.";
   if (code.includes("demo_only_runner")) return "Automated bots can only use a verified Demo account.";
   if (code.includes("bot_server_not_configured") || code.includes("bot_runner_not_configured")) return "The server-side bot runner is not configured yet. Review docs/bot-runner-setup.md.";
@@ -357,14 +362,21 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
         body: JSON.stringify({ bot_id: bot.id, enabled: !bot.is_active }),
         cache: "no-store",
       });
-      const result = await response.json() as { success?: boolean; error?: string; credential_expires_at?: string };
+      const result = await response.json() as {
+        success?: boolean;
+        error?: string;
+        settlement_only?: boolean;
+        credential_expires_at?: string;
+      };
       if (!response.ok || !result.success) throw new Error(result.error ?? "Could not update bot state.");
 
       await loadData(client, userId);
       setMessage(
-        !bot.is_active
-          ? "Demo bot armed. It will place an order only when the out-of-sample edge and risk gates pass. Its short-lived Deriv authorization must be renewed when it expires."
-          : "Bot paused. Any already-open Deriv contract remains open and must settle or be reconciled separately.",
+        result.settlement_only
+          ? "Demo authorization refreshed for settlement only. The bot remains paused and cannot open another order until the outstanding contract settles."
+          : !bot.is_active
+            ? "Demo bot armed. It will place an order only when the out-of-sample edge and risk gates pass. Its short-lived Deriv authorization must be renewed when it expires."
+            : "Bot paused. No new entries will be opened; any known outstanding contract remains eligible for settlement monitoring.",
       );
     } catch (toggleError: unknown) {
       setError(friendlyError(toggleError instanceof Error ? toggleError.message : "Could not update this bot."));
@@ -387,7 +399,7 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
       const result = await response.json() as { success?: boolean; stopped?: number; error?: string };
       if (!response.ok || !result.success) throw new Error(result.error ?? "Could not stop all bots.");
       if (client && userId) await loadData(client, userId);
-      setMessage("All bot configurations are paused and stored runner credentials have been removed. Reconcile any open Deriv contracts separately.");
+      setMessage("All bots are paused. Credentials are removed unless a known open contract still needs the runner to reconcile its settlement. No new bot entries will be opened.");
     } catch (stopError: unknown) {
       setError(friendlyError(stopError instanceof Error ? stopError.message : "Could not stop all bots."));
     } finally {
