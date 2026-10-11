@@ -91,6 +91,8 @@ The OAuth implementation returns a short-lived access token and currently has no
 
 ## 5. What the runner enforces
 
+The default strategy duration is 60 seconds. The first version caps contract duration at 1,800 seconds so a 5,000-candle history can provide up to 50 non-overlapping expiry observations in the 30% holdout; 3,600-second contracts cannot meet the 40-trade minimum with this history window.
+
 - Verified Demo Options WebSocket only; rejects Real-account WebSocket URLs.
 - Four strategy candidates: trend following, mean reversion, breakout, and momentum.
 - Historical holdout backtest with a 95% Wilson lower confidence bound; no probability is invented from a signal score.
