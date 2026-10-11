@@ -15,7 +15,7 @@ export const maxDuration = 60;
 
 const HEADERS = { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" };
 const DERIV_API = "https://api.derivws.com";
-const MAX_BOTS_PER_RUN = 4;
+const MAX_BOTS_PER_RUN = 1;
 const HISTORY_COUNT = 5000;
 const RPC_TIMEOUT_MS = 8000;
 const TERMINAL_STATUSES = new Set(["won", "lost", "sold", "expired", "cancelled"]);
@@ -638,9 +638,12 @@ export async function GET(request: NextRequest) {
     if (pausedBotError) return jsonError("bot_database_unavailable", 503);
     if (pausedBot) candidatesById.set(botId, pausedBot as BotRow);
   }
+  const unsettledBotIds = new Set((unsettledRows ?? []).map((row) => String(row.bot_id)));
   const candidates = [...candidatesById.values()].sort((a, b) => {
-    // The database order favours the least recently considered active bots; paused
-    // reconciliation candidates remain eligible but can never open new trades.
+    // Settlement/reconciliation takes priority over new signals. Other bots rotate
+    // by last_runner_at, so a large list does not permanently starve later entries.
+    const priorityDifference = Number(unsettledBotIds.has(b.id)) - Number(unsettledBotIds.has(a.id));
+    if (priorityDifference !== 0) return priorityDifference;
     return Date.parse(String(a.last_runner_at ?? "1970-01-01")) - Date.parse(String(b.last_runner_at ?? "1970-01-01"));
   });
 
