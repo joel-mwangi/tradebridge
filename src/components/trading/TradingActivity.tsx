@@ -5,6 +5,7 @@ import styles from "./TradingWorkspace.module.css";
 import type { AccountActivity, OpenPosition } from "./types";
 
 type Props = {
+  positionsOnly?: boolean;
   positions: OpenPosition[];
   activity: AccountActivity[];
   currency: string;
@@ -43,7 +44,7 @@ function csvCell(value: unknown) {
 }
 
 export default function TradingActivity({
-  positions, activity, currency, accountType, busy, activityLoading, activityHasMore,
+  positionsOnly = false, positions, activity, currency, accountType, busy, activityLoading, activityHasMore,
   onSell, onRefresh, onLoadMore,
 }: Props) {
   const [pendingSellId, setPendingSellId] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export default function TradingActivity({
     URL.revokeObjectURL(url);
   }
 
-  return <div className={styles.activityGrid} id="activity">
+  return <div className={positionsOnly ? styles.activityGridSingle : styles.activityGrid} id="activity">
     <section className={styles.activityPanel}>
       <div className={styles.panelHeading}>
         <div><p className={styles.eyebrow}>{liveAccount ? "LIVE ACCOUNT" : "DEMO ACCOUNT"}</p><h2>Open positions <span className={styles.countPill}>{positions.length}</span></h2><p className={styles.panelSubtext}>Open Deriv contracts · current profit/loss updates when available.</p></div>
@@ -92,6 +93,7 @@ export default function TradingActivity({
       </div>}
     </section>
 
+    {!positionsOnly && (
     <section className={styles.activityPanel}>
       <div className={styles.panelHeading}>
         <div><p className={styles.eyebrow}>ACCOUNT STATEMENT</p><h2>Recent activity</h2><p className={styles.panelSubtext}>Latest transactions returned by Deriv.</p></div>
@@ -117,5 +119,6 @@ export default function TradingActivity({
       {activityLoading && activity.length === 0 && <p className={styles.statementFootnote}>Loading statement from Deriv…</p>}
       <p className={styles.statementFootnote}>Export includes the transactions currently loaded from Deriv, not the account's full lifetime archive.</p>
     </section>
+    )}
   </div>;
 }
