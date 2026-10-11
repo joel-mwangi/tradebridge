@@ -256,7 +256,13 @@ async function settleExistingTrade(
     });
     return "settlement_missing_pnl_paused";
   }
-  const nextStatus = status === "sold" || raw.is_sold === 1 ? "sold" : profit >= 0 ? "won" : "lost";
+  const nextStatus = status === "sold" || raw.is_sold === 1 || raw.is_sold === true
+    ? "sold"
+    : status === "won"
+      ? "won"
+      : status === "lost"
+        ? "lost"
+        : profit > 0 ? "won" : "lost";
   const { data: updated, error } = await admin.from("bot_trade_ledger").update({
     status: nextStatus,
     realized_pnl: profit,
