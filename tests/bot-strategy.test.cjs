@@ -54,3 +54,24 @@ test("entry gate rejects weak samples, breached loss limits, and open exposure",
   assert.equal(evaluateEntry(base).allowed, true);
   assert.equal(evaluateEntry({ ...base, backtest: { ...base.backtest, wilsonLower95: 0.55 } }).reason, "edge_not_proven");
 });
+
+
+test("history bars are completed and aligned to the contract expiry horizon", async () => {
+  const { granularityForDuration, completedCandleSeries } = await enginePromise;
+  assert.equal(granularityForDuration(60), 60);
+  assert.equal(granularityForDuration(300), 60);
+  assert.equal(granularityForDuration(90), 30);
+  assert.equal(granularityForDuration(45), 15);
+  assert.equal(granularityForDuration(59), 1);
+
+  const series = completedCandleSeries([
+    { epoch: 120, close: 102 },
+    { epoch: 60, close: 101 },
+    { epoch: 180, close: 103 },
+    { epoch: 240, close: 104 },
+    { epoch: -1, close: 100 },
+    { epoch: 0, close: 0 },
+  ], 60, 300);
+  assert.deepEqual(series.prices, [101, 102, 103, 104]);
+  assert.deepEqual(series.times, [120, 180, 240, 300]);
+});
