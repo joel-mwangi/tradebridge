@@ -11,14 +11,31 @@ interface TradingBot {
   bot_name: string;
   strategy_type: StrategyType;
   symbol: string;
+  account_id: string | null;
   stake_amount: number | string;
-  take_profit_pips: number | string;
-  stop_loss_pips: number | string;
+  duration_seconds: number;
+  daily_loss_limit: number | string;
+  max_trades_per_day: number;
+  max_consecutive_losses: number;
+  min_expected_return: number | string;
   is_active: boolean;
   total_trades: number;
   total_profit_loss: number | string;
   created_at: string;
   updated_at: string;
+}
+
+interface DemoAccountOption {
+  account_id: string;
+  account_type: string | null;
+  currency: string | null;
+  balance?: number | null;
+}
+
+interface AccountsResponse {
+  connected?: boolean;
+  accounts?: DemoAccountOption[];
+  error?: string;
 }
 
 interface BotLog {
@@ -36,18 +53,22 @@ interface BotFormState {
   bot_name: string;
   strategy_type: StrategyType;
   symbol: string;
+  account_id: string;
   stake_amount: string;
-  take_profit_pips: string;
-  stop_loss_pips: string;
+  duration_seconds: string;
+  daily_loss_limit: string;
+  max_trades_per_day: string;
 }
 
 const INITIAL_FORM: BotFormState = {
   bot_name: "",
   strategy_type: "trend_following",
   symbol: "frxEURUSD",
+  account_id: "",
   stake_amount: "1",
-  take_profit_pips: "0",
-  stop_loss_pips: "0",
+  duration_seconds: "60",
+  daily_loss_limit: "5",
+  max_trades_per_day: "10",
 };
 
 const STRATEGIES: Array<{ value: StrategyType; label: string; description: string }> = [
@@ -90,10 +111,17 @@ function logDetails(details: BotLog["details"]): string {
 }
 
 function friendlyError(message: string): string {
-  if (message.includes("trading_bots") || message.includes("bot_logs")) {
-    return "The bot tables are not available yet. Apply migration 20261011120000_add_trading_bots.sql to the TradeBridge Supabase project, then reload.";
+  const code = message.toLowerCase();
+  if (code.includes("bot_token_encryption_not_configured")) return "Bot token encryption is not configured on the server. Set BOT_TOKEN_ENCRYPTION_KEY to a base64-encoded 32-byte key.";
+  if (code.includes("demo_account_required")) return "Select a verified Deriv Demo account in the bot configuration first.";
+  if (code.includes("deriv_reconnect_required") || code.includes("deriv_authorization_invalid")) return "Reconnect Deriv, select your Demo account, then enable the bot again.";
+  if (code.includes("demo_only_runner")) return "Automated bots can only use a verified Demo account.";
+  if (code.includes("bot_server_not_configured") || code.includes("bot_runner_not_configured")) return "The server-side bot runner is not configured yet. Review docs/bot-runner-setup.md.";
+  if (code.includes("bot_credentials_unavailable") || code.includes("bot_database_unavailable")) return "The bot runner database is unavailable. Apply all TradeBridge migrations and verify server credentials.";
+  if (code.includes("trading_bots") || code.includes("bot_logs") || code.includes("bot_trade_ledger")) {
+    return "Bot tables are not available yet. Apply all TradeBridge Supabase migrations, then reload.";
   }
-  if (message.toLowerCase().includes("row-level security")) {
+  if (code.includes("row-level security")) {
     return "Supabase rejected this operation. Confirm that you are signed in to the correct TradeBridge account.";
   }
   return message;
@@ -102,6 +130,8 @@ function friendlyError(message: string): string {
 export default function BotManager({ theme }: { theme: "dark" | "light" }) {
   const [client, setClient] = useState<BrowserSupabaseClient | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccountOption[]>([]);
+  const [stoppingAll, setStoppingAll] = useState(false);
   const [bots, setBots] = useState<TradingBot[]>([]);
   const [logs, setLogs] = useState<BotLog[]>([]);
   const [form, setForm] = useState<BotFormState>(INITIAL_FORM);
@@ -159,6 +189,19 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
 
         const currentUserId = data.user.id;
         setUserId(currentUserId);
+
+        const accountsResponse = await fetch("/api/auth/deriv/accounts", { cache: "no-store" });
+        if (accountsResponse.ok) {
+          const accountData = await accountsResponse.json() as AccountsResponse;
+          const demoOnly = (accountData.accounts ?? []).filter(
+            (account) => (account.account_type ?? "").toLowerCase() === "demo" && Boolean(account.account_id),
+          );
+          setDemoAccounts(demoOnly);
+          if (demoOnly.length > 0) {
+            setForm((current) => ({ ...current, account_id: current.account_id || demoOnly[0].account_id }));
+          }
+        }
+
         await loadData(supabase, currentUserId);
         if (!alive) return;
 
@@ -234,8 +277,9 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
     }
 
     const stake = Number(form.stake_amount);
-    const takeProfit = Number(form.take_profit_pips);
-    const stopLoss = Number(form.stop_loss_pips);
+    const durationSeconds = Number(form.duration_seconds);
+    const dailyLossLimit = Number(form.daily_loss_limit);
+    const maxTradesPerDay = Number(form.max_trades_per_day);
     const trimmedName = form.bot_name.trim();
     const trimmedSymbol = form.symbol.trim();
 
@@ -247,12 +291,24 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
       setError("Enter a valid Deriv symbol, for example frxEURUSD.");
       return;
     }
-    if (!Number.isFinite(stake) || stake <= 0 || stake > 10000) {
-      setError("Stake must be greater than 0 and no more than 10,000.");
+    if (!demoAccounts.some((account) => account.account_id === form.account_id)) {
+      setError("Select a verified Demo account. Real accounts cannot be used for automated bots.");
       return;
     }
-    if (!Number.isFinite(takeProfit) || takeProfit < 0 || !Number.isFinite(stopLoss) || stopLoss < 0) {
-      setError("Take-profit and stop-loss values must be zero or greater.");
+    if (!Number.isFinite(stake) || stake <= 0 || stake > 100) {
+      setError("Stake must be greater than 0 and no more than 100 in the account currency.");
+      return;
+    }
+    if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) {
+      setError("Contract duration must be an integer between 1 and 3,600 seconds.");
+      return;
+    }
+    if (!Number.isFinite(dailyLossLimit) || dailyLossLimit <= 0 || dailyLossLimit > 10000) {
+      setError("Daily loss limit must be greater than 0 and no more than 10,000.");
+      return;
+    }
+    if (!Number.isInteger(maxTradesPerDay) || maxTradesPerDay < 1 || maxTradesPerDay > 100) {
+      setError("Maximum trades per day must be an integer between 1 and 100.");
       return;
     }
 
@@ -262,17 +318,20 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
     try {
       const { error: insertError } = await client.from("trading_bots").insert({
         user_id: userId,
+        account_id: form.account_id,
         bot_name: trimmedName,
         strategy_type: form.strategy_type,
         symbol: trimmedSymbol,
         stake_amount: stake,
-        take_profit_pips: takeProfit,
-        stop_loss_pips: stopLoss,
-        is_active: false,
+        duration_seconds: durationSeconds,
+        daily_loss_limit: dailyLossLimit,
+        max_trades_per_day: maxTradesPerDay,
+        max_consecutive_losses: 3,
+        min_expected_return: 0.02,
       });
 
       if (insertError) throw new Error(insertError.message);
-      setForm(INITIAL_FORM);
+      setForm({ ...INITIAL_FORM, account_id: form.account_id });
       await loadData(client, userId);
       setMessage("Bot configuration saved as inactive. Review the strategy and risk parameters before enabling it.");
     } catch (createError: unknown) {
@@ -292,22 +351,20 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
     setError(null);
     setMessage(null);
     try {
-      const { data, error: updateError } = await client
-        .from("trading_bots")
-        .update({ is_active: !bot.is_active })
-        .eq("id", bot.id)
-        .eq("user_id", userId)
-        .select("id")
-        .maybeSingle();
-
-      if (updateError) throw new Error(updateError.message);
-      if (!data) throw new Error("No bot was updated. Refresh and confirm that this bot belongs to your signed-in account.");
+      const response = await fetch("/api/bots/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bot_id: bot.id, enabled: !bot.is_active }),
+        cache: "no-store",
+      });
+      const result = await response.json() as { success?: boolean; error?: string; credential_expires_at?: string };
+      if (!response.ok || !result.success) throw new Error(result.error ?? "Could not update bot state.");
 
       await loadData(client, userId);
       setMessage(
         !bot.is_active
-          ? "Bot configuration marked enabled. No trades will be placed until a trusted server-side bot runner is connected."
-          : "Bot configuration paused. Verify any open Deriv positions separately in your trading account.",
+          ? "Demo bot armed. It will place an order only when the out-of-sample edge and risk gates pass. Its short-lived Deriv authorization must be renewed when it expires."
+          : "Bot paused. Any already-open Deriv contract remains open and must settle or be reconciled separately.",
       );
     } catch (toggleError: unknown) {
       setError(friendlyError(toggleError instanceof Error ? toggleError.message : "Could not update this bot."));
@@ -316,7 +373,30 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
     }
   }
 
+  async function stopAllBots() {
+    setStoppingAll(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/bots/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stop_all: true }),
+        cache: "no-store",
+      });
+      const result = await response.json() as { success?: boolean; stopped?: number; error?: string };
+      if (!response.ok || !result.success) throw new Error(result.error ?? "Could not stop all bots.");
+      if (client && userId) await loadData(client, userId);
+      setMessage("All bot configurations are paused and stored runner credentials have been removed. Reconcile any open Deriv contracts separately.");
+    } catch (stopError: unknown) {
+      setError(friendlyError(stopError instanceof Error ? stopError.message : "Could not stop all bots."));
+    } finally {
+      setStoppingAll(false);
+    }
+  }
+
   async function refresh() {
+    if (!client || !userId) return;  async function refresh() {
     if (!client || !userId) return;
     setError(null);
     try {
@@ -534,6 +614,26 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
 
           <form onSubmit={(event) => void handleCreate(event)}>
             <div className="field">
+              <label htmlFor="bot-account">Verified Deriv Demo account</label>
+              <select
+                id="bot-account"
+                value={form.account_id}
+                onChange={(event) => updateForm("account_id", event.target.value)}
+                required
+                disabled={demoAccounts.length === 0}
+              >
+                {demoAccounts.length === 0
+                  ? <option value="">Connect Deriv and select a Demo account</option>
+                  : demoAccounts.map((account) => (
+                    <option value={account.account_id} key={account.account_id}>
+                      {account.account_id} · {account.currency ?? "Currency"} · Demo
+                    </option>
+                  ))}
+              </select>
+              <p className="hint">Bots are hard-limited to verified Demo accounts. Real-money automation is not supported.</p>
+            </div>
+
+            <div className="field">
               <label htmlFor="bot-name">Bot name</label>
               <input
                 id="bot-name"
@@ -589,38 +689,53 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
                 onChange={(event) => updateForm("stake_amount", event.target.value)}
                 required
               />
-              <p className="hint">Positive amount, capped at 10,000 for this configuration. Actual order limits must also be checked on the server.</p>
+              <p className="hint">The runner also caps each stake at 1% of the verified Demo balance. A larger configured stake is skipped rather than forced.</p>
             </div>
 
             <div className="formRow">
               <div className="field">
-                <label htmlFor="bot-take-profit">Take profit (pips)</label>
+                <label htmlFor="bot-duration">Contract duration (seconds)</label>
                 <input
-                  id="bot-take-profit"
+                  id="bot-duration"
                   type="number"
-                  min="0"
-                  step="0.1"
-                  value={form.take_profit_pips}
-                  onChange={(event) => updateForm("take_profit_pips", event.target.value)}
+                  min="1"
+                  max="3600"
+                  step="1"
+                  value={form.duration_seconds}
+                  onChange={(event) => updateForm("duration_seconds", event.target.value)}
                   required
                 />
               </div>
               <div className="field">
-                <label htmlFor="bot-stop-loss">Stop loss (pips)</label>
+                <label htmlFor="bot-daily-loss">Daily loss limit</label>
                 <input
-                  id="bot-stop-loss"
+                  id="bot-daily-loss"
                   type="number"
-                  min="0"
-                  step="0.1"
-                  value={form.stop_loss_pips}
-                  onChange={(event) => updateForm("stop_loss_pips", event.target.value)}
+                  min="0.01"
+                  max="10000"
+                  step="0.01"
+                  value={form.daily_loss_limit}
+                  onChange={(event) => updateForm("daily_loss_limit", event.target.value)}
                   required
                 />
               </div>
             </div>
-            <p className="hint">A value of 0 means no threshold configured. Pip thresholds are stored as settings only and are not enforced by this UI.</p>
+            <div className="field">
+              <label htmlFor="bot-max-trades">Maximum trades per day (account-wide)</label>
+              <input
+                id="bot-max-trades"
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                value={form.max_trades_per_day}
+                onChange={(event) => updateForm("max_trades_per_day", event.target.value)}
+                required
+              />
+              <p className="hint">The runner also pauses after 3 consecutive losses, blocks overlapping contracts, and requires a positive out-of-sample edge before every entry.</p>
+            </div>
 
-            <button className="primary" type="submit" disabled={saving || loading || !client || !userId}>
+            <button className="primary" type="submit" disabled={saving || loading || !client || !userId || demoAccounts.length === 0}>
               {saving ? "Saving configuration…" : "＋ Create bot configuration"}
             </button>
           </form>
@@ -630,8 +745,11 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
           <div className="heading">
             <div>
               <h2 id="your-bots-title">Your bots</h2>
-              <p className="sub">Status and P&amp;L update when Supabase broadcasts changes or you refresh.</p>
+              <p className="sub">Only the scheduled server runner can submit Demo orders; enabled status does not guarantee a signal or profit.</p>
             </div>
+            <button className="secondary" type="button" onClick={() => void stopAllBots()} disabled={stoppingAll || activeCount === 0}>
+              {stoppingAll ? "Stopping…" : "■ Stop all"}
+            </button>
           </div>
 
           {loading ? (
@@ -650,13 +768,15 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
                       </div>
                       <div className="meta">
                         <span className="badge">{strategyLabel(bot.strategy_type)}</span>
+                        <span className="metaText">{bot.account_id ?? "No Demo account"}</span>
+                        <span className="metaText">·</span>
                         <span className="metaText">Stake {asNumber(bot.stake_amount).toFixed(2)}</span>
                         <span className="metaText">·</span>
-                        <span className="metaText">{bot.total_trades} reported trades</span>
+                        <span className="metaText">{bot.total_trades} settled trades</span>
                       </div>
                     </div>
                     <span className={bot.is_active ? "status enabled" : "status"}>
-                      {bot.is_active ? "Enabled · config" : "Inactive"}
+                      {bot.is_active ? "Armed · Demo" : "Inactive"}
                     </span>
                   </div>
 
@@ -666,12 +786,12 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
                       <strong className={pnlClass(bot.total_profit_loss)}>{formatPnl(bot.total_profit_loss)}</strong>
                     </div>
                     <div className="metric">
-                      <span>TAKE PROFIT</span>
-                      <strong>{asNumber(bot.take_profit_pips).toLocaleString("en-US")} pips</strong>
+                      <span>DURATION</span>
+                      <strong>{bot.duration_seconds}s</strong>
                     </div>
                     <div className="metric">
-                      <span>STOP LOSS</span>
-                      <strong>{asNumber(bot.stop_loss_pips).toLocaleString("en-US")} pips</strong>
+                      <span>DAILY LOSS STOP</span>
+                      <strong>{asNumber(bot.daily_loss_limit).toLocaleString("en-US")}</strong>
                     </div>
                   </div>
 
@@ -682,9 +802,9 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
                       className={bot.is_active ? "toggle enabled" : "toggle"}
                       onClick={() => void toggleBot(bot)}
                       disabled={busyBotId === bot.id}
-                      aria-label={bot.is_active ? "Disable " + bot.bot_name + " configuration" : "Enable " + bot.bot_name + " configuration"}
+                      aria-label={bot.is_active ? "Pause " + bot.bot_name : "Arm " + bot.bot_name}
                     >
-                      {busyBotId === bot.id ? "Saving…" : bot.is_active ? "Ⅱ Disable config" : "▶ Enable config"}
+                      {busyBotId === bot.id ? "Saving…" : bot.is_active ? "Ⅱ Pause bot" : "▶ Arm Demo bot"}
                     </button>
                   </div>
                 </article>
@@ -725,7 +845,7 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
         )}
       </section>
 
-      <p className="muted">Automated trading involves risk. These settings are not a performance guarantee, and the reported P&amp;L depends on updates from a separate trusted execution service.</p>
+      <p className="muted">No strategy guarantees profit. The runner uses an out-of-sample holdout, a 95% Wilson lower-bound profitability gate, a 1% per-trade balance cap, a daily loss stop, trade-count and loss-streak limits, one open account contract at a time, and an ambiguity pause. The Deriv OAuth token is encrypted server-side and expires from bot use after a short safety TTL; reconnect and re-arm to renew it. Make sure a scheduler is configured as described in docs/bot-runner-setup.md.</p>
     </section>
   );
 }
