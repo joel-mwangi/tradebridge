@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import BotManager from "./BotManager";
 import DemoTradeTicket from "./DemoTradeTicket";
 import LiveTradingControls from "./LiveTradingControls";
 import MarketWatch from "./MarketWatch";
+import PriceChart from "./PriceChart";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
@@ -28,10 +29,11 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspacePage = "dashboard" | "trade" | "portfolio" | "bots" | "settings";
+type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "bots" | "settings";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "dashboard", label: "Dashboard", icon: "▦" },
+  { id: "markets", label: "Markets", icon: "⌁" },
   { id: "trade", label: "Trade", icon: "↗" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
   { id: "bots", label: "Automated Bots", icon: "▤" },
@@ -40,6 +42,7 @@ const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
 
 const PAGE_TITLES: Record<WorkspacePage, string> = {
   dashboard: "Dashboard",
+  markets: "Markets",
   trade: "Trade",
   portfolio: "Portfolio & History",
   bots: "Automated Bots",
@@ -95,6 +98,7 @@ function accountTypeLabel(account: DerivAccount) {
 
 export default function TradingWorkspace() {
   const pathname = usePathname();
+  const router = useRouter();
   const routeSegment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
   const page: WorkspacePage = PRIMARY_NAV.some((item) => item.id === routeSegment)
     ? routeSegment as WorkspacePage
@@ -126,6 +130,20 @@ export default function TradingWorkspace() {
     markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket,
     candlesByKey, requestCandles,
   } = useMarketData();
+
+  useEffect(() => {
+    if (page !== "trade") return;
+    const requestedSymbol = new URLSearchParams(window.location.search).get("symbol");
+    if (requestedSymbol && requestedSymbol !== selectedSymbol
+      && markets.some((market) => market.symbol === requestedSymbol)) {
+      selectMarket(requestedSymbol);
+    }
+  }, [page, markets, selectedSymbol, selectMarket]);
+
+  function openMarket(symbol: string) {
+    selectMarket(symbol);
+    router.push("/trade?symbol=" + encodeURIComponent(symbol));
+  }
 
   const demoAccounts = accounts.filter(isDemoAccount);
   const realAccounts = accounts.filter(isRealAccount);
@@ -410,9 +428,9 @@ export default function TradingWorkspace() {
               </section>
 
               <section className={styles.overviewLaunchers} aria-label="Quick access">
-                <Link href="/trade" className={styles.overviewLauncher}>
-                  <span className={styles.launcherIcon}>↗</span>
-                  <span><strong>Open trading workspace</strong><small>Choose a market, review the chart and place an order from one workspace.</small></span>
+                <Link href="/markets" className={styles.overviewLauncher}>
+                  <span className={styles.launcherIcon}>⌁</span>
+                  <span><strong>Browse markets</strong><small>See available instruments, search by symbol and open a dedicated trading workspace.</small></span>
                   <span className={styles.launcherArrow} aria-hidden="true">→</span>
                 </Link>
                 <Link href="/portfolio" className={styles.overviewLauncher}>
@@ -434,6 +452,33 @@ export default function TradingWorkspace() {
             </section>
           )}
 
+          {page === "markets" && (
+            <section className={styles.workspaceSection} aria-label="Available markets">
+              <div className={styles.intro}>
+                <div className={styles.introMain}>
+                  <p className={styles.eyebrow}>Explore instruments</p>
+                  <h1 className={styles.title}>Markets</h1>
+                  <p className={styles.subtitle}>Browse every eligible instrument returned by Deriv. Select a market to open its chart and trade ticket together on the Trade page.</p>
+                </div>
+                <div className={styles.introActions}>
+                  <span className={connection === "Live prices" ? styles.liveStatus : styles.connectionStatus}><i />{connection}</span>
+                </div>
+              </div>
+
+              <MarketWatch
+                listOnly
+                markets={markets}
+                snapshots={snapshots}
+                selectedMarket={selectedMarket}
+                selectedSymbol={selectedSymbol}
+                connection={connection}
+                onSelect={openMarket}
+                candlesByKey={candlesByKey}
+                onLoadCandles={requestCandles}
+              />
+            </section>
+          )}
+
           {page === "trade" && (
             <section className={styles.workspaceSection} aria-label="Trading workspace">
               <div className={styles.intro}>
@@ -448,16 +493,19 @@ export default function TradingWorkspace() {
               </div>
 
               <div className={styles.marketGrid}>
-                <MarketWatch
-                  markets={markets}
-                  snapshots={snapshots}
-                  selectedMarket={selectedMarket}
-                  selectedSymbol={selectedSymbol}
-                  connection={connection}
-                  onSelect={selectMarket}
-                  candlesByKey={candlesByKey}
-                  onLoadCandles={requestCandles}
-                />
+
+                <div className={styles.marketColumn}>
+                  <PriceChart
+                    market={selectedMarket}
+                    snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+                    candlesByKey={candlesByKey}
+                    onLoadCandles={requestCandles}
+                  />
+                  <div className={styles.marketSelectionFooter}>
+                    <span><strong>{selectedMarket?.name ?? "No market selected"}</strong><small>{selectedMarket?.symbol ?? "Choose an available instrument to begin"}</small></span>
+                    <Link href="/markets" className={styles.secondaryButton}>Change market</Link>
+                  </div>
+                </div>
                 <div className={styles.tradeTicketColumn}>
                   {connected && activeAccountIsReal && activeAccount && <div id="live-controls">
                     <LiveTradingControls

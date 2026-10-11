@@ -320,6 +320,20 @@
 .connectionStatus { background: var(--surface); color: var(--muted); }
 .connectionStatus i { background: var(--muted); }
 
+.marketDirectoryTools { display: grid; gap: 12px; margin-bottom: 16px; }
+.marketSearchWrap { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); }
+.marketSearchWrap > span { flex: 0 0 auto; font-size: 23px; line-height: 1; }
+.marketSearch { width: 100%; min-width: 0; min-height: 42px; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--ink); font-size: 12px !important; }
+.marketSearch::placeholder { color: var(--muted); }
+.marketSearch:focus-visible { outline: none; }
+.marketSearchWrap:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-soft); }
+.marketCategoryList { display: flex; flex-wrap: wrap; gap: 7px; }
+.marketCategoryList .rangeButton, .marketCategoryList .rangeActive { min-height: 32px; padding: 0 11px; text-transform: capitalize; }
+.marketResultCount { margin: 0; color: var(--muted); font-size: 10px; }
+.marketSelectionFooter { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.marketSelectionFooter > span { min-width: 0; display: grid; gap: 4px; }
+.marketSelectionFooter strong { color: var(--ink); font-size: 12px; }
+.marketSelectionFooter small { color: var(--muted); font-size: 10px; }
 .marketList { display: grid; gap: 8px; }
 .marketItem, .marketItemActive { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; transition: all .15s ease; }
 .marketItem:hover { border-color: var(--teal); background: var(--panel); }
@@ -530,7 +544,7 @@
   .sidebarMetaBottom { justify-content: center; padding: 14px 0; }
   .marketGrid { grid-template-columns: minmax(0, 1fr); }
   .ticketPanel { position: static; }
-  .marketColumn { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .marketColumn { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 }
 @media (max-width: 720px) {
   .workspace { display: block; padding-bottom: 0; }
@@ -576,6 +590,9 @@
   .mobileNav a:hover, .mobileNav a:focus-visible { background: var(--teal-soft); color: var(--teal); }
   .overviewLaunchers { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .overviewLauncher { min-height: 88px; padding: 14px; }
+  .marketSelectionFooter { align-items: stretch; flex-direction: column; }
+  .marketCategoryList { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .marketCategoryList button { flex: 0 0 auto; }
   .workspaceSection { gap: 16px; }
   .footer { flex-direction: column; gap: 8px; }
 }

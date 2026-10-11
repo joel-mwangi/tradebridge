@@ -42,9 +42,42 @@ export function useMarketData() {
   const [connection, setConnection] = useState("Connecting to Deriv market data");
   const [selectedSymbol, setSelectedSymbol] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
+  const marketSequenceRef = useRef(100);
+  const historyRequestsRef = useRef(new Map<number, string>());
+  const subscribedSymbolsRef = useRef(new Set<string>());
   const candleSequenceRef = useRef(50_000);
   const candleRequestsRef = useRef(new Map<number, { key: string; symbol: string; granularity: number }>());
   const requestedCandleKeysRef = useRef(new Set<string>());
+
+  const requestMarket = useCallback((symbol: string) => {
+    const activeSocket = socketRef.current;
+    if (!symbol || !activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
+
+    const historyReqId = ++marketSequenceRef.current;
+    historyRequestsRef.current.set(historyReqId, symbol);
+    activeSocket.send(JSON.stringify({
+      ticks_history: symbol,
+      end: "latest",
+      count: 120,
+      style: "ticks",
+      req_id: historyReqId,
+    }));
+
+    if (!subscribedSymbolsRef.current.has(symbol)) {
+      const subscriptionReqId = ++marketSequenceRef.current;
+      activeSocket.send(JSON.stringify({
+        ticks: symbol,
+        subscribe: 1,
+        req_id: subscriptionReqId,
+      }));
+      subscribedSymbolsRef.current.add(symbol);
+    }
+  }, []);
+
+  const selectMarket = useCallback((symbol: string) => {
+    setSelectedSymbol(symbol);
+    requestMarket(symbol);
+  }, [requestMarket]);
 
   const requestCandles = useCallback((symbol: string, granularity: number, force = false) => {
     const activeSocket = socketRef.current;
@@ -70,8 +103,6 @@ export function useMarketData() {
 
   useEffect(() => {
     let alive = true;
-    let nextRequestId = 100;
-    const requestSymbols = new Map<number, string>();
     let socket: WebSocket;
 
     const mergePoints = (symbol: string, incoming: PricePoint[]) => {
@@ -111,13 +142,14 @@ export function useMarketData() {
         const item = bySymbol.get(symbol);
         return item ? [item] : [];
       });
-      const rest = candidates
+      const uniqueCandidates = [...bySymbol.values()];
+      const rest = uniqueCandidates
         .filter((item) => !PREFERRED_SYMBOLS.includes(item.symbol))
         .sort((a, b) => {
           const rank = (market: string | undefined) => market === "synthetic_index" ? 0 : market === "forex" ? 1 : 2;
           return rank(a.market) - rank(b.market) || a.name.localeCompare(b.name);
         });
-      const chosen = [...preferred, ...rest].slice(0, 8);
+      const chosen = [...preferred, ...rest];
       if (!alive) return;
       setMarkets(chosen);
       setSelectedSymbol((current) => chosen.some((item) => item.symbol === current) ? current : chosen[0]?.symbol ?? "");
@@ -126,22 +158,9 @@ export function useMarketData() {
         return;
       }
 
-      chosen.forEach((market) => {
-        const historyReqId = nextRequestId++;
-        requestSymbols.set(historyReqId, market.symbol);
-        socket.send(JSON.stringify({
-          ticks_history: market.symbol,
-          end: "latest",
-          count: 120,
-          style: "ticks",
-          req_id: historyReqId,
-        }));
-        socket.send(JSON.stringify({
-          ticks: market.symbol,
-          subscribe: 1,
-          req_id: nextRequestId++,
-        }));
-      });
+      // Keep a small live watchlist streaming; any other market is subscribed
+      // on demand when the user selects it from the full directory.
+      chosen.slice(0, 8).forEach((market) => requestMarket(market.symbol));
       setConnection("Live market stream connected");
     };
 
@@ -168,6 +187,10 @@ export function useMarketData() {
       try {
         const message = JSON.parse(event.data) as PublicMessage;
         if (message.error) {
+          const historyRequest = message.req_id === undefined
+            ? undefined
+            : historyRequestsRef.current.get(message.req_id);
+          if (historyRequest) historyRequestsRef.current.delete(message.req_id as number);
           const candleRequest = message.req_id === undefined
             ? undefined
             : candleRequestsRef.current.get(message.req_id);
@@ -215,8 +238,9 @@ export function useMarketData() {
         }
 
         if (message.msg_type === "history" && message.history) {
-          const symbol = message.req_id ? requestSymbols.get(message.req_id) : undefined;
+          const symbol = message.req_id ? historyRequestsRef.current.get(message.req_id) : undefined;
           if (!symbol) return;
+          historyRequestsRef.current.delete(message.req_id as number);
           const prices = message.history.prices ?? [];
           const times = message.history.times ?? [];
           const points = prices.flatMap((price, index) => {
@@ -253,6 +277,8 @@ export function useMarketData() {
       if (socketRef.current === socket) socketRef.current = null;
       candleRequestsRef.current.clear();
       requestedCandleKeysRef.current.clear();
+      historyRequestsRef.current.clear();
+      subscribedSymbolsRef.current.clear();
       socket.close();
     };
   }, []);
@@ -268,7 +294,7 @@ export function useMarketData() {
     connection,
     selectedMarket,
     selectedSymbol: selectedMarket?.symbol ?? "",
-    selectMarket: setSelectedSymbol,
+    selectMarket,
     candlesByKey,
     requestCandles,
   };
