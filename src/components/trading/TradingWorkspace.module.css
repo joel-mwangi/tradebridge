@@ -608,3 +608,70 @@
 @media (prefers-reduced-motion: reduce) {
   .workspace *, .workspace *::before, .workspace *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+/* Compact order ticket: preserve controls while removing redundant vertical copy. */
+.ticketPanelCompact { padding: 14px; }
+.ticketPanelCompact .panelHeading { gap: 8px; margin-bottom: 8px; }
+.ticketPanelCompact .panelHeading h2 { font-size: 14px; line-height: 1.25; }
+.ticketPanelCompact .panelHeading .panelSubtext { display: none; }
+.ticketPanelCompact .eyebrow { margin: 0 0 3px; font-size: 9px; }
+.ticketPanelCompact .demoLock,
+.ticketPanelCompact .realLock,
+.ticketPanelCompact .realModeLocked { padding: 4px 7px; font-size: 8px; }
+.ticketPanelCompact .tradeMarket { gap: 9px; padding: 7px 0 10px; margin-bottom: 10px; }
+.ticketPanelCompact .tradeMarketIcon { display: grid; flex: 0 0 32px; place-items: center; width: 32px; height: 32px; border-radius: 8px; font-size: 12px; }
+.ticketPanelCompact .tradeMarket>div { gap: 2px; }
+.ticketPanelCompact .tradeMarket strong { font-size: 12px; line-height: 1.25; }
+.ticketPanelCompact .tradeMarket small { font-size: 10px; }
+.ticketPanelCompact .directionField legend { margin: 0 0 5px; font-size: 10px; letter-spacing: 0; }
+.ticketPanelCompact .directionChoices { gap: 7px; }
+.ticketPanelCompact .callButton,
+.ticketPanelCompact .callSelected,
+.ticketPanelCompact .putButton,
+.ticketPanelCompact .putSelected { min-height: 40px; padding: 5px 8px; gap: 7px; border-radius: 8px; }
+.ticketPanelCompact .callButton>span:first-child,
+.ticketPanelCompact .callSelected>span:first-child,
+.ticketPanelCompact .putButton>span:first-child,
+.ticketPanelCompact .putSelected>span:first-child { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; }
+.ticketPanelCompact .callButton strong,
+.ticketPanelCompact .callSelected strong,
+.ticketPanelCompact .putButton strong,
+.ticketPanelCompact .putSelected strong { font-size: 11px; }
+.compactInputsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 11px; }
+.compactFieldGroup { min-width: 0; }
+.ticketPanelCompact .fieldLabel { margin: 0 0 5px; font-size: 10px; letter-spacing: 0; }
+.ticketPanelCompact .inputShell { min-height: 38px; gap: 6px; padding: 0 8px; border-radius: 8px; }
+.ticketPanelCompact .inputShell input { height: 36px; font-size: 12px; }
+.ticketPanelCompact .inputShell span { font-size: 10px; }
+.ticketPanelCompact .presets { gap: 4px; margin-top: 6px; }
+.ticketPanelCompact .preset,
+.ticketPanelCompact .presetActive { min-width: 0; min-height: 26px; padding: 0 3px; border-radius: 6px; font-size: 9px !important; }
+.compactPresets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.compactPresets button { width: 100%; }
+.durationPresets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.compactControlsHint { margin: 8px 0 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.advancedRisk { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+.advancedRisk summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 750; list-style-position: inside; }
+.advancedRisk summary span { color: var(--muted); font-size: 9px; font-weight: 500; }
+.compactRiskNote { margin: 8px 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.compactRiskFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ticketPanelCompact .ticketStatus { gap: 7px; margin-top: 10px; padding: 8px 9px; }
+.ticketPanelCompact .ticketStatus>div { gap: 2px; }
+.ticketPanelCompact .ticketStatus strong { font-size: 10px; }
+.ticketPanelCompact .ticketStatus p { font-size: 9px; line-height: 1.35; }
+.ticketPanelCompact .getQuoteButton,
+.ticketPanelCompact .getLiveQuoteButton { min-height: 42px; margin-top: 8px; border-radius: 8px; font-size: 11px; }
+.ticketPanelCompact .inlineHint { margin-top: 7px; font-size: 9px; }
+.ticketPanelCompact .quoteCard,
+.ticketPanelCompact .liveQuoteCard { margin-top: 10px; padding: 12px; }
+.ticketPanelCompact .quoteMetrics { gap: 8px; margin-top: 10px; }
+.ticketPanelCompact .confirmButton,
+.ticketPanelCompact .confirmLiveButton { min-height: 42px; margin-top: 10px; }
+@media (max-width: 420px) {
+  .ticketPanelCompact { padding: 12px; }
+  .compactInputsGrid { gap: 7px; }
+  .ticketPanelCompact .inputShell { padding: 0 6px; }
+  .compactPresets { gap: 3px; }
+  .ticketPanelCompact .preset,
+  .ticketPanelCompact .presetActive { padding: 0 1px; font-size: 8px !important; }
+}
