@@ -10,7 +10,7 @@ alter table public.trading_bots
 
 alter table public.trading_bots
   add constraint trading_bots_duration_seconds_allowed
-    check (duration_seconds in (5, 10, 15, 30, 60, 120, 300, 600, 900, 1800)),
+    check (duration_seconds in (60, 120, 300, 600, 900, 1800)),
   add constraint trading_bots_daily_loss_limit_positive
     check (daily_loss_limit > 0),
   add constraint trading_bots_daily_trade_limit_range
