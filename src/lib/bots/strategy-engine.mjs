@@ -22,7 +22,7 @@ const EPSILON = 1e-12;
  * judging a 60-second contract using arbitrary tick frequency.
  */
 export function granularityForDuration(durationSeconds) {
-  if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) return 60;
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 1800) return 60;
   let a = durationSeconds;
   let b = 60;
   while (b !== 0) {
