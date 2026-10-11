@@ -71,8 +71,8 @@ test("bot runner requires a secret and strictly validates Deriv Demo socket URLs
 });
 
 test("bot credentials use authenticated encryption and never store plaintext", () => {
-  assert.match(botCredentials, /createCipheriv\("aes-256-gcm"/);
-  assert.match(botCredentials, /createDecipheriv\("aes-256-gcm"/);
+  assert.match(botCredentials, /const ALGORITHM = "aes-256-gcm"/);\n  assert.match(botCredentials, /createCipheriv\(ALGORITHM/);
+  assert.match(botCredentials, /createDecipheriv\(ALGORITHM/);
   assert.match(botCredentials, /getAuthTag/);
   assert.match(botMigration, /revoke all on table public\.bot_runner_credentials from public, anon, authenticated/i);
   assert.match(botMigration, /grant all on table public\.bot_runner_credentials to service_role/i);
