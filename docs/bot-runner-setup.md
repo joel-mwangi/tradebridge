@@ -59,19 +59,18 @@ select cron.schedule(
   'tradebridge-demo-bot-runner',
   '* * * * *',
   $$
-  select net.http_post(
+  select net.http_get(
     url := (select decrypted_secret
             from vault.decrypted_secrets
             where name = 'tradebridge_bot_runner_url'),
+    params := '{}'::jsonb,
     headers := jsonb_build_object(
-      'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || (
         select decrypted_secret
         from vault.decrypted_secrets
         where name = 'tradebridge_cron_secret'
       )
     ),
-    body := '{}'::jsonb,
     timeout_milliseconds := 20000
   );
   $$
