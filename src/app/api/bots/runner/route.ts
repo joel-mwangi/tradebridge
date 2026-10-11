@@ -661,7 +661,7 @@ export async function GET(request: NextRequest) {
       user_id: candidate.user_id,
       account_id: candidate.account_id,
       lease_token: leaseToken,
-      lease_until: new Date(Date.now() + 55_000).toISOString(),
+      lease_until: new Date(Date.now() + 90_000).toISOString(),
     });
     if (leaseError) {
       results.push({ bot_id: candidate.id, result: "skipped_runner_lease_held" });
