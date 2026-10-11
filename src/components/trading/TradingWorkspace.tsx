@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
+import BotManager from "./BotManager";
 import DemoTradeTicket from "./DemoTradeTicket";
 import LiveTradingControls from "./LiveTradingControls";
 import MarketWatch from "./MarketWatch";
@@ -319,6 +320,7 @@ export default function TradingWorkspace() {
         <a className={styles.navLink} href="#markets"><span className={styles.navIcon}>⌁</span><span>Markets & chart</span></a>
         <a className={styles.navLink} href="#ticket"><span className={styles.navIcon}>↗</span><span>Trade ticket</span></a>
         <a className={styles.navLink} href="#activity"><span className={styles.navIcon}>◷</span><span>Positions & history</span></a>
+        <a className={styles.navLink} href="#bots"><span className={styles.navIcon}>▤</span><span>Automated bots</span></a>
       </nav>
       <div className={styles.sidebarMetaBottom}>
         <span className={accountSessionReady ? styles.statusDotConnected : styles.statusDot} />
@@ -428,6 +430,8 @@ export default function TradingWorkspace() {
           onLoadMore={trading.loadMoreActivity}
         />
 
+        <section className={styles.botManagerSection} id="bots" aria-label="Automated trading bots"><BotManager /></section>
+
         <footer className={styles.footer}><span>TradeBridge · Professional Trading Terminal</span><span>Demo execution mode · Real accounts read-only</span></footer>
       </div>
     </section>
@@ -437,6 +441,7 @@ export default function TradingWorkspace() {
       <a href="#markets">⌁<span>Markets</span></a>
       <a href="#ticket">↗<span>Trade</span></a>
       <a href="#activity">◷<span>Activity</span></a>
+      <a href="#bots">▤<span>Bots</span></a>
     </nav>
   </main>;
 }
