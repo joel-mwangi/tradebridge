@@ -10,6 +10,7 @@ type Props = {
   activity: AccountActivity[];
   currency: string;
   accountType: "demo" | "real" | "other";
+  accountDataUnavailable?: boolean;
   busy: boolean;
   activityLoading: boolean;
   activityHasMore: boolean;
@@ -44,7 +45,7 @@ function csvCell(value: unknown) {
 }
 
 export default function TradingActivity({
-  positionsOnly = false, positions, activity, currency, accountType, busy, activityLoading, activityHasMore,
+  positionsOnly = false, positions, activity, currency, accountType, accountDataUnavailable = false, busy, activityLoading, activityHasMore,
   onSell, onRefresh, onLoadMore,
 }: Props) {
   const [pendingSellId, setPendingSellId] = useState<string | null>(null);
@@ -76,7 +77,7 @@ export default function TradingActivity({
         <button type="button" className={styles.panelActionButton} onClick={onRefresh} disabled={busy || activityLoading}>Refresh</button>
       </div>
       {positions.length === 0 ? <div className={styles.emptyState}>
-        <span className={styles.emptyIcon}>◷</span><strong>No open positions</strong><p>After Deriv confirms an order, active contracts appear here with their current status and profit/loss.</p>
+        <span className={styles.emptyIcon}>◷</span><strong>{accountDataUnavailable ? "Live positions unavailable" : "No open positions"}</strong><p>{accountDataUnavailable ? "TradeBridge currently keeps real-account WebSocket sessions disabled until order execution can be enforced server-side. No live position data has been loaded here; check Deriv directly." : "After Deriv confirms an order, active contracts appear here with their current status and profit/loss."}</p>
       </div> : <div className={styles.positionList}>
         {positions.map((position) => <article className={styles.positionRow} key={position.contractId}>
           <div className={styles.positionLead}><span className={styles.positionSymbol}>{position.contractType.toLowerCase().includes("put") || position.contractType.toLowerCase().includes("lower") ? "↘" : "↗"}</span><div><strong>{position.symbol} · {position.contractType}</strong><small>Contract #{position.contractId} · {position.status}</small>{position.longcode && <small className={styles.positionDescription}>{position.longcode}</small>}{position.currentSpot !== null && <small>Current spot: {position.currentSpot}</small>}</div></div>
@@ -103,7 +104,7 @@ export default function TradingActivity({
         </div>
       </div>
       {activity.length === 0 ? <div className={styles.emptyState}>
-        <span className={styles.emptyIcon}>↺</span><strong>No transactions returned yet</strong><p>Purchases, sales, and other account events appear after Deriv returns a statement. No sample trades are shown.</p>
+        <span className={styles.emptyIcon}>↺</span><strong>{accountDataUnavailable ? "Live statement unavailable" : "No transactions returned yet"}</strong><p>{accountDataUnavailable ? "TradeBridge has not opened a live-account data session. Review your real-account statement directly in Deriv; no sample transactions are shown." : "Purchases, sales, and other account events appear after Deriv returns a statement. No sample trades are shown."}</p>
       </div> : <div className={styles.activityList}>
         {activity.map((item) => <article key={item.id} className={styles.activityRow}>
           <span className={styles.activityIcon}>{item.action.toLowerCase() === "buy" ? "↗" : item.action.toLowerCase() === "sell" ? "↘" : "•"}</span>
