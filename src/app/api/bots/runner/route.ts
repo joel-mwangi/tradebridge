@@ -61,6 +61,8 @@ type BrokerMessage = {
   history?: { prices?: Array<number | string>; times?: number[] };
   balance?: { balance?: number | string; currency?: string };
   portfolio?: { contracts?: Array<Record<string, unknown>> };
+  profit_table?: { count?: number; transactions?: Array<Record<string, unknown>> };
+  statement?: { count?: number; transactions?: Array<Record<string, unknown>> };
   proposal?: { id?: string; ask_price?: number | string; payout?: number | string };
   buy?: { contract_id?: number | string; buy_price?: number | string };
   proposal_open_contract?: Record<string, unknown>;
@@ -78,6 +80,9 @@ function startOfUtcDay() {
   const date = new Date();
   date.setUTCHours(0, 0, 0, 0);
   return date.toISOString();
+}
+function startOfUtcDayEpoch() {
+  return Math.floor(Date.parse(startOfUtcDay()) / 1000);
 }
 function constantTimeMatches(received: string, expected: string) {
   const left = Buffer.from(received);
@@ -357,7 +362,8 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       return { bot_id: bot.id, result: "paused_no_new_entries" };
     }
 
-    const [portfolioMessage, balanceMessage, historyMessage] = await Promise.all([
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const [portfolioMessage, balanceMessage, historyMessage, profitTableMessage, statementMessage] = await Promise.all([
       websocketRequest(ws, { portfolio: 1 }),
       websocketRequest(ws, { balance: 1 }),
       websocketRequest(ws, {
@@ -366,6 +372,20 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
         end: "latest",
         style: "ticks",
         adjust_start_time: 1,
+      }),
+      websocketRequest(ws, {
+        profit_table: 1,
+        limit: 500,
+        date_from: startOfUtcDayEpoch(),
+        date_to: nowEpoch,
+      }),
+      websocketRequest(ws, {
+        statement: 1,
+        action_type: "buy",
+        limit: 999,
+        offset: 0,
+        date_from: startOfUtcDayEpoch(),
+        date_to: nowEpoch,
       }),
     ]);
 
@@ -386,6 +406,32 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       await writeLog(admin, bot, "trade_skipped_balance_unavailable", { reason: "balance_or_currency_validation_failed" });
       return { bot_id: bot.id, result: "balance_unavailable" };
     }
+
+    const profitTransactions = profitTableMessage.profit_table?.transactions ?? [];
+    const profitCount = Number(profitTableMessage.profit_table?.count ?? profitTransactions.length);
+    if (!Number.isFinite(profitCount) || profitCount > profitTransactions.length || profitTransactions.length >= 500) {
+      await writeLog(admin, bot, "trade_skipped_incomplete_account_pnl", {
+        reason: "daily_profit_table_is_truncated",
+        returned_rows: profitTransactions.length,
+        reported_rows: Number.isFinite(profitCount) ? profitCount : null,
+      });
+      return { bot_id: bot.id, result: "account_pnl_incomplete" };
+    }
+    const brokerDailyPnlValues = profitTransactions.map((row) => toNumber(row.profit));
+    if (brokerDailyPnlValues.some((value) => value === null)) {
+      await writeLog(admin, bot, "trade_skipped_incomplete_account_pnl", { reason: "daily_profit_rows_missing_profit_values" });
+      return { bot_id: bot.id, result: "account_pnl_incomplete" };
+    }
+    const brokerDailyPnl = brokerDailyPnlValues.reduce((sum, value) => sum + (value ?? 0), 0);
+
+    const buyTransactions = statementMessage.statement?.transactions ?? [];
+    const reportedBuyCount = Number(statementMessage.statement?.count ?? buyTransactions.length);
+    const brokerTradesToday = !Number.isFinite(reportedBuyCount) || reportedBuyCount >= 999
+      ? Number(bot.max_trades_per_day)
+      : Math.max(reportedBuyCount, buyTransactions.length);
+    const buyEpochs = buyTransactions.map((row) => toNumber(row.transaction_time)).filter((value): value is number => value !== null);
+    const lastBrokerTradeAt = buyEpochs.length ? Math.max(...buyEpochs) * 1000 : null;
+
     if (prices.length !== times.length || prices.length < 100 || !times.length) {
       await writeLog(admin, bot, "trade_skipped_history_unavailable", {
         reason: "not_enough_valid_market_history", points: prices.length,
@@ -433,13 +479,10 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
     });
 
     const dayStart = startOfUtcDay();
-    const [todayTrades, todaySettlements, recentSettlements, previousTrade, ledgerOpen] = await Promise.all([
+    const [todayTrades, recentSettlements, previousTrade, ledgerOpen] = await Promise.all([
       admin.from("bot_trade_ledger").select("id,status,created_at")
         .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
         .gte("created_at", dayStart).neq("status", "rejected").limit(1000),
-      admin.from("bot_trade_ledger").select("realized_pnl")
-        .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
-        .gte("settled_at", dayStart).not("realized_pnl", "is", null).limit(1000),
       admin.from("bot_trade_ledger").select("realized_pnl")
         .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
         .not("settled_at", "is", null).not("realized_pnl", "is", null)
@@ -451,18 +494,23 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
         .eq("user_id", bot.user_id).eq("account_id", bot.account_id)
         .in("status", ["pending", "open", "unknown"]).limit(1),
     ]);
-    if (todayTrades.error || todaySettlements.error || recentSettlements.error || previousTrade.error || ledgerOpen.error) {
+    if (todayTrades.error || recentSettlements.error || previousTrade.error || ledgerOpen.error) {
       throw new Error("bot_risk_state_unavailable");
     }
 
-    const dailyPnl = (todaySettlements.data ?? []).reduce((sum, item) => sum + (toNumber(item.realized_pnl) ?? 0), 0);
+    // The loss stop uses Deriv's actual daily account P&L, not just bot results.
+    const dailyPnl = brokerDailyPnl;
     let consecutiveLosses = 0;
     for (const item of recentSettlements.data ?? []) {
       const pnl = toNumber(item.realized_pnl);
       if (pnl === null || pnl >= 0) break;
       consecutiveLosses += 1;
     }
-    const lastTradeTime = previousTrade.data?.[0]?.created_at ? Date.parse(previousTrade.data[0].created_at) : null;
+    const ledgerLastTradeTime = previousTrade.data?.[0]?.created_at ? Date.parse(previousTrade.data[0].created_at) : null;
+    const lastTradeTime = Math.max(
+      Number.isFinite(ledgerLastTradeTime) ? Number(ledgerLastTradeTime) : 0,
+      lastBrokerTradeAt ?? 0,
+    ) || null;
 
     const decision = evaluateEntry({
       signal,
@@ -473,7 +521,7 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       balance,
       dailyPnl,
       dailyLossLimit: Number(bot.daily_loss_limit),
-      tradesToday: (todayTrades.data ?? []).length,
+      tradesToday: Math.max((todayTrades.data ?? []).length, brokerTradesToday),
       maxTradesPerDay: Number(bot.max_trades_per_day),
       consecutiveLosses,
       maxConsecutiveLosses: Number(bot.max_consecutive_losses),
