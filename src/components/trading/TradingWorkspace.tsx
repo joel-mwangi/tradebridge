@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import BotManager from "./BotManager";
 import DemoTradeTicket from "./DemoTradeTicket";
@@ -92,7 +93,13 @@ function accountTypeLabel(account: DerivAccount) {
   return "Unsupported";
 }
 
-export default function TradingWorkspace({ page }: { page: WorkspacePage }) {
+export default function TradingWorkspace() {
+  const pathname = usePathname();
+  const routeSegment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
+  const page: WorkspacePage = PRIMARY_NAV.some((item) => item.id === routeSegment)
+    ? routeSegment as WorkspacePage
+    : "dashboard";
+
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
