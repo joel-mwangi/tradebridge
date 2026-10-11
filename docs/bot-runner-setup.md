@@ -91,7 +91,7 @@ The OAuth implementation returns a short-lived access token and currently has no
 
 ## 5. What the runner enforces
 
-The default strategy duration is 60 seconds. Supported durations are 5, 10, 15, 30, 60, 120, 300, 600, 900, and 1,800 seconds. The choices align with the candle history so the holdout has enough possible independent expiry windows for the 40-trade minimum; longer/unaligned durations are intentionally not selectable in the initial runner.
+The default strategy duration is 60 seconds. Supported durations are 60, 120, 300, 600, 900, and 1,800 seconds. The feed's candle granularity is at least one minute, so the supported durations are minute-aligned to preserve the actual expiry horizon in the backtest. Longer durations cannot meet the 40-trade holdout minimum with the current 5,000-candle history window.
 
 - Verified Demo Options WebSocket only; rejects Real-account WebSocket URLs.
 - Four strategy candidates: trend following, mean reversion, breakout, and momentum.
