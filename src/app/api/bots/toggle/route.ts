@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
     admin.from("trading_bots").select("id")
       .eq("user_id", user.id).eq("account_id", bot.account_id).eq("is_active", true)
       .neq("id", bot.id).limit(1),
-    admin.from("bot_trade_ledger").select("id,status")
+    admin.from("bot_trade_ledger").select("id,status,bot_id")
       .eq("user_id", user.id).eq("account_id", bot.account_id)
       .in("status", ["pending", "open", "unknown"]).limit(1),
   ]);
@@ -153,11 +153,14 @@ export async function POST(request: NextRequest) {
   if (otherActive && otherActive.length > 0) {
     return NextResponse.json({ error: "another_bot_armed_on_account" }, { status: 409, headers });
   }
-  if (unsettledTrades && unsettledTrades.length > 0) {
-    return NextResponse.json({
-      error: unsettledTrades[0].status === "unknown" ? "unknown_bot_trade_requires_reconciliation" : "open_bot_trade_must_settle",
-    }, { status: 409, headers });
+  const unresolved = unsettledTrades?.[0] ?? null;
+  if (unresolved && unresolved.bot_id !== bot.id) {
+    return NextResponse.json({ error: "open_trade_for_other_bot" }, { status: 409, headers });
   }
+  if (unresolved?.status === "unknown") {
+    return NextResponse.json({ error: "unknown_bot_trade_requires_reconciliation" }, { status: 409, headers });
+  }
+  const settlementOnly = Boolean(unresolved && ["pending", "open"].includes(String(unresolved.status)));
 
   let context = await getAuthenticatedDerivContext(request);
   if (!context.ok) {
@@ -207,6 +210,22 @@ export async function POST(request: NextRequest) {
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id,account_id" });
   if (credentialError) return NextResponse.json({ error: "bot_credentials_unavailable" }, { status: 503, headers });
+
+  if (settlementOnly) {
+    await logAction(admin, bot as unknown as Record<string, unknown>, "bot_settlement_access_refreshed", {
+      mode: "demo_only",
+      account_id: bot.account_id,
+      credential_expires_at: expiresAt,
+      note: "Bot remains paused while the outstanding contract is reconciled.",
+    });
+    return NextResponse.json({
+      success: true,
+      enabled: false,
+      settlement_only: true,
+      credential_expires_at: expiresAt,
+      message: "Demo authorization refreshed for settlement only. This bot remains paused and cannot place a new order until the outstanding contract is settled.",
+    }, { headers });
+  }
 
   const { error: activateError } = await admin.from("trading_bots")
     .update({ is_active: true })
