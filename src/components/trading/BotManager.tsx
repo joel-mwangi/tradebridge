@@ -334,8 +334,8 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
       setError("Stake must be greater than 0 and no more than 100 in the account currency.");
       return;
     }
-    if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) {
-      setError("Contract duration must be an integer between 1 and 3,600 seconds.");
+    if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 1800) {
+      setError("Contract duration must be an integer between 1 and 1,800 seconds.");
       return;
     }
     if (!Number.isFinite(dailyLossLimit) || dailyLossLimit <= 0 || dailyLossLimit > 10000) {
@@ -784,7 +784,7 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
                   id="bot-duration"
                   type="number"
                   min="1"
-                  max="3600"
+                  max="1800"
                   step="1"
                   value={form.duration_seconds}
                   onChange={(event) => updateForm("duration_seconds", event.target.value)}
