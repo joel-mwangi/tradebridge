@@ -89,6 +89,19 @@ const STRATEGIES: Array<{ value: StrategyType; label: string; description: strin
   { value: "momentum", label: "Momentum", description: "Prioritise price acceleration" },
 ];
 
+const DURATION_OPTIONS = [
+  { value: 5, label: "5 seconds" },
+  { value: 10, label: "10 seconds" },
+  { value: 15, label: "15 seconds" },
+  { value: 30, label: "30 seconds" },
+  { value: 60, label: "1 minute" },
+  { value: 120, label: "2 minutes" },
+  { value: 300, label: "5 minutes" },
+  { value: 600, label: "10 minutes" },
+  { value: 900, label: "15 minutes" },
+  { value: 1800, label: "30 minutes" },
+];
+
 function asNumber(value: number | string | null | undefined): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -334,8 +347,8 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
       setError("Stake must be greater than 0 and no more than 100 in the account currency.");
       return;
     }
-    if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 1800) {
-      setError("Contract duration must be an integer between 1 and 1,800 seconds.");
+    if (!DURATION_OPTIONS.some((option) => option.value === durationSeconds)) {
+      setError("Choose one of the supported contract durations.");
       return;
     }
     if (!Number.isFinite(dailyLossLimit) || dailyLossLimit <= 0 || dailyLossLimit > 10000) {
@@ -780,16 +793,16 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
             <div className="formRow">
               <div className="field">
                 <label htmlFor="bot-duration">Contract duration (seconds)</label>
-                <input
+                <select
                   id="bot-duration"
-                  type="number"
-                  min="1"
-                  max="1800"
-                  step="1"
                   value={form.duration_seconds}
                   onChange={(event) => updateForm("duration_seconds", event.target.value)}
                   required
-                />
+                >
+                  {DURATION_OPTIONS.map((option) => (
+                    <option value={String(option.value)} key={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="field">
                 <label htmlFor="bot-daily-loss">Daily loss limit</label>
