@@ -593,7 +593,7 @@ export default function TradingWorkspace() {
                 <div className={styles.introMain}>
                   <p className={styles.eyebrow}>Automation workspace</p>
                   <h1 className={styles.title}>Automated Trading Bots</h1>
-                  <p className={styles.subtitle}>Create and monitor bot configurations. Enabling a configuration does not execute Deriv trades until a trusted server-side runner is connected.</p>
+                  <p className={styles.subtitle}>Configure Demo-only bots. A scheduled server runner will trade only when an out-of-sample edge is supported and all account-level risk gates pass.</p>
                 </div>
               </div>
               <BotManager theme={theme} />
