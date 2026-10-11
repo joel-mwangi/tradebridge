@@ -6,6 +6,8 @@ import {
   analyzeSignal,
   backtestStrategy,
   evaluateEntry,
+  granularityForDuration,
+  completedCandleSeries,
   STRATEGY_ENGINE_VERSION,
 } from "@/lib/bots/strategy-engine.mjs";
 
@@ -60,6 +62,7 @@ type BrokerMessage = {
   msg_type?: string;
   error?: { message?: string; code?: string };
   history?: { prices?: Array<number | string>; times?: number[] };
+  candles?: Array<{ epoch?: number | string; close?: number | string }>;
   balance?: { balance?: number | string; currency?: string };
   portfolio?: { contracts?: Array<Record<string, unknown>> };
   profit_table?: { count?: number; transactions?: Array<Record<string, unknown>> };
@@ -330,6 +333,7 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
     }
 
     const nowEpoch = Math.floor(Date.now() / 1000);
+    const candleGranularity = granularityForDuration(Number(bot.duration_seconds));
     const [portfolioMessage, balanceMessage, historyMessage, profitTableMessage, statementMessage] = await Promise.all([
       websocketRequest(ws, { portfolio: 1 }),
       websocketRequest(ws, { balance: 1 }),
@@ -337,7 +341,8 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
         ticks_history: bot.symbol,
         count: HISTORY_COUNT,
         end: "latest",
-        style: "ticks",
+        style: "candles",
+        granularity: candleGranularity,
         adjust_start_time: 1,
       }),
       websocketRequest(ws, {
@@ -367,8 +372,13 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
 
     const balance = toNumber(balanceMessage.balance?.balance);
     const currency = String(balanceMessage.balance?.currency ?? credentials.currency);
-    const prices = historyMessage.history?.prices?.map((price) => Number(price)) ?? [];
-    const times = historyMessage.history?.times?.map((time) => Number(time)) ?? [];
+    const series = completedCandleSeries(
+      historyMessage.candles ?? [],
+      candleGranularity,
+      Math.floor(Date.now() / 1000),
+    );
+    const prices = series.prices;
+    const times = series.times;
     if (!balanceMessage.balance || balance === null || balance <= 0 || currency !== credentials.currency) {
       await writeLog(admin, bot, "trade_skipped_balance_unavailable", { reason: "balance_or_currency_validation_failed" });
       return { bot_id: bot.id, result: "balance_unavailable" };
