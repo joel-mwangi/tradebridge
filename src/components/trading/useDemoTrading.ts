@@ -25,6 +25,8 @@ type ApiMessage = {
   buy?: { contract_id?: number | string; buy_price?: number | string };
   sell?: { contract_id?: number | string; sold_for?: number | string };
   proposal_open_contract?: Record<string, unknown>;
+  transaction?: Record<string, unknown>;
+  subscription?: { id?: string };
 };
 
 function numeric(value: unknown): number | null {
@@ -288,6 +290,9 @@ export function useTradingSession(
             ? "Connected to your selected real Deriv account. Live orders use real funds; review every order carefully."
             : "Connected to your selected Deriv demo account. Quotes and balances come from Deriv.");
           send({ balance: 1, subscribe: 1, req_id: nextId() });
+          // Deriv's transaction stream pushes account events as they happen.
+          // The statement remains the source for paginated historical records.
+          send({ transaction: 1, subscribe: 1, req_id: nextId() });
           refreshAccountRef.current = refreshAccount;
           refreshAccount();
           refreshTimer = window.setInterval(refreshAccount, 15_000);
@@ -344,6 +349,27 @@ export function useTradingSession(
               balance: numeric(message.balance.balance),
               currency: String(message.balance.currency ?? activeAccount.currency ?? ""),
             });
+            return;
+          }
+
+          if (message.msg_type === "transaction" && message.transaction) {
+            const incoming = toActivity(message.transaction);
+            if (incoming) {
+              setActivity((current) => {
+                const unique = new Map<string, AccountActivity>();
+                for (const item of [incoming, ...current]) unique.set(item.id, item);
+                return [...unique.values()].sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+              });
+              if (incoming.balance !== null) {
+                setBalance((current) => ({
+                  balance: incoming.balance,
+                  currency: incoming.currency || current.currency || activeAccount.currency || "",
+                }));
+              }
+              // A streamed transaction can precede its statement row. Refresh
+              // the ledger and open positions without waiting for the timer.
+              refreshAccount();
+            }
             return;
           }
 
