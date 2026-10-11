@@ -62,12 +62,11 @@ export default function DemoTradeTicket({
   const quoteSecondsRemaining = quote ? Math.max(0, Math.ceil((30_000 - (now - quote.receivedAt)) / 1000)) : 0;
   const quoteExpired = Boolean(quote && quoteSecondsRemaining <= 0);
 
-  return <section className={styles.ticketPanel} id="ticket">
+  return <section className={styles.ticketPanel + " " + styles.ticketPanelCompact} id="ticket">
     <div className={styles.panelHeading}>
       <div>
         <p className={styles.eyebrow}>ORDER ENTRY</p>
         <h2>{isRealAccount ? "Real account · read-only" : "Demo trade ticket"}</h2>
-        <p className={styles.panelSubtext}>Get a fresh market quote first. Submit only after checking the terms.</p>
       </div>
       <span className={isRealAccount ? (realTradingEnabled ? styles.realLock : styles.realModeLocked) : styles.demoLock}>
         {isRealAccount ? (realTradingEnabled ? "REAL MONEY" : "LOCKED") : "DEMO ONLY"}
@@ -99,49 +98,56 @@ export default function DemoTradeTicket({
       <legend>Contract direction</legend>
       <div className={styles.directionChoices}>
         <button type="button" className={direction === "CALL" ? styles.callSelected : styles.callButton} onClick={() => setDirection("CALL")} aria-pressed={direction === "CALL"}>
-          <span>↗</span><span><strong>Higher</strong><small>Call</small></span>
+          <span>↗</span><span><strong>Higher</strong></span>
         </button>
         <button type="button" className={direction === "PUT" ? styles.putSelected : styles.putButton} onClick={() => setDirection("PUT")} aria-pressed={direction === "PUT"}>
-          <span>↘</span><span><strong>Lower</strong><small>Put</small></span>
+          <span>↘</span><span><strong>Lower</strong></span>
         </button>
       </div>
     </fieldset>
 
-    <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake amount</label>
-    <div className={styles.inputShell}>
-      <span>{account?.currency ?? "—"}</span>
-      <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="stake-note" disabled={!ready || busy} />
-    </div>
-    <div className={styles.presets} aria-label="Stake presets">
-      {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value} {account?.currency ?? ""}</button>)}
-    </div>
-    <p className={styles.fieldHint} id="stake-note">{isRealAccount ? "Real-money order entry is currently disabled. The fields are shown for context only." : "Use virtual funds only. The feed validates minimum stakes for the selected market and currency."}</p>
-
-    <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Contract duration</label>
-    <div className={styles.inputShell}>
-      <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max="86400" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="duration-note" disabled={!ready || busy} />
-      <span>seconds</span>
-    </div>
-    <div className={styles.presets} aria-label="Duration presets">
-      {[{ label: "1 min", value: "60" }, { label: "5 min", value: "300" }, { label: "10 min", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
-    </div>
-    <p className={styles.fieldHint} id="duration-note">Duration is in seconds. The feed returns the actual offered price and potential payout for the selected contract.</p>
-
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", margin: "12px 0 4px" }}>
-      <div>
-        <label className={styles.fieldLabel} htmlFor="tradebridge-tp">Take Profit (opt)</label>
+    <div className={styles.compactInputsGrid}>
+      <div className={styles.compactFieldGroup}>
+        <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-tp" type="number" placeholder="Target P/L" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} disabled={!ready || busy} />
+          <span>{account?.currency ?? "—"}</span>
+          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+        </div>
+        <div className={styles.presets + " " + styles.compactPresets} aria-label="Stake presets">
+          {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value}</button>)}
         </div>
       </div>
-      <div>
-        <label className={styles.fieldLabel} htmlFor="tradebridge-sl">Stop Loss (opt)</label>
+      <div className={styles.compactFieldGroup}>
+        <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Duration</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-sl" type="number" placeholder="Max Loss" value={stopLoss} onChange={e => setStopLoss(e.target.value)} disabled={!ready || busy} />
+          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max="86400" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+          <span>sec</span>
+        </div>
+        <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
+          {[{ label: "1m", value: "60" }, { label: "5m", value: "300" }, { label: "10m", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
         </div>
       </div>
     </div>
-    <p className={styles.fieldHint}>Configure automatic risk thresholds (Take Profit & Stop Loss) for advanced contract protection.</p>
+    <p className={styles.compactControlsHint} id="ticket-inputs-note">{isRealAccount ? "Read-only: real-money order entry is disabled." : "Demo funds only · quotes expire after 30 seconds."}</p>
+
+    <details className={styles.advancedRisk}>
+      <summary>Advanced risk settings <span>Optional</span></summary>
+      <p className={styles.compactRiskNote}>These thresholds are for reference only; they are not sent to Deriv or automatically enforced by the current order flow.</p>
+      <div className={styles.compactRiskFields}>
+        <div>
+          <label className={styles.fieldLabel} htmlFor="tradebridge-tp">Take Profit</label>
+          <div className={styles.inputShell}>
+            <input id="tradebridge-tp" type="number" placeholder="Target P/L" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} disabled={!ready || busy} />
+          </div>
+        </div>
+        <div>
+          <label className={styles.fieldLabel} htmlFor="tradebridge-sl">Stop Loss</label>
+          <div className={styles.inputShell}>
+            <input id="tradebridge-sl" type="number" placeholder="Max loss" value={stopLoss} onChange={e => setStopLoss(e.target.value)} disabled={!ready || busy} />
+          </div>
+        </div>
+      </div>
+    </details>
 
     {quote && quoteMatchesForm && <div className={isRealAccount ? styles.liveQuoteCard : styles.quoteCard} role="status">
       <div className={styles.quoteCardHeader}><span>LIVE QUOTE</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
