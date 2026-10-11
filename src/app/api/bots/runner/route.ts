@@ -35,6 +35,7 @@ type BotRow = {
   max_consecutive_losses: number;
   min_expected_return: number | string;
   is_active: boolean;
+  last_runner_at?: string | null;
 };
 type CredentialRow = {
   user_id: string;
@@ -388,7 +389,7 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       await writeLog(admin, bot, "trade_skipped_incomplete_account_pnl", { reason: "daily_profit_rows_missing_profit_values" });
       return { bot_id: bot.id, result: "account_pnl_incomplete" };
     }
-    const brokerDailyPnl = brokerDailyPnlValues.reduce((sum, value) => sum + (value ?? 0), 0);
+    const brokerDailyPnl = brokerDailyPnlValues.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 
     const buyTransactions = statementMessage.statement?.transactions ?? [];
     const reportedBuyCount = Number(statementMessage.statement?.count ?? buyTransactions.length);
@@ -492,7 +493,7 @@ async function processBot(admin: ReturnType<typeof createAdminClient>, bot: BotR
       consecutiveLosses,
       maxConsecutiveLosses: Number(bot.max_consecutive_losses),
       openPositionCount: (ledgerOpen.data ?? []).length,
-      lastTradeAt: Number.isFinite(lastTradeTime) ? lastTradeTime : null,
+      lastTradeAt: lastTradeTime,
       now: Date.now(),
       cooldownSeconds: 60,
       maxStakeFraction: 0.01,
