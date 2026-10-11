@@ -46,3 +46,50 @@ test("an uncorrelated early-sale response pauses order actions for manual reconc
   assert.match(tradingHook, /returnedContractId !== soldContractId/);
   assert.match(tradingHook, /Order actions are paused; reconcile the contract and statement directly in Deriv/);
 });
+
+
+const botMigration = read("supabase/migrations/20261011133000_add_demo_bot_runner.sql");
+const botToggleRoute = read("src/app/api/bots/toggle/route.ts");
+const botRunnerRoute = read("src/app/api/bots/runner/route.ts");
+const botCredentials = read("src/lib/bots/credentials.ts");
+
+test("browser clients cannot activate bots directly or arm two bots on one account", () => {
+  assert.match(botMigration, /revoke insert \(is_active\) on public\.trading_bots from authenticated/i);
+  assert.match(botMigration, /revoke update \(is_active\) on public\.trading_bots from authenticated/i);
+  assert.match(botMigration, /trading_bots_one_armed_bot_per_account/i);
+  assert.match(botToggleRoute, /getAuthenticatedDerivContext/);
+  assert.match(botToggleRoute, /fetchDerivAccounts/);
+  assert.match(botToggleRoute, /account_type[\s\S]{0,120}demo/i);
+});
+
+test("bot runner requires a secret and strictly validates Deriv Demo socket URLs", () => {
+  assert.match(botRunnerRoute, /timingSafeEqual/);
+  assert.match(botRunnerRoute, /allowedSecrets\.some/);
+  assert.match(botRunnerRoute, /url\.hostname !== "api\.derivws\.com"/);
+  assert.match(botRunnerRoute, /url\.pathname !== "\/trading\/v1\/options\/ws\/demo"/);
+  assert.match(botRunnerRoute, /real_execution_gateway_unavailable|non_demo_session_rejected/);
+});
+
+test("bot credentials use authenticated encryption and never store plaintext", () => {
+  assert.match(botCredentials, /createCipheriv\("aes-256-gcm"/);
+  assert.match(botCredentials, /createDecipheriv\("aes-256-gcm"/);
+  assert.match(botCredentials, /getAuthTag/);
+  assert.match(botMigration, /revoke all on table public\.bot_runner_credentials from public, anon, authenticated/i);
+  assert.match(botMigration, /grant all on table public\.bot_runner_credentials to service_role/i);
+});
+
+test("risk gates use broker daily account P&L and reject incomplete history", () => {
+  assert.match(botRunnerRoute, /profit_table: 1/);
+  assert.match(botRunnerRoute, /statement: 1/);
+  assert.match(botRunnerRoute, /trade_skipped_incomplete_account_pnl/);
+  assert.match(botRunnerRoute, /dailyPnl: brokerDailyPnl/);
+  assert.match(botRunnerRoute, /maxStakeFraction: 0\.01/);
+  assert.match(botRunnerRoute, /daily_loss_limit/);
+});
+
+test("ambiguous bot orders are not retried automatically", () => {
+  assert.match(botRunnerRoute, /status: "unknown"/);
+  assert.match(botRunnerRoute, /bot_paused_unknown_order/);
+  assert.match(botRunnerRoute, /buy_outcome_ambiguous/);
+  assert.match(botRunnerRoute, /do not retry|Do not retry/i);
+});
