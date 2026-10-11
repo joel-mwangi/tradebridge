@@ -136,5 +136,6 @@ test("bot durations stay within candle-aligned values that can meet the holdout 
   assert.match(botMigration, /duration_seconds in \(60, 120, 300, 600, 900, 1800\)/);
   assert.match(botManager, /const DURATION_OPTIONS/);
   assert.match(botManager, /Choose one of the supported contract durations/);
-  assert.match(botManager, /<select[\s\S]{0,100}id="bot-duration"/);\n  assert.match(botManager, /DURATION_OPTIONS\.map/);
+  assert.match(botManager, /<select[\s\S]{0,100}id="bot-duration"/);
+  assert.match(botManager, /DURATION_OPTIONS\.map/);
 });
