@@ -68,3 +68,14 @@ export function analyzeSignal(prices: number[], strategy: StrategyType | string)
 export function wilsonLowerBound(wins: number, trades: number, z?: number): number;
 export function backtestStrategy(input: BacktestInput): BacktestResult;
 export function evaluateEntry(input: EntryGateInput): EntryGateResult;
+
+export interface HistoricalCandle {
+  epoch: number | string;
+  close: number | string;
+}
+export interface CandleSeries {
+  prices: number[];
+  times: number[];
+}
+export function granularityForDuration(durationSeconds: number): number;
+export function completedCandleSeries(candles: HistoricalCandle[], granularity: number, nowEpoch: number): CandleSeries;
