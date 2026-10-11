@@ -17,6 +17,42 @@ export const MIN_BACKTEST_TRADES = 40;
 const MIN_HISTORY = 30;
 const EPSILON = 1e-12;
 
+/** Choose a candle width that divides common contract durations up to one minute.
+ * This lets the backtest compare prices at the actual expiry horizon, rather than
+ * judging a 60-second contract using arbitrary tick frequency.
+ */
+export function granularityForDuration(durationSeconds) {
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) return 60;
+  let a = durationSeconds;
+  let b = 60;
+  while (b !== 0) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return Math.max(1, a);
+}
+
+/** Convert only completed OHLC candles into a time-aligned close-price series. */
+export function completedCandleSeries(candles, granularity, nowEpoch) {
+  if (!Array.isArray(candles) || !Number.isInteger(granularity) || granularity < 1
+    || !Number.isFinite(nowEpoch)) return { prices: [], times: [] };
+  const byEpoch = new Map();
+  for (const candle of candles) {
+    const epoch = Number(candle?.epoch);
+    const close = Number(candle?.close);
+    if (!Number.isFinite(epoch) || !Number.isFinite(close) || close <= 0
+      || epoch < 0 || epoch + granularity > nowEpoch) continue;
+    byEpoch.set(epoch, close);
+  }
+  const ordered = [...byEpoch.entries()].sort((left, right) => left[0] - right[0]);
+  return {
+    prices: ordered.map(([, close]) => close),
+    // A close becomes available at the end of its candle, not at the open epoch.
+    times: ordered.map(([epoch]) => epoch + granularity),
+  };
+}
+
 function mean(values) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
