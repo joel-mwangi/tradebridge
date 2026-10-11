@@ -1,6 +1,7 @@
 -- Demo-only automated bot runner. All order-writing privileges remain server-side.
 alter table public.trading_bots
   add column if not exists account_id text,
+  add column if not exists last_runner_at timestamptz,
   add column if not exists duration_seconds integer not null default 60,
   add column if not exists daily_loss_limit numeric(18, 8) not null default 5,
   add column if not exists max_trades_per_day integer not null default 10,
@@ -53,6 +54,9 @@ create table if not exists public.bot_runner_leases (
   lease_until timestamptz not null,
   created_at timestamptz not null default now()
 );
+alter table public.bot_runner_leases add column if not exists account_id text;
+create unique index if not exists bot_runner_leases_account_unique
+  on public.bot_runner_leases (account_id) where account_id is not null;
 alter table public.bot_runner_leases enable row level security;
 revoke all on table public.bot_runner_leases from public, anon, authenticated;
 grant all on table public.bot_runner_leases to service_role;
