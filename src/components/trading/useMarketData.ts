@@ -142,7 +142,8 @@ export function useMarketData() {
         const item = bySymbol.get(symbol);
         return item ? [item] : [];
       });
-      const rest = candidates
+      const uniqueCandidates = [...bySymbol.values()];
+      const rest = uniqueCandidates
         .filter((item) => !PREFERRED_SYMBOLS.includes(item.symbol))
         .sort((a, b) => {
           const rank = (market: string | undefined) => market === "synthetic_index" ? 0 : market === "forex" ? 1 : 2;
@@ -186,6 +187,10 @@ export function useMarketData() {
       try {
         const message = JSON.parse(event.data) as PublicMessage;
         if (message.error) {
+          const historyRequest = message.req_id === undefined
+            ? undefined
+            : historyRequestsRef.current.get(message.req_id);
+          if (historyRequest) historyRequestsRef.current.delete(message.req_id as number);
           const candleRequest = message.req_id === undefined
             ? undefined
             : candleRequestsRef.current.get(message.req_id);
