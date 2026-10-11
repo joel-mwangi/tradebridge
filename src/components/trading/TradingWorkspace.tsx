@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import BotManager from "./BotManager";
 import DemoTradeTicket from "./DemoTradeTicket";
@@ -26,15 +28,23 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspaceTab = "overview" | "markets" | "ticket" | "activity" | "bots";
+type WorkspacePage = "dashboard" | "trade" | "portfolio" | "bots" | "settings";
 
-const WORKSPACE_TABS: Array<{ id: WorkspaceTab; label: string; icon: string }> = [
-  { id: "overview", label: "Overview", icon: "▦" },
-  { id: "markets", label: "Markets & Chart", icon: "⌁" },
-  { id: "ticket", label: "Trade Ticket", icon: "↗" },
-  { id: "activity", label: "Positions & History", icon: "◷" },
+const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
+  { id: "dashboard", label: "Dashboard", icon: "▦" },
+  { id: "trade", label: "Trade", icon: "↗" },
+  { id: "portfolio", label: "Portfolio & History", icon: "◷" },
   { id: "bots", label: "Automated Bots", icon: "▤" },
+  { id: "settings", label: "Settings", icon: "⚙" },
 ];
+
+const PAGE_TITLES: Record<WorkspacePage, string> = {
+  dashboard: "Dashboard",
+  trade: "Trade",
+  portfolio: "Portfolio & History",
+  bots: "Automated Bots",
+  settings: "Settings",
+};
 
 function authErrorMessage(error: string | null) {
   const messages: Record<string, string> = {
@@ -83,7 +93,8 @@ function accountTypeLabel(account: DerivAccount) {
   return "Unsupported";
 }
 
-export default function TradingWorkspace() {
+export default function TradingWorkspace({ page }: { page: WorkspacePage }) {
+  const router = useRouter();
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -96,40 +107,14 @@ export default function TradingWorkspace() {
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
-
-  function chooseTab(tab: WorkspaceTab) {
-    setActiveTab(tab);
-    const nextUrl = new URL(window.location.href);
-    nextUrl.hash = tab === "overview" ? "" : tab;
-    window.history.replaceState({}, "", nextUrl);
-  }
-
-  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentTab: WorkspaceTab) {
-    const currentIndex = WORKSPACE_TABS.findIndex((tab) => tab.id === currentTab);
-    let nextIndex = currentIndex;
-
-    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % WORKSPACE_TABS.length;
-    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + WORKSPACE_TABS.length) % WORKSPACE_TABS.length;
-    else if (event.key === "Home") nextIndex = 0;
-    else if (event.key === "End") nextIndex = WORKSPACE_TABS.length - 1;
-    else return;
-
-    event.preventDefault();
-    const nextTab = WORKSPACE_TABS[nextIndex].id;
-    chooseTab(nextTab);
-    document.getElementById("workspace-tab-" + nextTab)?.focus();
-  }
-
   useEffect(() => {
     const saved = localStorage.getItem("tradebridge_theme");
     if (saved === "light" || saved === "dark") setTheme(saved);
-
-    const requestedTab = window.location.hash.slice(1);
-    if (WORKSPACE_TABS.some((tab) => tab.id === requestedTab)) {
-      setActiveTab(requestedTab as WorkspaceTab);
-    }
   }, []);
+
+  function navigateTo(target: WorkspacePage) {
+    router.push("/" + target);
+  }
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
@@ -257,13 +242,13 @@ export default function TradingWorkspace() {
       return;
     }
     if (activeAccountIsReal && !effectiveLiveTradingEnabled) {
-      chooseTab("ticket");
+      navigateTo("trade");
       return;
     }
     if (!activeAccountIsDemo && !activeAccountIsReal && demoAccounts.length > 0) {
       setSelectedAccountId(demoAccounts[0].account_id);
     }
-    chooseTab("ticket");
+    navigateTo("trade");
   }
 
   async function enableLiveTrading(stakeLimit: number, dailyLossLimit: number) {
@@ -350,17 +335,17 @@ export default function TradingWorkspace() {
           ? "Unsupported account type · trading disabled"
           : "Account required";
 
-  return <main className={styles.workspace} data-theme={theme} id="overview">
+  return <main className={styles.workspace} data-theme={theme}>
     <section className={styles.main}>
       <header className={styles.topbar}>
-        <button className={styles.topbarIdentity} type="button" onClick={() => chooseTab("overview")} aria-label="TradeBridge overview">
+        <Link href="/dashboard" className={styles.topbarIdentity} aria-label="TradeBridge dashboard">
           <span className={styles.brandMark}>T</span>
           <span className={styles.brandWord}>tradebridge<span>.</span></span>
           <span className={styles.workspaceContext}>
-            <strong>{WORKSPACE_TABS.find((tab) => tab.id === activeTab)?.label ?? "Overview"}</strong>
+            <strong>{PAGE_TITLES[page]}</strong>
             <small>{activeAccountIsReal ? "Real account · read-only by default" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>
           </span>
-        </button>
+        </Link>
         <div className={styles.topActions}>
           <button className={styles.secondaryButton} type="button" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
@@ -378,23 +363,17 @@ export default function TradingWorkspace() {
       </header>
 
       <div className={styles.tabNavWrap}>
-        <nav className={styles.workspaceTabs} role="tablist" aria-label="Trading workspace sections">
-          {WORKSPACE_TABS.map((tab) => (
-            <button
-              className={activeTab === tab.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
-              type="button"
-              role="tab"
-              id={"workspace-tab-" + tab.id}
-              aria-controls="workspace-tab-panel"
-              aria-selected={activeTab === tab.id}
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              key={tab.id}
-              onClick={() => chooseTab(tab.id)}
-              onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
+        <nav className={styles.workspaceTabs} aria-label="Primary navigation">
+          {PRIMARY_NAV.map((item) => (
+            <Link
+              className={page === item.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
+              href={"/" + item.id}
+              aria-current={page === item.id ? "page" : undefined}
+              key={item.id}
             >
-              <span className={styles.workspaceTabIcon} aria-hidden="true">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
+              <span className={styles.workspaceTabIcon} aria-hidden="true">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
           ))}
         </nav>
       </div>
@@ -405,14 +384,14 @@ export default function TradingWorkspace() {
           <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Reconnect Broker ↗</button>
         </section>}
 
-        <div className={styles.workspaceTabPanel} id="workspace-tab-panel" role="tabpanel" aria-labelledby={"workspace-tab-" + activeTab} tabIndex={0}>
-          {activeTab === "overview" && (
+        <div className={styles.workspaceTabPanel}>
+          {page === "dashboard" && (
             <section className={styles.overviewPage} aria-label="Workspace overview">
               <div className={styles.intro}>
                 <div className={styles.introMain}>
                   <p className={styles.eyebrow}>Account overview</p>
                   <h1 className={styles.title}>Your trading workspace</h1>
-                  <p className={styles.subtitle}>Check your account at a glance, then open the section you need from the tabs above.</p>
+                  <p className={styles.subtitle}>Check your account at a glance, then choose a workspace for your next task.</p>
                 </div>
                 <div className={styles.introActions}>
                   {connected
