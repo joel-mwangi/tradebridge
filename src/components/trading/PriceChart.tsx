@@ -42,9 +42,11 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   const [range, setRange] = useState(3600);
   const [view, setView] = useState<"line" | "candles">("line");
   const [granularity, setGranularity] = useState(300);
+  const [showSma, setShowSma] = useState(false);
   const gradientId = useId().replace(/:/g, "");
   const allPoints = snapshot?.points ?? [];
   const allCandles = market ? candlesByKey[`${market.symbol}:${granularity}`] ?? [] : [];
+
 
   useEffect(() => {
     if (view === "candles" && market) onLoadCandles(market.symbol, granularity);
@@ -56,6 +58,7 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
     const filtered = allPoints.filter((point) => point.time >= latest - range);
     return filtered.length > 1 ? filtered : allPoints;
   }, [allPoints, range]);
+
 
   const filteredCandles = useMemo(() => {
     if (range === 0 || allCandles.length < 2) return allCandles;
@@ -90,6 +93,23 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   const plotWidth = width - left - right;
   const plotHeight = height - top - bottom;
   const yForPrice = (price: number) => top + ((max - price) / (max - min)) * plotHeight;
+
+  const smaPoints = useMemo(() => {
+    if (!showSma || filteredPoints.length < 5) return [];
+    const period = 5;
+    const result: { x: number; y: number }[] = [];
+    for (let i = 0; i < filteredPoints.length; i++) {
+      const start = Math.max(0, i - period + 1);
+      const slice = filteredPoints.slice(start, i + 1);
+      const avg = slice.reduce((acc, p) => acc + p.price, 0) / slice.length;
+      const x = left + (filteredPoints.length < 2 ? 0 : i / (filteredPoints.length - 1)) * plotWidth;
+      const y = yForPrice(avg);
+      result.push({ x, y });
+    }
+    return result;
+  }, [showSma, filteredPoints, min, max, plotHeight, top]);
+
+  const smaPath = smaPoints.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(2) + "," + p.y.toFixed(2)).join(" ");
 
   const coords = filteredPoints.map((point, index) => ({
     x: left + (filteredPoints.length < 2 ? 0 : index / (filteredPoints.length - 1)) * plotWidth,
@@ -144,6 +164,13 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
       <div>{WINDOWS.map((item) => <button key={item.label} type="button" aria-pressed={range === item.seconds} className={range === item.seconds ? styles.rangeActive : styles.rangeButton} onClick={() => setRange(item.seconds)}>{item.label}</button>)}</div>
     </div>
 
+    <div className={styles.chartTools} aria-label="Chart indicators">
+      <span>INDICATORS</span>
+      <div>
+        <button type="button" aria-pressed={showSma} className={showSma ? styles.rangeActive : styles.rangeButton} onClick={() => setShowSma(!showSma)}>SMA (20)</button>
+      </div>
+    </div>
+
     {hasChartData ? <div className={styles.svgChart}>
       <svg viewBox={"0 0 " + width + " " + height} role="img" aria-label={market.name + (view === "candles" ? " OHLC candlestick history" : " tick-price history")}>
         <defs>
@@ -164,6 +191,7 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
         {view === "line" && <>
           <path d={areaPath} fill={"url(#" + gradientId + ")"} />
           <path d={linePath} fill="none" stroke={isUp ? "#159a7d" : "#dc6470"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          {showSma && smaPath && <path d={smaPath} fill="none" stroke="#e67e22" strokeWidth="2" strokeDasharray="3 3" />}
           {last && <g>
             <circle cx={last.x} cy={last.y} r="6" fill={isUp ? "#159a7d" : "#dc6470"} stroke="#fff" strokeWidth="3" />
             <line x1={last.x} y1={last.y} x2={width - right} y2={last.y} stroke={isUp ? "#159a7d" : "#dc6470"} strokeDasharray="4 4" opacity=".5" />

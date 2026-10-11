@@ -30,6 +30,8 @@ export default function DemoTradeTicket({
   const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("60");
+  const [takeProfit, setTakeProfit] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
   const [now, setNow] = useState(Date.now());
   const accountType = (account?.account_type ?? "").toLowerCase();
   const isDemo = accountType === "demo";
@@ -65,7 +67,7 @@ export default function DemoTradeTicket({
       <div>
         <p className={styles.eyebrow}>ORDER ENTRY</p>
         <h2>{isRealAccount ? "Real account · read-only" : "Demo trade ticket"}</h2>
-        <p className={styles.panelSubtext}>Get a fresh Deriv quote first. Submit only after checking the terms.</p>
+        <p className={styles.panelSubtext}>Get a fresh market quote first. Submit only after checking the terms.</p>
       </div>
       <span className={isRealAccount ? (realTradingEnabled ? styles.realLock : styles.realModeLocked) : styles.demoLock}>
         {isRealAccount ? (realTradingEnabled ? "REAL MONEY" : "LOCKED") : "DEMO ONLY"}
@@ -80,8 +82,8 @@ export default function DemoTradeTicket({
     </div>}
     {orderResolutionRequired && <div className={styles.riskStopNotice} role="alert">
       <strong>Previous order outcome unknown — entry paused</strong>
-      <span>Deriv may have accepted the previous order even though TradeBridge did not receive its confirmation. Open Deriv directly and reconcile recent transactions and open contracts before retrying.</span>
-      <button type="button" className={styles.secondaryButton} onClick={acknowledgeOrderResolution}>I checked Deriv account activity</button>
+      <span>The previous order status is unconfirmed. Reconcile recent transactions and open contracts on your account before retrying.</span>
+      <button type="button" className={styles.secondaryButton} onClick={acknowledgeOrderResolution}>I checked account activity</button>
     </div>}
     {dailyLossReached && <div className={styles.riskStopNotice} role="alert">
       <strong>Daily loss stop reached</strong>
@@ -113,7 +115,7 @@ export default function DemoTradeTicket({
     <div className={styles.presets} aria-label="Stake presets">
       {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value} {account?.currency ?? ""}</button>)}
     </div>
-    <p className={styles.fieldHint} id="stake-note">{isRealAccount ? "Real-money order entry is currently disabled. The fields are shown for context only." : "Use virtual funds only. Deriv validates minimum stakes for the selected market and currency."}</p>
+    <p className={styles.fieldHint} id="stake-note">{isRealAccount ? "Real-money order entry is currently disabled. The fields are shown for context only." : "Use virtual funds only. The feed validates minimum stakes for the selected market and currency."}</p>
 
     <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Contract duration</label>
     <div className={styles.inputShell}>
@@ -123,10 +125,26 @@ export default function DemoTradeTicket({
     <div className={styles.presets} aria-label="Duration presets">
       {[{ label: "1 min", value: "60" }, { label: "5 min", value: "300" }, { label: "10 min", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
     </div>
-    <p className={styles.fieldHint} id="duration-note">Duration is in seconds. Deriv returns the actual offered price and potential payout for the selected contract.</p>
+    <p className={styles.fieldHint} id="duration-note">Duration is in seconds. The feed returns the actual offered price and potential payout for the selected contract.</p>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", margin: "12px 0 4px" }}>
+      <div>
+        <label className={styles.fieldLabel} htmlFor="tradebridge-tp">Take Profit (opt)</label>
+        <div className={styles.inputShell}>
+          <input id="tradebridge-tp" type="number" placeholder="Target P/L" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} disabled={!ready || busy} />
+        </div>
+      </div>
+      <div>
+        <label className={styles.fieldLabel} htmlFor="tradebridge-sl">Stop Loss (opt)</label>
+        <div className={styles.inputShell}>
+          <input id="tradebridge-sl" type="number" placeholder="Max Loss" value={stopLoss} onChange={e => setStopLoss(e.target.value)} disabled={!ready || busy} />
+        </div>
+      </div>
+    </div>
+    <p className={styles.fieldHint}>Configure automatic risk thresholds (Take Profit & Stop Loss) for advanced contract protection.</p>
 
     {quote && quoteMatchesForm && <div className={isRealAccount ? styles.liveQuoteCard : styles.quoteCard} role="status">
-      <div className={styles.quoteCardHeader}><span>DERIV QUOTE</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
+      <div className={styles.quoteCardHeader}><span>LIVE QUOTE</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
       <div className={styles.quoteMetrics}>
         <div><small>Stake</small><strong>{quote.stake.toLocaleString()} {quote.currency}</strong></div>
         <div><small>Purchase price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
@@ -137,8 +155,8 @@ export default function DemoTradeTicket({
         {isRealAccount ? "Confirm real-money trade" : "Confirm demo trade"} <span>→</span>
       </button>
       <small className={styles.quoteWarning}>{isRealAccount
-        ? "This action sends a live order to Deriv and can immediately lose real money. Review the quoted stake and potential payout. Confirmation cannot guarantee a profit."
-        : "Confirmation sends an order to your Deriv demo account and can change your virtual balance."}</small>
+        ? "This action sends a live order and can immediately lose real money. Review the quoted stake and potential payout. Confirmation cannot guarantee a profit."
+        : "Confirmation sends an order to your demo account and updates your virtual balance."}</small>
     </div>}
 
     <div className={styles.ticketStatus} role="status">

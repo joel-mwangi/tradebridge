@@ -1,0 +1,7 @@
+{
+  "name": "TradeBridge",
+  "description": "Trading workspace connected to Deriv with authentication and live market data.",
+  "request_capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

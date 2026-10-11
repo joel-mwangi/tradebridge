@@ -27,28 +27,28 @@ type LiveConsentResponse = {
 
 function authErrorMessage(error: string | null) {
   const messages: Record<string, string> = {
-    configuration: "Deriv OAuth is not configured correctly. Review the server environment and registered callback URL.",
-    cancelled: "Deriv authorization was cancelled. You can reconnect whenever you're ready.",
-    invalid_callback: "TradeBridge could not verify the Deriv authorization response. Please connect again.",
-    token_exchange: "Deriv could not complete authorization. Please try again.",
-    platform_email_unverified: "Verify your TradeBridge email before connecting Deriv.",
-    account_verification_failed: "Deriv authorization completed, but account details could not be verified.",
-    account_linking_unavailable: "Secure account linking is not ready. Apply the required database migrations, then retry.",
-    account_conflict: "This Deriv account is linked to another TradeBridge user. Sign in with the account that originally linked it.",
-    deriv_auth_required: "Sign in to TradeBridge before connecting Deriv.",
+    configuration: "Authorization is not configured correctly. Review environment settings.",
+    cancelled: "Authorization was cancelled. You can reconnect whenever you're ready.",
+    invalid_callback: "Could not verify authorization response. Please connect again.",
+    token_exchange: "Could not complete authorization. Please try again.",
+    platform_email_unverified: "Verify your email before connecting.",
+    account_verification_failed: "Authorization completed, but account details could not be verified.",
+    account_linking_unavailable: "Secure account linking is not ready. Apply required database migrations.",
+    account_conflict: "This trading account is linked to another user.",
+    deriv_auth_required: "Sign in before connecting your account.",
   };
   return error ? messages[error] ?? "" : "";
 }
 
 function accountErrorMessage(error?: string) {
   switch (error) {
-    case "token_expired": return "Your Deriv session expired or was revoked. Reconnect Deriv to continue.";
-    case "insufficient_scope": return "Deriv denied account access. Reconnect and approve the required trading permission.";
-    case "deriv_unavailable": return "Deriv is temporarily unavailable. Retry when the provider is reachable.";
+    case "token_expired": return "Your session expired or was revoked. Reconnect to continue.";
+    case "insufficient_scope": return "Account access denied. Reconnect and approve required trading permissions.";
+    case "deriv_unavailable": return "Trading service is temporarily unavailable. Retry when reachable.";
     case "account_mismatch":
-    case "owner_mismatch": return "This Deriv session does not match the signed-in TradeBridge account. Connect Deriv again.";
-    case "account_linking_unavailable": return "Secure account linking is unavailable. Apply the required database migrations, then retry.";
-    default: return "Connect your Deriv account to load account data and trading features.";
+    case "owner_mismatch": return "Session does not match your signed-in account. Connect again.";
+    case "account_linking_unavailable": return "Secure account linking is unavailable. Apply migrations and retry.";
+    default: return "Connect your trading account to load balances and trading features.";
   }
 }
 
@@ -84,6 +84,18 @@ export default function TradingWorkspace() {
   const [liveConsentMessage, setLiveConsentMessage] = useState("");
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("tradebridge_theme");
+    if (saved === "light" || saved === "dark") setTheme(saved);
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("tradebridge_theme", next);
+  }
   const {
     markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket,
     candlesByKey, requestCandles,
@@ -115,7 +127,7 @@ export default function TradingWorkspace() {
     let active = true;
     const params = new URLSearchParams(window.location.search);
     const firstAuthMessage = authErrorMessage(params.get("auth_error"));
-    if (params.get("connection") === "connected") setAuthMessage("Deriv authorization completed. Verifying linked accounts and trading permissions…");
+    if (params.get("connection") === "connected") setAuthMessage("Authorization completed. Verifying linked accounts and trading permissions…");
     if (params.get("auth_error")) setAuthMessage(firstAuthMessage);
     if (params.has("connection") || params.has("auth_error")) {
       window.history.replaceState({}, "", window.location.pathname);
@@ -133,16 +145,16 @@ export default function TradingWorkspace() {
           ? current
           : eligible[0]?.account_id ?? returnedAccounts.find(isRealAccount)?.account_id ?? returnedAccounts[0]?.account_id ?? "");
         if (firstAuthMessage) setAuthMessage(firstAuthMessage);
-        else if (data.connected && eligible.length > 0) setAuthMessage("Deriv connected. Demo and real accounts are checked against your linked account ownership.");
-        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Deriv connected. Your linked Real account is read-only in TradeBridge; use a Demo account to place trades.");
-        else if (data.connected) setAuthMessage("Deriv connected, but no supported Options account was returned. Refresh or reconnect Deriv.");
+        else if (data.connected && eligible.length > 0) setAuthMessage("Trading account connected. Demo and real accounts verified.");
+        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Account connected. Real accounts are read-only; use a Demo account to trade.");
+        else if (data.connected) setAuthMessage("Connected, but no supported trading account was returned. Refresh or reconnect.");
         else setAuthMessage(accountErrorMessage(data.error));
       })
       .catch(() => {
         if (active) {
           setConnected(false);
           setAccounts([]);
-          setAuthMessage("Could not verify the Deriv connection. Check your connection, then reconnect Deriv.");
+          setAuthMessage("Could not verify the trading connection. Check your network and reconnect.");
         }
       });
 
@@ -298,7 +310,7 @@ export default function TradingWorkspace() {
           ? "Unsupported account type · trading disabled"
           : "Account required";
 
-  return <main className={styles.workspace} id="overview">
+  return <main className={styles.workspace} data-theme={theme} id="overview">
     <aside className={styles.sidebar}>
       <a className={styles.brand} href="#overview" aria-label="TradeBridge workspace home"><span className={styles.brandMark}>T</span><span className={styles.brandWord}>tradebridge<span>.</span></span></a>
       <p className={styles.sidebarMeta}>TRADING WORKSPACE</p>
@@ -310,7 +322,7 @@ export default function TradingWorkspace() {
       </nav>
       <div className={styles.sidebarMetaBottom}>
         <span className={accountSessionReady ? styles.statusDotConnected : styles.statusDot} />
-        <div><strong>{accountState}</strong><small>{activeAccount ? activeAccount.account_id : connected ? "Select a linked account" : "Connect Deriv to continue"}</small></div>
+        <div><strong>{accountState}</strong><small>{activeAccount ? activeAccount.account_id : connected ? "Select a linked account" : "Connect broker to continue"}</small></div>
       </div>
     </aside>
 
@@ -318,50 +330,25 @@ export default function TradingWorkspace() {
       <header className={styles.topbar}>
         <div className={styles.breadcrumb}>Workspace <b>/</b> {activeAccountIsReal ? effectiveLiveTradingEnabled ? "Live trading" : "Real account · read-only" : "Demo trading"}</div>
         <div className={styles.topActions}>
+          <button className={styles.secondaryButton} type="button" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+          </button>
           {accounts.length > 0 && <label className={styles.activeAccountWrap}>
             <span className={styles.accountLabel}>ACCOUNT</span>
-            <select className={styles.accountSelect} aria-label="Select Deriv account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
+            <select className={styles.accountSelect} aria-label="Select trading account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
               {accounts.map((item) => <option value={item.account_id} key={item.account_id}>{item.account_id} · {item.currency ?? "Currency"} · {accountTypeLabel(item)}</option>)}
             </select>
           </label>}
           {connected
             ? <form action="/api/auth/deriv/disconnect" method="post"><button className={styles.secondaryButton} type="submit">Disconnect</button></form>
-            : <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>}
+            : <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Broker ↗</button>}
         </div>
       </header>
 
       <div className={styles.content}>
-        <section className={styles.intro}>
-          <div className={styles.introMain}>
-            <p className={styles.eyebrow}>{activeAccountIsReal ? effectiveLiveTradingEnabled ? "REAL ACCOUNT · LIVE ORDERS ENABLED" : "REAL ACCOUNT · ORDER ENTRY LOCKED" : "YOUR MARKETS, YOUR DERIV ACCOUNT"}</p>
-            <h1 className={styles.title}>Trade with a clearer view.</h1>
-            <p className={styles.subtitle}>{activeAccountIsReal
-              ? effectiveLiveTradingEnabled
-                ? "Monitor real balance, live contract P/L, open positions, and account history. Every entry requires a fresh Deriv quote and a separate confirmation."
-                : "Your linked Real account is read-only in TradeBridge. Live orders are disabled until a server-side gateway can enforce stake caps, daily-loss stops, and revocation for every order."
-              : "Inspect real market prices, review a live Deriv quote, confirm trades, monitor open contracts, and check account activity. All figures are sourced from Deriv."}</p>
-          </div>
-          <div className={styles.introActions}>
-            {!connected && <button className={styles.secondaryButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>}
-            <button className={styles.primaryButton} type="button" onClick={startTrading}>{!connected ? "Connect to start" : !activeAccount ? "Refresh accounts" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Open live trade ticket" : "View account safety status" : activeAccountIsDemo ? "Open demo trade ticket" : "Switch to demo"} <span aria-hidden="true">→</span></button>
-          </div>
-        </section>
-
-        <section className={styles.notice} aria-live="polite">
-          <span className={styles.noticeIcon}>i</span>
-          <div className={styles.noticeCopy}>
-            <strong>{!connected ? "Connect Deriv to activate trading" : activeAccountIsDemo ? "Demo account selected · virtual funds only" : activeAccountIsReal ? effectiveLiveTradingEnabled ? "Real account selected · live orders enabled" : "Real account selected · read-only; live orders disabled for safety" : "Deriv connected · supported account required"}</strong>
-            <p>{activeAccountIsReal
-              ? REAL_EXECUTION_GATEWAY_AVAILABLE
-                ? liveConsentMessage || "Live account actions require explicit risk acknowledgement."
-                : "Real-money order execution is disabled in this build. Use a Demo account to place trades; a browser-only limit is not a secure live-trading control."
-              : authMessage}</p>
-          </div>
-        </section>
-
         {connected && accounts.length === 0 && <section className={styles.accountEmpty}>
-          <div><strong>No linked Deriv Options account was returned</strong><p>Create or activate a supported account in Deriv, then reconnect. TradeBridge only displays accounts returned by Deriv and verified as linked to your signed-in user.</p></div>
-          <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Reconnect Deriv ↗</button>
+          <div><strong>No linked trading account was returned</strong><p>Create or activate a supported account with your broker, then reconnect. TradeBridge only displays accounts returned and verified as linked to your signed-in user.</p></div>
+          <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Reconnect Broker ↗</button>
         </section>}
 
         {connected && activeAccountIsReal && activeAccount && <div id="live-controls">
@@ -386,15 +373,15 @@ export default function TradingWorkspace() {
             <strong className={styles.statValue}>{connected && activeAccount ? formatMoney(liveBalance, currency) : "—"}</strong>
             <p className={styles.statSub}>{activeAccount ? activeAccount.account_id + (activeAccountIsReal ? " · real money" : activeAccountIsDemo ? " · virtual funds" : " · trading disabled") : "Connect and select a linked account"}</p>
           </article>
-          <article className={styles.statCard}>
+           <article className={styles.statCard}>
             <div className={styles.statLabel}><span className={styles.metricAccent}>▤</span> Open positions</div>
             <strong className={styles.statValue}>{accountSessionReady ? trading.positions.length : "—"}</strong>
-            <p className={styles.statSub}>{accountSessionReady ? "Active Deriv contracts" : trading.sessionState}</p>
+            <p className={styles.statSub}>{accountSessionReady ? "Active contracts" : trading.sessionState}</p>
           </article>
           <article className={styles.statCard}>
             <div className={styles.statLabel}><span className={styles.metricAccent}>↗</span> Realized P/L today</div>
             <strong className={styles.statValue}>{accountSessionReady && trading.realizedProfit !== null ? formatMoney(trading.realizedProfit, currency) : "—"}</strong>
-            <p className={styles.statSub}>{accountSessionReady ? "Read from Deriv's profit table" : "Available after the selected account session connects"}</p>
+            <p className={styles.statSub}>{accountSessionReady ? "Read from account ledger" : "Available after the selected account session connects"}</p>
           </article>
         </section>
 
@@ -441,7 +428,7 @@ export default function TradingWorkspace() {
           onLoadMore={trading.loadMoreActivity}
         />
 
-        <footer className={styles.footer}><span>TradeBridge · Quotes, balances, and positions from Deriv</span><span>Deriv Options · Demo orders only; Real accounts are read-only</span></footer>
+        <footer className={styles.footer}><span>TradeBridge · Professional Trading Terminal</span><span>Demo execution mode · Real accounts read-only</span></footer>
       </div>
     </section>
 
