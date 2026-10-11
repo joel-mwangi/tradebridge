@@ -405,7 +405,7 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
         }
         .panel { min-width: 0; border: 1px solid var(--bot-line); border-radius: 14px; background: var(--bot-panel); padding: 22px; box-shadow: var(--bot-shadow); }
         .heading { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
-        .eyebrow { margin:0 0 7px; color:var(--bot-teal); font-size:10px; font-weight:800; letter-spacing:1.4px; text-transform:uppercase; }
+        .eyebrow { margin:0 0 7px; color:var(--bot-teal-ink); font-size:10px; font-weight:800; letter-spacing:1.4px; text-transform:uppercase; }
         h2 { margin:0; color:var(--bot-ink); font-size:17px; font-weight:800; letter-spacing:-.3px; }
         .sub { margin:6px 0 0; max-width:720px; color:var(--bot-muted); font-size:12px; line-height:1.6; }
         .grid { display:grid; grid-template-columns:minmax(260px,.85fr) minmax(0,1.4fr); align-items:start; gap:18px; }
