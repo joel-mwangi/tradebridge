@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import BotManager from "./BotManager";
 import DemoTradeTicket from "./DemoTradeTicket";
@@ -26,15 +28,23 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspaceTab = "overview" | "markets" | "ticket" | "activity" | "bots";
+type WorkspacePage = "dashboard" | "trade" | "portfolio" | "bots" | "settings";
 
-const WORKSPACE_TABS: Array<{ id: WorkspaceTab; label: string; icon: string }> = [
-  { id: "overview", label: "Overview", icon: "▦" },
-  { id: "markets", label: "Markets & Chart", icon: "⌁" },
-  { id: "ticket", label: "Trade Ticket", icon: "↗" },
-  { id: "activity", label: "Positions & History", icon: "◷" },
+const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
+  { id: "dashboard", label: "Dashboard", icon: "▦" },
+  { id: "trade", label: "Trade", icon: "↗" },
+  { id: "portfolio", label: "Portfolio & History", icon: "◷" },
   { id: "bots", label: "Automated Bots", icon: "▤" },
+  { id: "settings", label: "Settings", icon: "⚙" },
 ];
+
+const PAGE_TITLES: Record<WorkspacePage, string> = {
+  dashboard: "Dashboard",
+  trade: "Trade",
+  portfolio: "Portfolio & History",
+  bots: "Automated Bots",
+  settings: "Settings",
+};
 
 function authErrorMessage(error: string | null) {
   const messages: Record<string, string> = {
@@ -84,6 +94,12 @@ function accountTypeLabel(account: DerivAccount) {
 }
 
 export default function TradingWorkspace() {
+  const pathname = usePathname();
+  const routeSegment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
+  const page: WorkspacePage = PRIMARY_NAV.some((item) => item.id === routeSegment)
+    ? routeSegment as WorkspacePage
+    : "dashboard";
+
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -96,39 +112,9 @@ export default function TradingWorkspace() {
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
-
-  function chooseTab(tab: WorkspaceTab) {
-    setActiveTab(tab);
-    const nextUrl = new URL(window.location.href);
-    nextUrl.hash = tab === "overview" ? "" : tab;
-    window.history.replaceState({}, "", nextUrl);
-  }
-
-  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentTab: WorkspaceTab) {
-    const currentIndex = WORKSPACE_TABS.findIndex((tab) => tab.id === currentTab);
-    let nextIndex = currentIndex;
-
-    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % WORKSPACE_TABS.length;
-    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + WORKSPACE_TABS.length) % WORKSPACE_TABS.length;
-    else if (event.key === "Home") nextIndex = 0;
-    else if (event.key === "End") nextIndex = WORKSPACE_TABS.length - 1;
-    else return;
-
-    event.preventDefault();
-    const nextTab = WORKSPACE_TABS[nextIndex].id;
-    chooseTab(nextTab);
-    document.getElementById("workspace-tab-" + nextTab)?.focus();
-  }
-
   useEffect(() => {
     const saved = localStorage.getItem("tradebridge_theme");
     if (saved === "light" || saved === "dark") setTheme(saved);
-
-    const requestedTab = window.location.hash.slice(1);
-    if (WORKSPACE_TABS.some((tab) => tab.id === requestedTab)) {
-      setActiveTab(requestedTab as WorkspaceTab);
-    }
   }, []);
 
   function toggleTheme() {
@@ -251,21 +237,6 @@ export default function TradingWorkspace() {
     window.location.href = "/api/auth/deriv/start";
   }
 
-  function startTrading() {
-    if (!connected || !activeAccount) {
-      startDerivConnect();
-      return;
-    }
-    if (activeAccountIsReal && !effectiveLiveTradingEnabled) {
-      chooseTab("ticket");
-      return;
-    }
-    if (!activeAccountIsDemo && !activeAccountIsReal && demoAccounts.length > 0) {
-      setSelectedAccountId(demoAccounts[0].account_id);
-    }
-    chooseTab("ticket");
-  }
-
   async function enableLiveTrading(stakeLimit: number, dailyLossLimit: number) {
     if (!activeAccountIsReal || !activeAccount) return;
     setLiveConsentBusy(true);
@@ -350,17 +321,17 @@ export default function TradingWorkspace() {
           ? "Unsupported account type · trading disabled"
           : "Account required";
 
-  return <main className={styles.workspace} data-theme={theme} id="overview">
+  return <main className={styles.workspace} data-theme={theme}>
     <section className={styles.main}>
       <header className={styles.topbar}>
-        <button className={styles.topbarIdentity} type="button" onClick={() => chooseTab("overview")} aria-label="TradeBridge overview">
+        <Link href="/dashboard" className={styles.topbarIdentity} aria-label="TradeBridge dashboard">
           <span className={styles.brandMark}>T</span>
           <span className={styles.brandWord}>tradebridge<span>.</span></span>
           <span className={styles.workspaceContext}>
-            <strong>{WORKSPACE_TABS.find((tab) => tab.id === activeTab)?.label ?? "Overview"}</strong>
+            <strong>{PAGE_TITLES[page]}</strong>
             <small>{activeAccountIsReal ? "Real account · read-only by default" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>
           </span>
-        </button>
+        </Link>
         <div className={styles.topActions}>
           <button className={styles.secondaryButton} type="button" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
@@ -378,23 +349,17 @@ export default function TradingWorkspace() {
       </header>
 
       <div className={styles.tabNavWrap}>
-        <nav className={styles.workspaceTabs} role="tablist" aria-label="Trading workspace sections">
-          {WORKSPACE_TABS.map((tab) => (
-            <button
-              className={activeTab === tab.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
-              type="button"
-              role="tab"
-              id={"workspace-tab-" + tab.id}
-              aria-controls="workspace-tab-panel"
-              aria-selected={activeTab === tab.id}
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              key={tab.id}
-              onClick={() => chooseTab(tab.id)}
-              onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
+        <nav className={styles.workspaceTabs} aria-label="Primary navigation">
+          {PRIMARY_NAV.map((item) => (
+            <Link
+              className={page === item.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
+              href={"/" + item.id}
+              aria-current={page === item.id ? "page" : undefined}
+              key={item.id}
             >
-              <span className={styles.workspaceTabIcon} aria-hidden="true">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
+              <span className={styles.workspaceTabIcon} aria-hidden="true">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
           ))}
         </nav>
       </div>
@@ -405,14 +370,14 @@ export default function TradingWorkspace() {
           <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Reconnect Broker ↗</button>
         </section>}
 
-        <div className={styles.workspaceTabPanel} id="workspace-tab-panel" role="tabpanel" aria-labelledby={"workspace-tab-" + activeTab} tabIndex={0}>
-          {activeTab === "overview" && (
+        <div className={styles.workspaceTabPanel}>
+          {page === "dashboard" && (
             <section className={styles.overviewPage} aria-label="Workspace overview">
               <div className={styles.intro}>
                 <div className={styles.introMain}>
                   <p className={styles.eyebrow}>Account overview</p>
                   <h1 className={styles.title}>Your trading workspace</h1>
-                  <p className={styles.subtitle}>Check your account at a glance, then open the section you need from the tabs above.</p>
+                  <p className={styles.subtitle}>Check your account at a glance, then choose a workspace for your next task.</p>
                 </div>
                 <div className={styles.introActions}>
                   {connected
@@ -445,112 +410,114 @@ export default function TradingWorkspace() {
               </section>
 
               <section className={styles.overviewLaunchers} aria-label="Quick access">
-                <button type="button" className={styles.overviewLauncher} onClick={() => chooseTab("markets")}>
-                  <span className={styles.launcherIcon}>⌁</span>
-                  <span><strong>Markets &amp; Chart</strong><small>Browse active Deriv instruments and live prices.</small></span>
-                  <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </button>
-                <button type="button" className={styles.overviewLauncher} onClick={() => chooseTab("ticket")}>
+                <Link href="/trade" className={styles.overviewLauncher}>
                   <span className={styles.launcherIcon}>↗</span>
-                  <span><strong>Trade Ticket</strong><small>Request a quote and review an order before confirmation.</small></span>
+                  <span><strong>Open trading workspace</strong><small>Choose a market, review the chart and place an order from one workspace.</small></span>
                   <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </button>
-                <button type="button" className={styles.overviewLauncher} onClick={() => chooseTab("activity")}>
+                </Link>
+                <Link href="/portfolio" className={styles.overviewLauncher}>
                   <span className={styles.launcherIcon}>◷</span>
-                  <span><strong>Positions &amp; History</strong><small>Monitor open contracts and loaded statement activity.</small></span>
+                  <span><strong>Portfolio &amp; History</strong><small>Review open positions and account statement activity.</small></span>
                   <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </button>
-                <button type="button" className={styles.overviewLauncher} onClick={() => chooseTab("bots")}>
+                </Link>
+                <Link href="/bots" className={styles.overviewLauncher}>
                   <span className={styles.launcherIcon}>▤</span>
-                  <span><strong>Automated Bots</strong><small>Manage bot configurations and reported results.</small></span>
+                  <span><strong>Automated Bots</strong><small>Manage configurations and inspect recorded bot activity.</small></span>
                   <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </button>
+                </Link>
+                <Link href="/settings" className={styles.overviewLauncher}>
+                  <span className={styles.launcherIcon}>⚙</span>
+                  <span><strong>Settings</strong><small>Manage appearance and review broker connection status.</small></span>
+                  <span className={styles.launcherArrow} aria-hidden="true">→</span>
+                </Link>
               </section>
             </section>
           )}
 
-          {activeTab === "markets" && (
-            <section className={styles.workspaceSection} aria-label="Markets and chart">
+          {page === "trade" && (
+            <section className={styles.workspaceSection} aria-label="Trading workspace">
               <div className={styles.intro}>
                 <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Explore the market</p>
-                  <h1 className={styles.title}>Markets &amp; Chart</h1>
-                  <p className={styles.subtitle}>Choose a supported instrument and inspect the live market data before opening the trade ticket.</p>
+                  <p className={styles.eyebrow}>Trading workspace</p>
+                  <h1 className={styles.title}>Trade</h1>
+                  <p className={styles.subtitle}>Choose a market, analyse its price action and review your order without switching pages. Open positions stay available below.</p>
                 </div>
                 <div className={styles.introActions}>
-                  <button className={styles.primaryButton} type="button" onClick={() => chooseTab("ticket")}>Open trade ticket →</button>
+                  <Link className={styles.secondaryButton} href="/portfolio">View portfolio →</Link>
                 </div>
               </div>
-              <MarketWatch
-                markets={markets}
-                snapshots={snapshots}
-                selectedMarket={selectedMarket}
-                selectedSymbol={selectedSymbol}
-                connection={connection}
-                onSelect={selectMarket}
-                candlesByKey={candlesByKey}
-                onLoadCandles={requestCandles}
+
+              <div className={styles.marketGrid}>
+                <MarketWatch
+                  markets={markets}
+                  snapshots={snapshots}
+                  selectedMarket={selectedMarket}
+                  selectedSymbol={selectedSymbol}
+                  connection={connection}
+                  onSelect={selectMarket}
+                  candlesByKey={candlesByKey}
+                  onLoadCandles={requestCandles}
+                />
+                <div className={styles.tradeTicketColumn}>
+                  {connected && activeAccountIsReal && activeAccount && <div id="live-controls">
+                    <LiveTradingControls
+                      account={activeAccount}
+                      executionGatewayAvailable={REAL_EXECUTION_GATEWAY_AVAILABLE}
+                      consentEnabled={liveTradingEnabled}
+                      enabled={effectiveLiveTradingEnabled}
+                      loading={liveConsentLoading}
+                      busy={liveConsentBusy}
+                      maxStake={maxRealStake}
+                      maxDailyLoss={maxDailyLoss}
+                      message={liveConsentMessage}
+                      onEnable={enableLiveTrading}
+                      onDisable={disableLiveTrading}
+                    />
+                  </div>}
+                  <div className={styles.tradeTicketWorkspace}>
+                    <DemoTradeTicket
+                      connected={connected}
+                      account={activeAccount}
+                      realTradingEnabled={effectiveLiveTradingEnabled}
+                      maxRealStake={maxRealStake}
+                      maxDailyLoss={maxDailyLoss}
+                      realizedProfit={trading.realizedProfit}
+                      orderResolutionRequired={trading.orderResolutionRequired}
+                      acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
+                      market={selectedMarket}
+                      sessionState={trading.sessionState}
+                      status={trading.status}
+                      busy={trading.busy}
+                      quote={trading.quote}
+                      requestQuote={trading.requestQuote}
+                      confirmQuote={trading.confirmQuote}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <TradingActivity
+                positionsOnly
+                positions={trading.positions}
+                activity={trading.activity}
+                currency={currency}
+                accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                busy={trading.busy}
+                activityLoading={trading.activityLoading}
+                activityHasMore={trading.activityHasMore}
+                onSell={trading.sellPosition}
+                onRefresh={trading.refreshAccount}
+                onLoadMore={trading.loadMoreActivity}
               />
             </section>
           )}
 
-          {activeTab === "ticket" && (
-            <section className={styles.workspaceSection} aria-label="Trade ticket">
-              <div className={styles.intro}>
-                <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Order entry</p>
-                  <h1 className={styles.title}>Trade Ticket</h1>
-                  <p className={styles.subtitle}>Request a fresh quote and review the contract details before separately confirming an order.</p>
-                </div>
-                <div className={styles.introActions}>
-                  <button className={styles.secondaryButton} type="button" onClick={() => chooseTab("markets")}>← Markets &amp; Chart</button>
-                </div>
-              </div>
-
-              {connected && activeAccountIsReal && activeAccount && <div id="live-controls">
-                <LiveTradingControls
-                  account={activeAccount}
-                  executionGatewayAvailable={REAL_EXECUTION_GATEWAY_AVAILABLE}
-                  consentEnabled={liveTradingEnabled}
-                  enabled={effectiveLiveTradingEnabled}
-                  loading={liveConsentLoading}
-                  busy={liveConsentBusy}
-                  maxStake={maxRealStake}
-                  maxDailyLoss={maxDailyLoss}
-                  message={liveConsentMessage}
-                  onEnable={enableLiveTrading}
-                  onDisable={disableLiveTrading}
-                />
-              </div>}
-
-              <div className={styles.tradeTicketWorkspace}>
-                <DemoTradeTicket
-                  connected={connected}
-                  account={activeAccount}
-                  realTradingEnabled={effectiveLiveTradingEnabled}
-                  maxRealStake={maxRealStake}
-                  maxDailyLoss={maxDailyLoss}
-                  realizedProfit={trading.realizedProfit}
-                  orderResolutionRequired={trading.orderResolutionRequired}
-                  acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
-                  market={selectedMarket}
-                  sessionState={trading.sessionState}
-                  status={trading.status}
-                  busy={trading.busy}
-                  quote={trading.quote}
-                  requestQuote={trading.requestQuote}
-                  confirmQuote={trading.confirmQuote}
-                />
-              </div>
-            </section>
-          )}
-
-          {activeTab === "activity" && (
+          {page === "portfolio" && (
             <section className={styles.workspaceSection} aria-label="Positions and history">
               <div className={styles.intro}>
                 <div className={styles.introMain}>
                   <p className={styles.eyebrow}>Account activity</p>
-                  <h1 className={styles.title}>Positions &amp; History</h1>
+                  <h1 className={styles.title}>Portfolio &amp; History</h1>
                   <p className={styles.subtitle}>Review open contracts, monitor profit and loss, and load your Deriv statement activity.</p>
                 </div>
                 <div className={styles.introActions}>
@@ -572,7 +539,7 @@ export default function TradingWorkspace() {
             </section>
           )}
 
-          {activeTab === "bots" && (
+          {page === "bots" && (
             <section className={styles.botManagerSection} aria-label="Automated trading bots">
               <div className={styles.intro}>
                 <div className={styles.introMain}>
@@ -582,6 +549,55 @@ export default function TradingWorkspace() {
                 </div>
               </div>
               <BotManager theme={theme} />
+            </section>
+          )}
+
+          {page === "settings" && (
+            <section className={styles.workspaceSection} aria-label="Settings">
+              <div className={styles.intro}>
+                <div className={styles.introMain}>
+                  <p className={styles.eyebrow}>Workspace preferences</p>
+                  <h1 className={styles.title}>Settings</h1>
+                  <p className={styles.subtitle}>Manage the appearance of TradeBridge and review the status and safety boundaries of your broker connection.</p>
+                </div>
+              </div>
+
+              <div className={styles.settingsGrid}>
+                <section className={styles.settingsPanel}>
+                  <div className={styles.panelHeading}>
+                    <div><p className={styles.eyebrow}>APPEARANCE</p><h2>Theme</h2><p className={styles.panelSubtext}>Your choice is saved in this browser and used across workspace pages.</p></div>
+                  </div>
+                  <div className={styles.settingValue}>
+                    <div><strong>{theme === "dark" ? "Dark theme" : "Light theme"}</strong><small>Current workspace appearance</small></div>
+                    <button className={styles.secondaryButton} type="button" onClick={toggleTheme}>{theme === "dark" ? "Switch to light" : "Switch to dark"}</button>
+                  </div>
+                </section>
+
+                <section className={styles.settingsPanel}>
+                  <div className={styles.panelHeading}>
+                    <div><p className={styles.eyebrow}>BROKER CONNECTION</p><h2>Deriv account</h2><p className={styles.panelSubtext}>Account details and live connection status are verified by the server.</p></div>
+                  </div>
+                  <p className={styles.settingStatus}>{authMessage}</p>
+                  <p className={styles.panelSubtext}>{connected ? accountState : "No verified trading connection is currently active."}</p>
+                  <div className={styles.settingActions}>
+                    {connected
+                      ? <form action="/api/auth/deriv/disconnect" method="post"><button className={styles.secondaryButton} type="submit">Disconnect broker</button></form>
+                      : <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>}
+                    {connected && <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>}
+                  </div>
+                </section>
+
+                <section className={styles.settingsPanel}>
+                  <div className={styles.panelHeading}>
+                    <div><p className={styles.eyebrow}>TRADING SAFETY</p><h2>Execution controls</h2><p className={styles.panelSubtext}>Connecting an account does not bypass the execution restrictions.</p></div>
+                  </div>
+                  <ul className={styles.safetyList}>
+                    <li>Demo accounts are the default trading practice environment.</li>
+                    <li>Real-account execution remains locked unless a trusted execution gateway is available and the required consent is verified.</li>
+                    <li>Enabling a bot configuration does not place trades; a trusted server-side bot runner is still required.</li>
+                  </ul>
+                </section>
+              </div>
             </section>
           )}
         </div>

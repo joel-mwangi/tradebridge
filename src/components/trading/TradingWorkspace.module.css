@@ -92,6 +92,7 @@
   text-align: left;
   cursor: pointer;
   flex-shrink: 0;
+  text-decoration: none;
 }
 .topbarIdentity .brandMark { flex: 0 0 36px; }
 .topbarIdentity .brandWord { white-space: nowrap; }
@@ -148,6 +149,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--muted);
+  text-decoration: none;
   font-size: 12px;
   font-weight: 750;
   white-space: nowrap;
@@ -202,6 +204,7 @@
   background: var(--panel);
   color: var(--ink);
   text-align: left;
+  text-decoration: none;
   box-shadow: var(--card-shadow);
   transition: border-color .15s ease, transform .15s ease, background .15s ease;
 }
@@ -247,6 +250,23 @@
   min-width: 0;
 }
 .botManagerSection { min-width: 0; display: grid; gap: 20px; }
+
+/* Dedicated route content: keep the market, chart and ticket in one coordinated view. */
+.tradeTicketColumn { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.tradeTicketColumn .ticketPanel { top: 145px; }
+.tradeTicketColumn .tradeTicketWorkspace { max-width: none; }
+.activityGridSingle { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 22px; min-width: 0; }
+.settingsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.settingsPanel { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--card-shadow); }
+.settingsPanel:last-child { grid-column: 1 / -1; }
+.settingValue { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.settingValue > div { min-width: 0; display: grid; gap: 5px; }
+.settingValue strong { color: var(--ink); font-size: 13px; }
+.settingValue small, .settingStatus { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.settingStatus { overflow-wrap: anywhere; margin: 0 0 8px; }
+.settingActions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.safetyList { margin: 0; padding-left: 20px; display: grid; gap: 10px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+
 
 .main { min-width: 0; background: var(--page); }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 70px; padding: 0 32px; border-bottom: 1px solid var(--line); background: var(--topbar-bg); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
@@ -541,6 +561,13 @@
   .marketColumn { display: flex; flex-direction: column; gap: 16px; }
   .marketPanel, .chartPanel, .ticketPanel, .activityPanel { padding: 16px; border-radius: 12px; }
   .activityGrid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .settingsGrid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .settingsPanel:last-child { grid-column: auto; }
+  .settingsPanel { padding: 16px; }
+  .settingValue { align-items: flex-start; flex-direction: column; }
+  .settingActions { align-items: stretch; flex-direction: column; }
+  .tradeTicketColumn { gap: 14px; }
+  .tradeTicketColumn .ticketPanel { position: static; top: auto; }
   .positionRow { align-items: flex-start; flex-direction: column; gap: 12px; }
   .positionNumbers { width: 100%; justify-content: flex-end; }
   .mobileNav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--sidebar-bg); border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.15); }
