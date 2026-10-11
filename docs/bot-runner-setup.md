@@ -97,7 +97,7 @@ The OAuth implementation returns a short-lived access token and currently has no
 - At least 40 non-overlapping holdout trades and expected return at the lower confidence bound above the configured margin, using the current payout ratio as an explicit historical assumption.
 - Stake cap of 1% of the current Demo balance.
 - Account-wide daily loss limit, daily trade limit, maximum three consecutive losses, 60-second cooldown, and no overlapping open contract on the account.
-- Database leases, pre-order intent ledger, and pause-on-ambiguous-order behavior. A timeout after submitting a buy is treated as unknown—not as a confirmed failure—and the bot is paused to prevent blind retries.
+- Database leases, pre-order intent ledger, and pause-on-ambiguous-order behavior. A timeout after submitting a buy is treated as unknown—not as a confirmed failure—and the bot is paused to prevent blind retries. Unknown orders can be recovered only by broker verification: provide the contract ID for a verified open/settled contract, or run a server-side check of portfolio, statement and profit history before closing the intent as not placed.
 - Server-side-only token encryption, credentials, leases, settlement writes, and P&L updates.
 
 A signal score is not a probability. Historical backtests using current payout ratios do not replace recording actual quotes over time; the payout assumption may differ from past offers. The gates are conservative controls, not proof of future profitability.
