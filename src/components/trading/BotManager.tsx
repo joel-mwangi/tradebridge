@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { createClient } from "../../lib/supabase/client";
 import BotStrategyBuilder from "./BotStrategyBuilder";
+import DigitStrategyControls from "./DigitStrategyControls";
 
 type StrategyType = "trend_following" | "mean_reversion" | "breakout" | "momentum";
 
@@ -688,6 +689,7 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
       </div>
 
       <BotStrategyBuilder userId={userId} />
+      <DigitStrategyControls userId={userId} />
 
       <div className="grid">
         <section className="panel" aria-labelledby="create-bot-title">
