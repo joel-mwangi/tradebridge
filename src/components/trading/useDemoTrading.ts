@@ -627,7 +627,7 @@ export function useTradingSession(
       setStatus("Digit contracts require a duration between 1 and 10 ticks.");
       return;
     }
-    const hasSingleDigitBarrier = typeof input.barrier === "string" && /^\\d$/.test(input.barrier);
+    const hasSingleDigitBarrier = typeof input.barrier === "string" && /^\d$/.test(input.barrier);
     const barrierValue = hasSingleDigitBarrier ? Number(input.barrier) : null;
     if ((input.contractType === "DIGITOVER" && (barrierValue === null || barrierValue > 8))
       || (input.contractType === "DIGITUNDER" && (barrierValue === null || barrierValue < 1))
