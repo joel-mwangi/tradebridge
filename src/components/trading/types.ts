@@ -37,7 +37,9 @@ export interface DemoQuote {
   askPrice: number;
   payout: number | null;
   symbol: string;
-  contractType: "CALL" | "PUT";
+  contractType: "CALL" | "PUT" | "DIGITOVER" | "DIGITUNDER";
+  barrier?: string;
+  durationUnit: "s" | "t";
   stake: number;
   duration: number;
   currency: string;
