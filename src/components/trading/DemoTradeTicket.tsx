@@ -18,7 +18,7 @@ type Props = {
   status: string;
   busy: boolean;
   quote: DemoQuote | null;
-  requestQuote: (input: { symbol: string; contractType: "CALL" | "PUT"; stake: number; duration: number }) => void;
+  requestQuote: (input: { symbol: string; contractType: "CALL" | "PUT" | "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "s" | "t"; barrier?: string }) => void;
   confirmQuote: () => void;
 };
 
@@ -27,7 +27,10 @@ export default function DemoTradeTicket({
   orderResolutionRequired, acknowledgeOrderResolution,
   market, sessionState, status, busy, quote, requestQuote, confirmQuote,
 }: Props) {
+  const [contractMode, setContractMode] = useState<"directional" | "digit">("directional");
   const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
+  const [digitDirection, setDigitDirection] = useState<"DIGITOVER" | "DIGITUNDER">("DIGITOVER");
+  const [barrier, setBarrier] = useState("5");
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("60");
   const [takeProfit, setTakeProfit] = useState("");
@@ -52,12 +55,15 @@ export default function DemoTradeTicket({
     if (!ready || !market) return;
     const stakeValue = Number(stake);
     const durationValue = Number(duration);
-    requestQuote({ symbol: market.symbol, contractType: direction, stake: stakeValue, duration: durationValue });
+    requestQuote({ symbol: market.symbol, contractType: contractMode === "digit" ? digitDirection : direction, stake: stakeValue, duration: durationValue, durationUnit: contractMode === "digit" ? "t" : "s", ...(contractMode === "digit" ? { barrier } : {}) });
   }
 
   const quoteMatchesForm = Boolean(
-    quote && quote.symbol === market?.symbol && quote.contractType === direction
-    && quote.stake === Number(stake) && quote.duration === Number(duration),
+    quote && quote.symbol === market?.symbol
+    && quote.contractType === (contractMode === "digit" ? digitDirection : direction)
+    && quote.stake === Number(stake) && quote.duration === Number(duration)
+    && quote.durationUnit === (contractMode === "digit" ? "t" : "s")
+    && (contractMode !== "digit" || quote.barrier === barrier),
   );
   const quoteSecondsRemaining = quote ? Math.max(0, Math.ceil((30_000 - (now - quote.receivedAt)) / 1000)) : 0;
   const quoteExpired = Boolean(quote && quoteSecondsRemaining <= 0);
@@ -95,16 +101,48 @@ export default function DemoTradeTicket({
     </div>
 
     <fieldset className={styles.directionField} disabled={!ready || busy}>
-      <legend>Contract direction</legend>
+      <legend>Contract type</legend>
       <div className={styles.directionChoices}>
-        <button type="button" className={direction === "CALL" ? styles.callSelected : styles.callButton} onClick={() => setDirection("CALL")} aria-pressed={direction === "CALL"}>
-          <span>↗</span><span><strong>Higher</strong></span>
+        <button type="button" className={contractMode === "directional" ? styles.callSelected : styles.callButton} onClick={() => { setContractMode("directional"); setDuration("60"); }} aria-pressed={contractMode === "directional"}>
+          <span>↗</span><span><strong>Higher / Lower</strong></span>
         </button>
-        <button type="button" className={direction === "PUT" ? styles.putSelected : styles.putButton} onClick={() => setDirection("PUT")} aria-pressed={direction === "PUT"}>
-          <span>↘</span><span><strong>Lower</strong></span>
+        <button type="button" className={contractMode === "digit" ? styles.putSelected : styles.putButton} onClick={() => { setContractMode("digit"); setDuration("5"); }} aria-pressed={contractMode === "digit"}>
+          <span>0–9</span><span><strong>Digit Over / Under</strong></span>
         </button>
       </div>
     </fieldset>
+    {contractMode === "directional" ? (
+      <fieldset className={styles.directionField} disabled={!ready || busy}>
+        <legend>Price direction</legend>
+        <div className={styles.directionChoices}>
+          <button type="button" className={direction === "CALL" ? styles.callSelected : styles.callButton} onClick={() => setDirection("CALL")} aria-pressed={direction === "CALL"}>
+            <span>↗</span><span><strong>Higher</strong></span>
+          </button>
+          <button type="button" className={direction === "PUT" ? styles.putSelected : styles.putButton} onClick={() => setDirection("PUT")} aria-pressed={direction === "PUT"}>
+            <span>↘</span><span><strong>Lower</strong></span>
+          </button>
+        </div>
+      </fieldset>
+    ) : (
+      <fieldset className={styles.directionField} disabled={!ready || busy}>
+        <legend>Last digit prediction</legend>
+        <div className={styles.directionChoices}>
+          <button type="button" className={digitDirection === "DIGITOVER" ? styles.callSelected : styles.callButton} onClick={() => setDigitDirection("DIGITOVER")} aria-pressed={digitDirection === "DIGITOVER"}>
+            <span>↑</span><span><strong>Over</strong></span>
+          </button>
+          <button type="button" className={digitDirection === "DIGITUNDER" ? styles.putSelected : styles.putButton} onClick={() => setDigitDirection("DIGITUNDER")} aria-pressed={digitDirection === "DIGITUNDER"}>
+            <span>↓</span><span><strong>Under</strong></span>
+          </button>
+        </div>
+        <div className={styles.compactFieldGroup}>
+          <label className={styles.fieldLabel} htmlFor="tradebridge-digit-barrier">Barrier digit (0–9)</label>
+          <select id="tradebridge-digit-barrier" value={barrier} onChange={(event) => setBarrier(event.target.value)} disabled={!ready || busy}>
+            {Array.from({ length: 10 }, (_, digit) => <option key={digit} value={String(digit)}>{digit}</option>)}
+          </select>
+          <p className={styles.compactControlsHint}>Over wins when the last digit is greater than the barrier; Under wins when it is lower. Equal digits do not satisfy either prediction.</p>
+        </div>
+      </fieldset>
+    )}
 
     <div className={styles.compactInputsGrid}>
       <div className={styles.compactFieldGroup}>
@@ -120,11 +158,11 @@ export default function DemoTradeTicket({
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Duration</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max="86400" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
-          <span>sec</span>
+          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={contractMode === "digit" ? 10 : 86400} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+          <span>{contractMode === "digit" ? "ticks" : "sec"}</span>
         </div>
         <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
-          {[{ label: "1m", value: "60" }, { label: "5m", value: "300" }, { label: "10m", value: "600" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
+          {(contractMode === "digit" ? [{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }] : [{ label: "1m", value: "60" }, { label: "5m", value: "300" }, { label: "10m", value: "600" }]).map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
         </div>
       </div>
     </div>
@@ -156,7 +194,7 @@ export default function DemoTradeTicket({
         <div><small>Purchase price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
         <div><small>Potential payout</small><strong>{quote.payout === null ? "Not returned" : quote.payout.toLocaleString() + " " + quote.currency}</strong></div>
       </div>
-      <p>{quote.contractType === "CALL" ? "Higher" : "Lower"} · {quote.symbol} · {quote.duration} seconds</p>
+      <p>{quote.contractType === "CALL" ? "Higher" : quote.contractType === "PUT" ? "Lower" : quote.contractType === "DIGITOVER" ? `Digit Over ${quote.barrier}` : `Digit Under ${quote.barrier}`} · {quote.symbol} · {quote.duration} {quote.durationUnit === "t" ? "ticks" : "seconds"}</p>
       <button type="button" className={isRealAccount ? styles.confirmLiveButton : styles.confirmButton} onClick={confirmQuote} disabled={!ready || busy || quoteExpired}>
         {isRealAccount ? "Confirm real-money trade" : "Confirm demo trade"} <span>→</span>
       </button>
@@ -169,7 +207,7 @@ export default function DemoTradeTicket({
       <span className={sessionState === expectedSessionState ? styles.statusDotConnected : styles.statusDot} />
       <div><strong>{sessionState}</strong>{status && <p>{status}</p>}</div>
     </div>
-    <button type="button" className={isRealAccount ? styles.getLiveQuoteButton : styles.getQuoteButton} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 86400}>
+    <button type="button" className={isRealAccount ? styles.getLiveQuoteButton : styles.getQuoteButton} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > (contractMode === "digit" ? 10 : 86400)}>
       {busy ? "Waiting for Deriv…" : quoteMatchesForm && !quoteExpired ? "Request a new quote" : isRealAccount ? "Get live quote" : "Get demo quote"}
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
