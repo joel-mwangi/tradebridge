@@ -5,11 +5,13 @@ import { createClient } from "../../lib/supabase/client";
 
 type Item = { id: string; name: string; source_format: string; status: string; created_at: string; account_id?: string | null; last_error?: string | null; session_pnl?: number | string | null };
 type DemoAccount = { account_id: string; account_type: string | null; currency: string | null; balance?: number | null };
+type Trade = { id: string; symbol: string; contract_type: string; status: string; stake: number | string; realized_pnl?: number | string | null; created_at: string };
 
 export default function DigitStrategyControls({ userId }: { userId: string | null }) {
   const [items, setItems] = useState<Item[]>([]);
   const [accountId, setAccountId] = useState("");
   const [accounts, setAccounts] = useState<DemoAccount[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -21,6 +23,10 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
       .eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
     if (error) setError("Could not load saved strategy states.");
     else setItems((data ?? []) as Item[]);
+    const tradeResult = await createClient().from("digit_strategy_trades")
+      .select("id,symbol,contract_type,status,stake,realized_pnl,created_at")
+      .eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
+    if (!tradeResult.error) setTrades((tradeResult.data ?? []) as Trade[]);
   }
   useEffect(() => {
     let alive = true;
@@ -64,6 +70,13 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
       <div className="info"><strong>{item.name}</strong><small>{item.source_format.toUpperCase()} · {item.account_id ?? "No account linked"}</small>{item.last_error && <small className="error">{item.last_error.replaceAll("_", " ")}</small>}{item.session_pnl !== null && item.session_pnl !== undefined && <small>Session P&amp;L: {Number(item.session_pnl).toFixed(2)}</small>}</div>
       <div className="controls"><span className={item.status === "running" ? "running" : ""}>{item.status.toUpperCase()}</span>{item.status === "running" ? <button type="button" disabled={busy === item.id} onClick={() => void act(item, "pause")}>{busy === item.id ? "Working…" : "Pause"}</button> : <button type="button" disabled={busy === item.id || item.source_format === "xml"} onClick={() => void act(item, "start")}>{busy === item.id ? "Working…" : "Start Demo"}</button>}</div>
     </article>)}</div>
+    <div className="tradeHistory">
+      <h3>Recent digit trades</h3>
+      {trades.length === 0 ? <p>No digit contracts recorded yet.</p> : trades.map((trade) => <article key={trade.id}>
+        <div><strong>{trade.symbol} · {trade.contract_type.replace("DIGIT", "")}</strong><small>{new Date(trade.created_at).toLocaleString()} · Stake {Number(trade.stake).toFixed(2)}</small></div>
+        <div className="tradeResult"><span>{trade.status.toUpperCase()}</span>{trade.realized_pnl !== null && trade.realized_pnl !== undefined && <strong className={Number(trade.realized_pnl) >= 0 ? "positive" : "negative"}>{Number(trade.realized_pnl) > 0 ? "+" : ""}{Number(trade.realized_pnl).toFixed(2)}</strong>}</div>
+      </article>)}
+    </div>
     <style jsx>{`
       .runtime{grid-column:1/-1;border:1px solid var(--bot-line);border-radius:14px;padding:20px;background:var(--bot-panel);min-width:0}
       header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
@@ -75,7 +88,7 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
       button:disabled{opacity:.55;cursor:not-allowed}
       .items{margin-top:14px}.items article{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--bot-line)}
       .info{min-width:0}.info strong{font-size:13px;color:var(--bot-ink);overflow-wrap:anywhere}.controls{display:flex;align-items:center;gap:10px;flex-shrink:0}.controls span{font-size:10px;font-weight:800;color:var(--bot-muted)}.controls .running{color:var(--bot-success)}
-      .error{color:#fca5a5}.message{color:var(--bot-success);font-size:13px}
+      .tradeHistory{margin-top:18px;border-top:1px solid var(--bot-line);padding-top:14px}.tradeHistory h3{font-size:14px;color:var(--bot-ink);margin:0 0 8px}.tradeHistory p{color:var(--bot-muted);font-size:12px}.tradeHistory article{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bot-line)}.tradeHistory article strong{font-size:12px;color:var(--bot-ink)}.tradeResult{display:flex;align-items:center;gap:10px;flex-shrink:0}.tradeResult span{font-size:10px;color:var(--bot-muted);font-weight:800}.tradeResult .positive{color:var(--bot-success)}.tradeResult .negative{color:#fca5a5}.error{color:#fca5a5}.message{color:var(--bot-success);font-size:13px}
       @media(max-width:600px){header,.items article{align-items:flex-start}.items article{flex-direction:column}.controls{width:100%;justify-content:space-between}}
     `}</style>
   </section>;
