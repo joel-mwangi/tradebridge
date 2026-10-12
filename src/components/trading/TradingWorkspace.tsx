@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import BotManager from "./BotManager";
-import DemoTradeTicket from "./DemoTradeTicket";
 import LiveTradingControls from "./LiveTradingControls";
 import MarketWatch from "./MarketWatch";
 import DigitAnalysis from "./DigitAnalysis";
@@ -513,46 +512,7 @@ export default function TradingWorkspace() {
                     <Link href="/markets" className={styles.secondaryButton}>Change market</Link>
                   </div>
                 </div>
-                <div className={styles.tradeTicketColumn}>
-                  {connected && activeAccountIsReal && activeAccount && <div id="live-controls">
-                    <LiveTradingControls
-                      account={activeAccount}
-                      executionGatewayAvailable={REAL_EXECUTION_GATEWAY_AVAILABLE}
-                      consentEnabled={liveTradingEnabled}
-                      enabled={effectiveLiveTradingEnabled}
-                      loading={liveConsentLoading}
-                      busy={liveConsentBusy}
-                      maxStake={maxRealStake}
-                      maxDailyLoss={maxDailyLoss}
-                      message={liveConsentMessage}
-                      onEnable={enableLiveTrading}
-                      onDisable={disableLiveTrading}
-                    />
-                  </div>}
-                  <div className={styles.tradeTicketWorkspace}>
-                    <DemoTradeTicket
-                      connected={connected}
-                      account={activeAccount}
-                      realTradingEnabled={effectiveLiveTradingEnabled}
-                      maxRealStake={maxRealStake}
-                      maxDailyLoss={maxDailyLoss}
-                      realizedProfit={trading.realizedProfit}
-                      orderResolutionRequired={trading.orderResolutionRequired}
-                      acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
-                      market={selectedMarket}
-                      mode={digitMode}
-                      prediction={digitPrediction}
-                      onPredictionChange={setPredictionAndValidateTarget}
-                      target={digitTarget}
-                      sessionState={trading.sessionState}
-                      status={trading.status}
-                      busy={trading.busy}
-                      quote={trading.quote}
-                      requestQuote={trading.requestQuote}
-                      confirmQuote={trading.confirmQuote}
-                    />
-                  </div>
-                </div>
+
               </div>
 
               <TradingActivity
