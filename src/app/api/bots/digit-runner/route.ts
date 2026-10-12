@@ -251,11 +251,18 @@ export async function GET(request: NextRequest) {
     // duplicate work from overlapping cron invocations; unresolved order checks remain authoritative.
     const staleBefore = new Date(Date.now() - 45_000).toISOString();
     const claimedAt = new Date().toISOString();
-    const claim = await admin.from("bot_strategy_definitions").update({ last_evaluated_at: claimedAt })
+    // A claim is not an evaluation. Keep the lease separate from last_evaluated_at
+    // so the UI only reports completed runner work as an evaluation heartbeat.
+    const claim = await admin.from("bot_strategy_definitions").update({ runner_claimed_at: claimedAt })
       .eq("id", strategy.id).eq("status", strategy.status)
-      .or("last_evaluated_at.is.null,last_evaluated_at.lt." + staleBefore).select("id");
+      .or("runner_claimed_at.is.null,runner_claimed_at.lt." + staleBefore).select("id");
     if (claim.error || !claim.data?.length) continue;
-    results.push(await execute(admin, { ...strategy, last_evaluated_at: claimedAt }));
+    const result = await execute(admin, { ...strategy, runner_claimed_at: claimedAt });
+    await admin.from("bot_strategy_definitions").update({
+      last_evaluated_at: new Date().toISOString(),
+      runner_last_result: String(result.result ?? "unknown"),
+    }).eq("id", strategy.id);
+    results.push(result);
   }
   return NextResponse.json({ processed: results.length, results }, { headers: HEADERS });
 }
