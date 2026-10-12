@@ -5,10 +5,9 @@ import type { DigitContractMode, DigitPrediction, MarketInstrument, MarketSnapsh
 import styles from "./DigitAnalysis.module.css";
 const DIGITS = Array.from({ length: 10 }, (_, i) => i);
 
-export default function DigitAnalysis({ market, snapshot, connection, mode, onModeChange, prediction, target, onTargetChange }: {
+export default function DigitAnalysis({ market, snapshot, mode, onModeChange, prediction, target, onTargetChange }: {
   market: MarketInstrument | null;
   snapshot?: MarketSnapshot;
-  connection: string;
   mode: DigitContractMode;
   onModeChange: (mode: DigitContractMode) => void;
   prediction: DigitPrediction;
@@ -36,9 +35,6 @@ export default function DigitAnalysis({ market, snapshot, connection, mode, onMo
   const matches = counts[target];
   const differs = total - matches;
   const recent = [...digits].slice(-30).reverse();
-  const updated = snapshot?.updatedAt ?? 0;
-  const stale = !updated || Date.now() - updated > 15000;
-  const live = connection === "Live prices" || connection === "Live market stream connected";
   const percent = (n: number) => total ? (n / total * 100).toFixed(1) + "%" : "—";
 
   return <section className={styles.root} aria-label="Digit analysis">
