@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
 type ContractType = "DIGITOVER" | "DIGITUNDER" | "DIGITEVEN" | "DIGITODD" | "DIGITMATCH" | "DIGITDIFF";
@@ -55,7 +55,10 @@ function validateDraft(value: unknown): { draft?: StrategyDraft; errors: string[
   return { draft: { version: 1, market: v.market as string, contract_type: v.contract_type as ContractType, barrier, duration_ticks: Number(v.duration_ticks), stake: Number(v.stake), entry_rule: v.entry_rule as StrategyDraft["entry_rule"], frequency_window: Number(v.frequency_window), max_session_loss: Number(v.max_session_loss), session_profit_target: Number(v.session_profit_target) }, errors: [] };
 }
 
+type SavedDraft = { id: string; name: string; source_format: string; status: string; created_at: string };
+
 export default function BotStrategyBuilder({ userId }: { userId: string | null }) {
+  const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
   const [name, setName] = useState("Digit strategy draft");
   const [market, setMarket] = useState("1HZ75V");
   const [contractType, setContractType] = useState<ContractType>("DIGITOVER");
@@ -75,6 +78,22 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const contract = CONTRACTS.find((item) => item.value === contractType)!;
+
+  useEffect(() => {
+    let alive = true;
+    async function loadDrafts() {
+      if (!userId) { setSavedDrafts([]); return; }
+      const supabase = createClient();
+      const { data, error } = await supabase.from("bot_strategy_definitions")
+        .select("id,name,source_format,status,created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (alive && !error) setSavedDrafts((data ?? []) as SavedDraft[]);
+    }
+    void loadDrafts();
+    return () => { alive = false; };
+  }, [userId]);
 
   const nativeCandidate = useMemo(() => ({
     version: 1,
@@ -174,6 +193,12 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
       });
       if (error) throw error;
       setNotice("Strategy draft saved. It is not executable and will not place trades until the digit runner explicitly supports this schema.");
+      const { data } = await createClient().from("bot_strategy_definitions")
+        .select("id,name,source_format,status,created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      setSavedDrafts((data ?? []) as SavedDraft[]);
     } catch (e) {
       setErrors([e instanceof Error ? e.message : "Could not save strategy draft. Apply the bot strategy migration and try again."]);
     } finally {
@@ -245,6 +270,15 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
       {xmlBlocks.length > 0 && <div className="blockSummary"><strong>Recognized block inventory</strong><p>{[...new Set(xmlBlocks)].join(", ")}</p><small>Block recognition is not the same as translating the strategy into executable rules.</small></div>}
       {errors.length > 0 && <div className="builderErrors" role="alert">{errors.map((item) => <p key={item}>{item}</p>)}</div>}
       {notice && <div className="builderNotice" role="status">{notice}</div>}
+      <div className="savedDrafts">
+        <div className="savedHeading"><strong>Saved strategy drafts</strong><span>{savedDrafts.length} recent</span></div>
+        {savedDrafts.length === 0 ? <p className="hint">No saved strategy drafts yet.</p> : savedDrafts.map((item) => (
+          <div className="savedDraft" key={item.id}>
+            <div><strong>{item.name}</strong><small>{item.source_format.toUpperCase()} · {new Date(item.created_at).toLocaleString()}</small></div>
+            <span>{item.status.toUpperCase()}</span>
+          </div>
+        ))}
+      </div>
       <div className="builderActions">
         <button className="secondary" type="button" onClick={() => { setSourceFormat("native"); setSourceContent(""); setFileName(""); setDraft(null); setXmlBlocks([]); setErrors([]); setNotice(""); }}>Use native builder</button>
         <button className="primary" type="button" onClick={() => void saveDraft()} disabled={saving || !userId}>{saving ? "Saving draft…" : "Save strategy draft"}</button>
@@ -264,6 +298,14 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
         .builderField.full { grid-column:1 / -1; }
         .builderField label,.importRow label { color:var(--bot-label); font-size:13px; font-weight:650; }
         .builderField input,.builderField select,.importRow input[type=file] { box-sizing:border-box; width:100%; min-width:0; border:1px solid var(--bot-border); border-radius:9px; background:var(--bot-card); color:var(--bot-ink); padding:11px 12px; font:inherit; }
+        .savedDrafts { margin-top:18px; border-top:1px solid var(--bot-line); padding-top:14px; }
+        .savedHeading,.savedDraft { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+        .savedHeading { color:var(--bot-ink); font-size:13px; margin-bottom:8px; }
+        .savedHeading span,.savedDraft small { color:var(--bot-muted); font-size:11px; }
+        .savedDraft { padding:9px 0; border-bottom:1px solid var(--bot-line); }
+        .savedDraft div { min-width:0; display:grid; gap:4px; overflow-wrap:anywhere; }
+        .savedDraft strong { font-size:13px; color:var(--bot-ink); }
+        .savedDraft > span { flex-shrink:0; color:#fbbf24; font-size:10px; font-weight:800; }
         .importRow { display:grid; gap:8px; margin-top:18px; padding-top:16px; border-top:1px solid var(--bot-line); }
         .importRow input[type=file] { padding:9px; }
         .hint,.blockSummary small { color:var(--bot-muted); font-size:12px; margin:0; line-height:1.5; }
