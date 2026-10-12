@@ -65,7 +65,7 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
   const [barrier, setBarrier] = useState("5");
   const [durationTicks, setDurationTicks] = useState("1");
   const [stake, setStake] = useState("1");
-  const [entryRule, setEntryRule] = useState<StrategyDraft["entry_rule"]>("manual_review");
+  const [entryRule, setEntryRule] = useState<StrategyDraft["entry_rule"]>("last_digit_frequency");
   const [windowSize, setWindowSize] = useState("100");
   const [maxLoss, setMaxLoss] = useState("5");
   const [profitTarget, setProfitTarget] = useState("5");
@@ -246,7 +246,7 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
           <label htmlFor="strategy-entry">Entry condition</label>
           <select id="strategy-entry" value={entryRule} onChange={(e) => setEntryRule(e.target.value as StrategyDraft["entry_rule"])}>
             <option value="manual_review">Manual review — no automatic entries</option>
-            <option value="last_digit_frequency">Last-digit frequency rule (draft)</option>
+            <option value="last_digit_frequency">Last-digit frequency rule (automatic entries when armed)</option>
           </select>
         </div>
         <div className="builderField">
