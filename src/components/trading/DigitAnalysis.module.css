@@ -20,9 +20,9 @@
 .panelTitle { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:16px; }
 .panelTitle h3 { margin:0; color:var(--ink); font-size:14px; font-weight:800; }
 .panelTitle p { margin:5px 0 0; color:var(--muted); font-size:10px; }
-.frequencyGrid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px 8px; }
+.frequencyGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,78px),1fr)); gap:12px 8px; }
 .frequencyItem { min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
-.ring { position:relative; display:grid; place-items:center; width:44px; height:44px; flex:0 0 44px; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
+.ring { position:relative; display:grid; place-items:center; width:clamp(34px,4vw,44px); height:clamp(34px,4vw,44px); flex:0 0 auto; aspect-ratio:1; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
 .ring strong { font-size:16px; }
 .top { border-color:#4ade80; background:#142d25; color:#4ade80; box-shadow:0 0 0 3px rgba(74,222,128,.10), 0 0 12px rgba(74,222,128,.12); }
 .second { border-color:#60a5fa; background:#17283d; color:#60a5fa; }
@@ -46,5 +46,5 @@
 .disclaimer { display:grid; gap:5px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
 .disclaimer strong { color:var(--teal); font-size:10px; font-weight:800; }
 .disclaimer p { margin:0; color:var(--muted); font-size:10px; line-height:1.55; }
-@media (max-width:850px) { .frequencyGrid { grid-template-columns:repeat(5,minmax(0,1fr)); row-gap:12px; } .ring { width:42px; height:42px; flex-basis:42px; } .lowerGrid { grid-template-columns:1fr; } }
+@media (max-width:850px) { .frequencyGrid { gap:12px 6px; } .lowerGrid { grid-template-columns:1fr; } }
 @media (max-width:520px) { .controls { grid-template-columns:1fr; } .header { flex-direction:column; } .statusLive,.statusStale { max-width:100%; } .modeSummary > div strong { font-size:20px; } .panel { padding:12px; } }
