@@ -12,7 +12,7 @@ import DigitAnalysis from "./DigitAnalysis";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
-import type { DerivAccount } from "./types";
+import type { DerivAccount, DigitContractMode } from "./types";
 
 type AccountsResponse = {
   connected?: boolean;
@@ -116,6 +116,8 @@ export default function TradingWorkspace() {
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [digitMode, setDigitMode] = useState<DigitContractMode>("over-under");
+  const [digitTarget, setDigitTarget] = useState(5);
   useEffect(() => {
     const saved = localStorage.getItem("tradebridge_theme");
     if (saved === "light" || saved === "dark") setTheme(saved);
@@ -458,7 +460,7 @@ export default function TradingWorkspace() {
                 <div className={styles.introMain}>
                   <p className={styles.eyebrow}>Explore instruments</p>
                   <h1 className={styles.title}>Markets</h1>
-                  <p className={styles.subtitle}>Browse every eligible instrument returned by Deriv. Select a market to open its chart and trade ticket together on the Trade page.</p>
+                  <p className={styles.subtitle}>Browse instruments eligible for digit contracts, then select one to open its live digit analysis and trade controls.</p>
                 </div>
                 <div className={styles.introActions}>
                   <span className={connection === "Live prices" ? styles.liveStatus : styles.connectionStatus}><i />{connection}</span>
@@ -485,7 +487,7 @@ export default function TradingWorkspace() {
                 <div className={styles.introMain}>
                   <p className={styles.eyebrow}>Trading workspace</p>
                   <h1 className={styles.title}>Trade</h1>
-                  <p className={styles.subtitle}>Choose a market, analyse its price action and review your order without switching pages. Open positions stay available below.</p>
+                  <p className={styles.subtitle}>Analyse live last-digit behaviour and configure a digit contract in one workspace. Open positions stay available below.</p>
                 </div>
                 <div className={styles.introActions}>
                   <Link className={styles.secondaryButton} href="/portfolio">View portfolio →</Link>
@@ -499,6 +501,10 @@ export default function TradingWorkspace() {
                     market={selectedMarket}
                     snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
                     connection={connection}
+                    mode={digitMode}
+                    onModeChange={setDigitMode}
+                    target={digitTarget}
+                    onTargetChange={setDigitTarget}
                   />
                   <div className={styles.marketSelectionFooter}>
                     <span><strong>{selectedMarket?.name ?? "No market selected"}</strong><small>{selectedMarket?.symbol ?? "Choose an available instrument to begin"}</small></span>
@@ -532,6 +538,8 @@ export default function TradingWorkspace() {
                       orderResolutionRequired={trading.orderResolutionRequired}
                       acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
                       market={selectedMarket}
+                      mode={digitMode}
+                      target={digitTarget}
                       sessionState={trading.sessionState}
                       status={trading.status}
                       busy={trading.busy}
