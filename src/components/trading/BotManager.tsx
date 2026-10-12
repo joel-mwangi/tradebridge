@@ -578,9 +578,6 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
         h2 { margin:0; color:var(--bot-ink); font-size:17px; font-weight:800; letter-spacing:-.3px; }
         .sub { margin:6px 0 0; max-width:720px; color:var(--bot-muted); font-size:12px; line-height:1.6; }
         .grid { display:grid; grid-template-columns:minmax(260px,.85fr) minmax(0,1.4fr); align-items:start; gap:18px; }
-        .notice { display:flex; align-items:flex-start; gap:11px; padding:14px 16px; border:1px solid var(--bot-warning-border); border-radius:11px; background:var(--bot-warning-bg); color:var(--bot-warning); }
-        .notice strong { display:block; margin-bottom:4px; font-size:12px; }
-        .notice p { margin:0; color:var(--bot-warning-muted); font-size:11px; line-height:1.65; }
         .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
         .stat { min-width:0; padding:16px; border:1px solid var(--bot-line); border-radius:11px; background:var(--bot-panel); }
         .stat span { color:var(--bot-muted); font-size:11px; font-weight:700; }
