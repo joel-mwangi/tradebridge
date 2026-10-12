@@ -2,7 +2,32 @@
 
 import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
-import type { DemoQuote, DerivAccount, MarketInstrument } from "./types";
+import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, MarketInstrument } from "./types";
+
+type DigitPrediction = "OVER" | "UNDER" | "EVEN" | "ODD" | "MATCHES" | "DIFFERS";
+
+const PREDICTIONS: Record<DigitContractMode, Array<{ label: string; value: DigitPrediction }>> = {
+  "over-under": [{ label: "Over", value: "OVER" }, { label: "Under", value: "UNDER" }],
+  "even-odd": [{ label: "Even", value: "EVEN" }, { label: "Odd", value: "ODD" }],
+  "matches-differs": [{ label: "Matches", value: "MATCHES" }, { label: "Differs", value: "DIFFERS" }],
+};
+
+function getContractType(mode: DigitContractMode, prediction: DigitPrediction): DigitContractType {
+  if (mode === "over-under") return prediction === "UNDER" ? "DIGITUNDER" : "DIGITOVER";
+  if (mode === "even-odd") return prediction === "ODD" ? "DIGITODD" : "DIGITEVEN";
+  return prediction === "DIFFERS" ? "DIGITDIFF" : "DIGITMATCH";
+}
+
+function getContractLabel(contractType: DigitContractType, barrier?: string) {
+  switch (contractType) {
+    case "DIGITOVER": return `Over ${barrier}`;
+    case "DIGITUNDER": return `Under ${barrier}`;
+    case "DIGITEVEN": return "Even";
+    case "DIGITODD": return "Odd";
+    case "DIGITMATCH": return `Matches ${barrier}`;
+    case "DIGITDIFF": return `Differs from ${barrier}`;
+  }
+}
 
 type Props = {
   connected: boolean;
@@ -14,25 +39,24 @@ type Props = {
   orderResolutionRequired: boolean;
   acknowledgeOrderResolution: () => void;
   market: MarketInstrument | null;
+  mode: DigitContractMode;
+  target: number;
   sessionState: string;
   status: string;
   busy: boolean;
   quote: DemoQuote | null;
-  requestQuote: (input: { symbol: string; contractType: "CALL" | "PUT" | "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "s" | "t"; barrier?: string }) => void;
+  requestQuote: (input: { symbol: string; contractType: DigitContractType; stake: number; duration: number; durationUnit: "t"; barrier?: string }) => void;
   confirmQuote: () => void;
 };
 
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
   orderResolutionRequired, acknowledgeOrderResolution,
-  market, sessionState, status, busy, quote, requestQuote, confirmQuote,
+  market, mode, target, sessionState, status, busy, quote, requestQuote, confirmQuote,
 }: Props) {
-  const [contractMode, setContractMode] = useState<"directional" | "digit">("directional");
-  const [direction, setDirection] = useState<"CALL" | "PUT">("CALL");
-  const [digitDirection, setDigitDirection] = useState<"DIGITOVER" | "DIGITUNDER">("DIGITOVER");
-  const [barrier, setBarrier] = useState("5");
+  const [prediction, setPrediction] = useState<DigitPrediction>("OVER");
   const [stake, setStake] = useState("1");
-  const [duration, setDuration] = useState("60");
+  const [duration, setDuration] = useState("5");
   const [takeProfit, setTakeProfit] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -44,6 +68,17 @@ export default function DemoTradeTicket({
   const dailyLossReached = isRealAccount && realizedProfit !== null && realizedProfit <= -maxDailyLoss;
   const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached && !orderResolutionRequired;
   const maxStake = isRealAccount ? maxRealStake : 1000;
+  const predictionOptions = PREDICTIONS[mode];
+  const activePrediction = predictionOptions.some((option) => option.value === prediction)
+    ? prediction
+    : predictionOptions[0].value;
+  const contractType = getContractType(mode, activePrediction);
+  const requiresTarget = mode !== "even-odd";
+
+  useEffect(() => {
+    setPrediction(PREDICTIONS[mode][0].value);
+    setDuration("5");
+  }, [mode]);
 
   useEffect(() => {
     if (!quote) return;
@@ -55,15 +90,15 @@ export default function DemoTradeTicket({
     if (!ready || !market) return;
     const stakeValue = Number(stake);
     const durationValue = Number(duration);
-    requestQuote({ symbol: market.symbol, contractType: contractMode === "digit" ? digitDirection : direction, stake: stakeValue, duration: durationValue, durationUnit: contractMode === "digit" ? "t" : "s", ...(contractMode === "digit" ? { barrier } : {}) });
+    requestQuote({ symbol: market.symbol, contractType, stake: stakeValue, duration: durationValue, durationUnit: "t", ...(requiresTarget ? { barrier: String(target) } : {}) });
   }
 
   const quoteMatchesForm = Boolean(
     quote && quote.symbol === market?.symbol
-    && quote.contractType === (contractMode === "digit" ? digitDirection : direction)
+    && quote.contractType === contractType
     && quote.stake === Number(stake) && quote.duration === Number(duration)
-    && quote.durationUnit === (contractMode === "digit" ? "t" : "s")
-    && (contractMode !== "digit" || quote.barrier === barrier),
+    && quote.durationUnit === "t"
+    && quote.barrier === (requiresTarget ? String(target) : undefined),
   );
   const quoteSecondsRemaining = quote ? Math.max(0, Math.ceil((30_000 - (now - quote.receivedAt)) / 1000)) : 0;
   const quoteExpired = Boolean(quote && quoteSecondsRemaining <= 0);
@@ -96,54 +131,30 @@ export default function DemoTradeTicket({
     </div>}
 
     <div className={styles.tradeMarket}>
-      <span className={styles.tradeMarketIcon}>{market?.market === "forex" ? "FX" : "↗"}</span>
+      <span className={styles.tradeMarketIcon}>0–9</span>
       <div><strong>{market?.name ?? "Select a market"}</strong><small>{market?.symbol ?? "No active market selected"}</small></div>
     </div>
 
     <fieldset className={styles.directionField} disabled={!ready || busy}>
-      <legend>Contract type</legend>
+      <legend>{mode === "over-under" ? "Over / Under prediction" : mode === "even-odd" ? "Even / Odd prediction" : "Matches / Differs prediction"}</legend>
       <div className={styles.directionChoices}>
-        <button type="button" className={contractMode === "directional" ? styles.callSelected : styles.callButton} onClick={() => { setContractMode("directional"); setDuration("60"); }} aria-pressed={contractMode === "directional"}>
-          <span>↗</span><span><strong>Higher / Lower</strong></span>
-        </button>
-        <button type="button" className={contractMode === "digit" ? styles.putSelected : styles.putButton} onClick={() => { setContractMode("digit"); setDuration("5"); }} aria-pressed={contractMode === "digit"}>
-          <span>0–9</span><span><strong>Digit Over / Under</strong></span>
-        </button>
+        {predictionOptions.map((option, index) => {
+          const selected = activePrediction === option.value;
+          const affirmative = index === 0;
+          return <button
+            key={option.value}
+            type="button"
+            className={selected ? (affirmative ? styles.callSelected : styles.putSelected) : (affirmative ? styles.callButton : styles.putButton)}
+            onClick={() => setPrediction(option.value)}
+            aria-pressed={selected}
+          >
+            <span>{option.label}</span>
+          </button>;
+        })}
       </div>
     </fieldset>
-    {contractMode === "directional" ? (
-      <fieldset className={styles.directionField} disabled={!ready || busy}>
-        <legend>Price direction</legend>
-        <div className={styles.directionChoices}>
-          <button type="button" className={direction === "CALL" ? styles.callSelected : styles.callButton} onClick={() => setDirection("CALL")} aria-pressed={direction === "CALL"}>
-            <span>↗</span><span><strong>Higher</strong></span>
-          </button>
-          <button type="button" className={direction === "PUT" ? styles.putSelected : styles.putButton} onClick={() => setDirection("PUT")} aria-pressed={direction === "PUT"}>
-            <span>↘</span><span><strong>Lower</strong></span>
-          </button>
-        </div>
-      </fieldset>
-    ) : (
-      <fieldset className={styles.directionField} disabled={!ready || busy}>
-        <legend>Last digit prediction</legend>
-        <div className={styles.directionChoices}>
-          <button type="button" className={digitDirection === "DIGITOVER" ? styles.callSelected : styles.callButton} onClick={() => { setDigitDirection("DIGITOVER"); if (Number(barrier) > 8) setBarrier("5"); }} aria-pressed={digitDirection === "DIGITOVER"}>
-            <span>↑</span><span><strong>Over</strong></span>
-          </button>
-          <button type="button" className={digitDirection === "DIGITUNDER" ? styles.putSelected : styles.putButton} onClick={() => { setDigitDirection("DIGITUNDER"); if (Number(barrier) < 1) setBarrier("5"); }} aria-pressed={digitDirection === "DIGITUNDER"}>
-            <span>↓</span><span><strong>Under</strong></span>
-          </button>
-        </div>
-        <div className={styles.compactFieldGroup}>
-          <label className={styles.fieldLabel} htmlFor="tradebridge-digit-barrier">Barrier digit (0–9)</label>
-          <select id="tradebridge-digit-barrier" value={barrier} onChange={(event) => setBarrier(event.target.value)} disabled={!ready || busy}>
-            {(digitDirection === "DIGITOVER" ? Array.from({ length: 9 }, (_, digit) => digit) : Array.from({ length: 9 }, (_, digit) => digit + 1)).map((digit) => <option key={digit} value={String(digit)}>{digit}</option>)}
-          </select>
-          <p className={styles.compactControlsHint}>Over wins when the last digit is greater than the barrier; Under wins when it is lower. Equal digits do not satisfy either prediction.</p>
-        </div>
-      </fieldset>
-    )}
-
+    {mode === "over-under" && <p className={styles.compactControlsHint}>Barrier digit: <strong>{target}</strong>. Over wins above the barrier; Under wins below it. An equal digit satisfies neither prediction.</p>}
+    {mode === "matches-differs" && <p className={styles.compactControlsHint}>Target digit: <strong>{target}</strong>. Matches wins on that digit; Differs wins on any other digit.</p>}
     <div className={styles.compactInputsGrid}>
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake</label>
@@ -158,11 +169,11 @@ export default function DemoTradeTicket({
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Duration</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={contractMode === "digit" ? 10 : 86400} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
-          <span>{contractMode === "digit" ? "ticks" : "sec"}</span>
+          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+          <span>ticks</span>
         </div>
         <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
-          {(contractMode === "digit" ? [{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }] : [{ label: "1m", value: "60" }, { label: "5m", value: "300" }, { label: "10m", value: "600" }]).map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
+          {[{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
         </div>
       </div>
     </div>
@@ -194,7 +205,7 @@ export default function DemoTradeTicket({
         <div><small>Purchase price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
         <div><small>Potential payout</small><strong>{quote.payout === null ? "Not returned" : quote.payout.toLocaleString() + " " + quote.currency}</strong></div>
       </div>
-      <p>{quote.contractType === "CALL" ? "Higher" : quote.contractType === "PUT" ? "Lower" : quote.contractType === "DIGITOVER" ? `Digit Over ${quote.barrier}` : `Digit Under ${quote.barrier}`} · {quote.symbol} · {quote.duration} {quote.durationUnit === "t" ? "ticks" : "seconds"}</p>
+      <p>{getContractLabel(quote.contractType, quote.barrier)} · {quote.symbol} · {quote.duration} ticks</p>
       <button type="button" className={isRealAccount ? styles.confirmLiveButton : styles.confirmButton} onClick={confirmQuote} disabled={!ready || busy || quoteExpired}>
         {isRealAccount ? "Confirm real-money trade" : "Confirm demo trade"} <span>→</span>
       </button>
@@ -207,7 +218,7 @@ export default function DemoTradeTicket({
       <span className={sessionState === expectedSessionState ? styles.statusDotConnected : styles.statusDot} />
       <div><strong>{sessionState}</strong>{status && <p>{status}</p>}</div>
     </div>
-    <button type="button" className={isRealAccount ? styles.getLiveQuoteButton : styles.getQuoteButton} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > (contractMode === "digit" ? 10 : 86400)}>
+    <button type="button" className={isRealAccount ? styles.getLiveQuoteButton : styles.getQuoteButton} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10}>
       {busy ? "Waiting for Deriv…" : quoteMatchesForm && !quoteExpired ? "Request a new quote" : isRealAccount ? "Get live quote" : "Get demo quote"}
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
