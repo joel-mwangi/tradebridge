@@ -7,6 +7,9 @@ The bot engine is **Demo-only**. Real-account order sessions remain disabled. A 
 Apply migrations to the intended Supabase project, including:
 
 - `supabase/migrations/20261011133000_add_demo_bot_runner.sql`
+- `supabase/migrations/20261012120000_add_bot_strategy_definitions.sql`
+- `supabase/migrations/20261012160000_digit_strategy_runtime.sql`
+- `supabase/migrations/20261012190000_fix_digit_runner_heartbeat.sql`
 
 This migration disables legacy active flags because those rows were only UI configurations, moves activation behind a server API, encrypts credentials in a service-role-only table, and creates an append-only-by-client trade ledger.
 
@@ -46,7 +49,7 @@ The digit-strategy endpoint is:
 
 `GET https://<your-production-domain>/api/bots/digit-runner`
 
-Both accept only `Authorization: Bearer <CRON_SECRET>`. The digit runner checks unresolved contracts before entries, claims evaluation windows, validates a chronological holdout using a 95% Wilson lower bound, and stops on configured session P&L limits. An ambiguous order pauses the strategy and is never retried blindly.
+Both accept only `Authorization: Bearer <CRON_SECRET>`. The digit runner checks unresolved contracts before entries, claims evaluation windows using a separate `runner_claimed_at` lease, records `last_evaluated_at` only after a completed evaluation, stores the outcome in `runner_last_result`, validates a chronological holdout using a 95% Wilson lower bound, and stops on configured session P&L limits. An ambiguous order pauses the strategy and is never retried blindly.
 
 **The Vercel project currently uses the Hobby plan**, whose Cron Jobs can only run once per day. A per-minute Vercel Cron configuration would fail deployment, so do not add a one-minute Vercel cron to this project unless its plan changes.
 
@@ -95,7 +98,7 @@ select cron.schedule(
 );
 ```
 
-If either job already exists, unschedule it by job name before scheduling a replacement. Review Supabase Cron run history and Vercel function logs to verify both endpoints execute. An HTTP request being sent is not proof that a trade was placed; inspect the API response, digit-strategy trade ledger, and TradeBridge activity.
+If either job already exists, unschedule it by job name before scheduling a replacement. Review Supabase Cron run history and Vercel function logs to verify both endpoints execute. An HTTP request being sent is not proof that a trade was placed; inspect the API response, digit-strategy trade ledger, and TradeBridge activity. In the Automated Bots tab, `ARMED` means eligible for evaluation—not currently trading. Check `Last completed evaluation`, `Runner result`, and the trade ledger to verify runtime behavior.
 
 ## 4. Arm a Demo bot
 
