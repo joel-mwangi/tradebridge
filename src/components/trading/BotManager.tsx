@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { createClient } from "../../lib/supabase/client";
+import BotStrategyBuilder from "./BotStrategyBuilder";
 
 type StrategyType = "trend_following" | "mean_reversion" | "breakout" | "momentum";
 
@@ -696,6 +697,8 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
           <small>Summed from the bot records; account currency may vary</small>
         </div>
       </div>
+
+      <BotStrategyBuilder userId={userId} />
 
       <div className="grid">
         <section className="panel" aria-labelledby="create-bot-title">
