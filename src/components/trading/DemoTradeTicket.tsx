@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
-import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, MarketInstrument } from "./types";
-
-type DigitPrediction = "OVER" | "UNDER" | "EVEN" | "ODD" | "MATCHES" | "DIFFERS";
+import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument } from "./types";
 
 const PREDICTIONS: Record<DigitContractMode, Array<{ label: string; value: DigitPrediction }>> = {
   "over-under": [{ label: "Over", value: "OVER" }, { label: "Under", value: "UNDER" }],
@@ -40,6 +38,8 @@ type Props = {
   acknowledgeOrderResolution: () => void;
   market: MarketInstrument | null;
   mode: DigitContractMode;
+  prediction: DigitPrediction;
+  onPredictionChange: (prediction: DigitPrediction) => void;
   target: number;
   sessionState: string;
   status: string;
@@ -52,9 +52,8 @@ type Props = {
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
   orderResolutionRequired, acknowledgeOrderResolution,
-  market, mode, target, sessionState, status, busy, quote, requestQuote, confirmQuote,
+  market, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote,
 }: Props) {
-  const [prediction, setPrediction] = useState<DigitPrediction>("OVER");
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("5");
   const [takeProfit, setTakeProfit] = useState("");
@@ -76,7 +75,6 @@ export default function DemoTradeTicket({
   const requiresTarget = mode !== "even-odd";
 
   useEffect(() => {
-    setPrediction(PREDICTIONS[mode][0].value);
     setDuration("5");
   }, [mode]);
 
@@ -145,7 +143,7 @@ export default function DemoTradeTicket({
             key={option.value}
             type="button"
             className={selected ? (affirmative ? styles.callSelected : styles.putSelected) : (affirmative ? styles.callButton : styles.putButton)}
-            onClick={() => setPrediction(option.value)}
+            onClick={() => onPredictionChange(option.value)}
             aria-pressed={selected}
           >
             <span>{option.label}</span>
