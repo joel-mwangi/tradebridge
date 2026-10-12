@@ -1,0 +1,58 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+
+const root = path.resolve(__dirname, "..");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+
+const ticket = read("src/components/trading/DemoTradeTicket.tsx");
+const analysis = read("src/components/trading/DigitAnalysis.tsx");
+const workspace = read("src/components/trading/TradingWorkspace.tsx");
+const tradingHook = read("src/components/trading/useDemoTrading.ts");
+const marketData = read("src/components/trading/useMarketData.ts");
+const marketWatch = read("src/components/trading/MarketWatch.tsx");
+const types = read("src/components/trading/types.ts");
+
+test("manual ticket exposes digit prediction modes without Higher/Lower price direction", () => {
+  assert.match(ticket, /"over-under": \[\{ label: "Over".*\{ label: "Under"/);
+  assert.match(ticket, /"even-odd": \[\{ label: "Even".*\{ label: "Odd"/);
+  assert.match(ticket, /"matches-differs": \[\{ label: "Matches".*\{ label: "Differs"/);
+  assert.doesNotMatch(ticket, /Higher\s*\/\s*Lower|Price direction|contractMode.*directional|DIGITOVER.*CALL|CALL.*DIGITUNDER/);
+  assert.match(types, /DigitContractType = "DIGITOVER" \| "DIGITUNDER" \| "DIGITEVEN" \| "DIGITODD" \| "DIGITMATCH" \| "DIGITDIFF"/);
+});
+
+test("one workspace state controls analysis mode, prediction, and ticket", () => {
+  assert.match(workspace, /const \[digitMode, setDigitModeState\]/);
+  assert.match(workspace, /prediction=\{digitPrediction\}/);
+  assert.match(workspace, /mode=\{digitMode\}/);
+  assert.match(workspace, /target=\{digitTarget\}/);
+  assert.match(workspace, /onModeChange=\{setDigitMode\}/);
+  assert.match(workspace, /onPredictionChange=\{setPredictionAndValidateTarget\}/);
+  assert.match(analysis, /onChange=\{\(e\) => onModeChange\(e\.target\.value as DigitContractMode\)\}/);
+  assert.match(ticket, /onClick=\{\(\) => onPredictionChange\(option\.value\)\}/);
+});
+
+test("digit modes map to their Deriv contract types and use tick duration", () => {
+  assert.match(ticket, /prediction === "UNDER" \? "DIGITUNDER" : "DIGITOVER"/);
+  assert.match(ticket, /prediction === "ODD" \? "DIGITODD" : "DIGITEVEN"/);
+  assert.match(ticket, /prediction === "DIFFERS" \? "DIGITDIFF" : "DIGITMATCH"/);
+  assert.match(ticket, /durationUnit: "t"/);
+  assert.match(tradingHook, /contract_type: input\.contractType/);
+  assert.match(tradingHook, /input\.duration > 10 \|\| input\.durationUnit !== "t"/);
+});
+
+test("digit quote barrier validation rejects invalid Over/Under and missing match targets", () => {
+  assert.match(tradingHook, /hasSingleDigitBarrier/);
+  assert.match(tradingHook, /input\.contractType === "DIGITOVER".*barrierValue > 8/s);
+  assert.match(tradingHook, /input\.contractType === "DIGITUNDER".*barrierValue < 1/s);
+  assert.match(tradingHook, /"DIGITMATCH".*hasSingleDigitBarrier/s);
+  assert.match(tradingHook, /"DIGITEVEN".*input\.barrier !== undefined/s);
+});
+
+test("market discovery and market labels are aligned with digit trading", () => {
+  assert.match(marketData, /contract_type: \["DIGITOVER", "DIGITUNDER", "DIGITEVEN", "DIGITODD", "DIGITMATCH", "DIGITDIFF"\]/);
+  assert.doesNotMatch(marketData, /contract_type: \["CALL", "PUT"\]/);
+  assert.doesNotMatch(marketWatch, /eligible instruments for CALL\/PUT contracts|chart and trade ticket/);
+  assert.doesNotMatch(workspace, /analyse its price action/);
+});
