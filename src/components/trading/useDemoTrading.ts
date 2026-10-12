@@ -627,10 +627,11 @@ export function useTradingSession(
       setStatus("Digit contracts require a duration between 1 and 10 ticks.");
       return;
     }
-    if ((input.contractType === "DIGITOVER" && (!input.barrier || Number(input.barrier) < 0 || Number(input.barrier) > 8))
-      || (input.contractType === "DIGITUNDER" && (!input.barrier || Number(input.barrier) < 1 || Number(input.barrier) > 9))
-      || ((input.contractType === "DIGITMATCH" || input.contractType === "DIGITDIFF")
-        && (!input.barrier || !/^\\d$/.test(input.barrier)))) {
+    const hasSingleDigitBarrier = typeof input.barrier === "string" && /^\\d$/.test(input.barrier);
+    const barrierValue = hasSingleDigitBarrier ? Number(input.barrier) : null;
+    if ((input.contractType === "DIGITOVER" && (barrierValue === null || barrierValue > 8))
+      || (input.contractType === "DIGITUNDER" && (barrierValue === null || barrierValue < 1))
+      || ((input.contractType === "DIGITMATCH" || input.contractType === "DIGITDIFF") && !hasSingleDigitBarrier)) {
       setStatus("The selected digit contract requires a valid barrier or target digit.");
       return;
     }
