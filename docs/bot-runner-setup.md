@@ -38,19 +38,24 @@ Redeploy after setting environment variables.
 
 ## 3. Configure a scheduler
 
-The endpoint is:
+The existing candle-strategy endpoint is:
 
 `GET https://<your-production-domain>/api/bots/runner`
 
-It accepts only `Authorization: Bearer <CRON_SECRET>`. It processes at most one bot per invocation to stay within serverless time limits, prioritizes unsettled trades, uses account-level database leases to prevent concurrent execution, and rotates by last-run time so configured bots are not permanently starved.
+The digit-strategy endpoint is:
+
+`GET https://<your-production-domain>/api/bots/digit-runner`
+
+Both accept only `Authorization: Bearer <CRON_SECRET>`. The digit runner checks unresolved contracts before entries, claims evaluation windows, validates a chronological holdout using a 95% Wilson lower bound, and stops on configured session P&L limits. An ambiguous order pauses the strategy and is never retried blindly.
 
 **The Vercel project currently uses the Hobby plan**, whose Cron Jobs can only run once per day. A per-minute Vercel Cron configuration would fail deployment, so do not add a one-minute Vercel cron to this project unless its plan changes.
 
 Use Supabase Cron instead:
 
 1. In the Supabase Dashboard, enable the `pg_cron`, `pg_net`, and Vault extensions if not already enabled.
-2. Store two secrets in Vault:
-   - `tradebridge_bot_runner_url`: the production endpoint above.
+2. Store three secrets in Vault:
+   - `tradebridge_bot_runner_url`: `https://<your-production-domain>/api/bots/runner`.
+   - `tradebridge_digit_runner_url`: `https://<your-production-domain>/api/bots/digit-runner`.
    - `tradebridge_cron_secret`: exactly the same value as Vercel's `CRON_SECRET`.
 3. Run the following SQL in the intended Supabase project's SQL Editor. It schedules a one-minute invocation and reads the URL and bearer secret from Vault, not from the SQL statement.
 
@@ -73,11 +78,24 @@ select cron.schedule(
     ),
     timeout_milliseconds := 55000
   );
-  $$
+  $
+);
+
+select cron.schedule(
+  'tradebridge-digit-strategy-runner',
+  '* * * * *',
+  $
+  select net.http_get(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'tradebridge_digit_runner_url'),
+    params := '{}'::jsonb,
+    headers := jsonb_build_object('Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'tradebridge_cron_secret')),
+    timeout_milliseconds := 55000
+  );
+  $
 );
 ```
 
-If the job already exists, unschedule it by job name before scheduling a replacement. Review Supabase Cron run history and Vercel function logs to verify that it is executing. An HTTP request being sent is not proof that a trade was placed; inspect the API response and TradeBridge bot activity.
+If either job already exists, unschedule it by job name before scheduling a replacement. Review Supabase Cron run history and Vercel function logs to verify both endpoints execute. An HTTP request being sent is not proof that a trade was placed; inspect the API response, digit-strategy trade ledger, and TradeBridge activity.
 
 ## 4. Arm a Demo bot
 
