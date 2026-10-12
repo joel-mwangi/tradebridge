@@ -496,17 +496,6 @@ export default function TradingWorkspace() {
 
           {page === "trade" && (
             <section className={styles.workspaceSection} aria-label="Trading workspace">
-              <div className={styles.intro}>
-                <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Trading workspace</p>
-                  <h1 className={styles.title}>Trade</h1>
-                  <p className={styles.subtitle}>Analyse live last-digit behaviour and configure a digit contract in one workspace. Open positions stay available below.</p>
-                </div>
-                <div className={styles.introActions}>
-                  <Link className={styles.secondaryButton} href="/portfolio">View portfolio →</Link>
-                </div>
-              </div>
-
               <div className={styles.marketGrid}>
 
                 <div className={styles.marketColumn}>
