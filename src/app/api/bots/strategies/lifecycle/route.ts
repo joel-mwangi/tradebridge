@@ -46,7 +46,6 @@ export async function POST(request: NextRequest) {
       status: "paused", last_error: null,
     }).eq("id", strategyId).eq("user_id", user.id);
     if (error) return NextResponse.json({ error: "strategy_pause_failed" }, { status: 503, headers });
-    await admin.from("bot_logs").insert({ bot_id: null, action: "digit_strategy_paused", details: { strategy_id: strategyId, user_id: user.id } }).then(() => undefined);
     return NextResponse.json({ success: true, status: "paused" }, { headers });
   }
 
