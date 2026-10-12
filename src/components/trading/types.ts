@@ -16,6 +16,7 @@ export interface MarketInstrument {
 export interface PricePoint {
   time: number;
   price: number;
+  lastDigit?: number;
 }
 
 export interface MarketSnapshot {
