@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
-import BotManager from "./BotManager";
 import LiveTradingControls from "./LiveTradingControls";
 import MarketWatch from "./MarketWatch";
 import DigitAnalysis from "./DigitAnalysis";
@@ -28,14 +27,13 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "bots" | "settings";
+type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "settings";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "dashboard", label: "Dashboard", icon: "▦" },
   { id: "markets", label: "Markets", icon: "⌁" },
   { id: "trade", label: "Trade", icon: "↗" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
-  { id: "bots", label: "Automated Bots", icon: "▤" },
   { id: "settings", label: "Settings", icon: "⚙" },
 ];
 
@@ -44,7 +42,6 @@ const PAGE_TITLES: Record<WorkspacePage, string> = {
   markets: "Markets",
   trade: "Trade",
   portfolio: "Portfolio & History",
-  bots: "Automated Bots",
   settings: "Settings",
 };
 
@@ -562,19 +559,6 @@ export default function TradingWorkspace() {
             </section>
           )}
 
-          {page === "bots" && (
-            <section className={styles.botManagerSection} aria-label="Automated trading bots">
-              <div className={styles.intro}>
-                <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Automation workspace</p>
-                  <h1 className={styles.title}>Automated Trading Bots</h1>
-                  <p className={styles.subtitle}>Configure Demo-only bots. A scheduled server runner will trade only when an out-of-sample edge is supported and all account-level risk gates pass.</p>
-                </div>
-              </div>
-              <BotManager theme={theme} />
-            </section>
-          )}
-
           {page === "settings" && (
             <section className={styles.workspaceSection} aria-label="Settings">
               <div className={styles.intro}>
@@ -617,7 +601,6 @@ export default function TradingWorkspace() {
                   <ul className={styles.safetyList}>
                     <li>Demo accounts are the default trading practice environment.</li>
                     <li>Real-account execution remains locked unless a trusted execution gateway is available and the required consent is verified.</li>
-                    <li>Enabling a bot configuration does not place trades; a trusted server-side bot runner is still required.</li>
                   </ul>
                 </section>
               </div>

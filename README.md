@@ -13,7 +13,7 @@ Real accounts can be linked and inspected, but **real-money order entry is delib
 - **Positions:** Stream open-contract updates, including current profit/loss and contract status, and request an early market sale after a second confirmation.
 - **Account activity:** Load and page through Deriv statement transactions, view the daily profit table, refresh account panels, and export the currently loaded statement rows to CSV.
 - **Session safety:** Server-side account ownership/type checks, Demo-only trading WebSocket issuance, server-only writes to risk-consent records, consent revocation, and token cookies that are HttpOnly in production.
-- **Automated bots (Demo-only):** A scheduled server runner uses holdout backtesting, payout-aware entry gates, daily account P&L, risk limits and duplicate-order interlocks. Bots are not operational until the migration, server secrets and schedule in `docs/bot-runner-setup.md` are configured.
+
 
 The manual Trade workspace focuses on Deriv **digit Options**: Over/Under, Even/Odd, and Matches/Differs. Its digit-analysis selector is shared with the quote-and-confirm ticket; the trade workflow does not present Higher/Lower price-direction entry or a price-history chart. It is not a general CFD, forex margin, copy-trading, or multi-asset terminal.
 
