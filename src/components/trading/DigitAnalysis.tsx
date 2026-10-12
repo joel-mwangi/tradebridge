@@ -1,20 +1,24 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { DigitContractMode, MarketInstrument, MarketSnapshot } from "./types";
+import type { DigitContractMode, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
 import styles from "./DigitAnalysis.module.css";
 const DIGITS = Array.from({ length: 10 }, (_, i) => i);
 
-export default function DigitAnalysis({ market, snapshot, connection, mode, onModeChange, target, onTargetChange }: {
+export default function DigitAnalysis({ market, snapshot, connection, mode, onModeChange, prediction, target, onTargetChange }: {
   market: MarketInstrument | null;
   snapshot?: MarketSnapshot;
   connection: string;
   mode: DigitContractMode;
   onModeChange: (mode: DigitContractMode) => void;
+  prediction: DigitPrediction;
   target: number;
   onTargetChange: (target: number) => void;
 }) {
   const [windowSize, setWindowSize] = useState(100);
+  const validTargets = mode === "over-under"
+    ? DIGITS.filter((digit) => prediction === "UNDER" ? digit >= 1 : digit <= 8)
+    : DIGITS;
   const allPoints = snapshot?.points ?? [];
   const points = useMemo(() => allPoints.slice(-windowSize), [allPoints, windowSize]);
   const digits = useMemo(() => points.flatMap((p) =>
@@ -53,7 +57,7 @@ export default function DigitAnalysis({ market, snapshot, connection, mode, onMo
       {mode !== "even-odd" && <label className={styles.control}>
         <span>{mode === "over-under" ? "Barrier digit" : "Target digit"}</span>
         <select value={target} onChange={(e) => onTargetChange(Number(e.target.value))}>
-          {DIGITS.map((d) => <option key={d} value={d}>{d}</option>)}
+          {validTargets.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
       </label>}
     </div>
