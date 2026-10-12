@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   catch { return NextResponse.json({ error: "bot_server_not_configured" }, { status: 503, headers }); }
 
   const { data: strategy, error: strategyError } = await admin.from("bot_strategy_definitions")
-    .select("id,user_id,name,strategy_definition,source_format,status,account_id")
+    .select("id,user_id,name,strategy_definition,source_format,status,account_id,session_started_at")
     .eq("id", strategyId).eq("user_id", user.id).maybeSingle();
   if (strategyError) return NextResponse.json({ error: "strategy_database_unavailable" }, { status: 503, headers });
   if (!strategy) return NextResponse.json({ error: "strategy_not_found" }, { status: 404, headers });
