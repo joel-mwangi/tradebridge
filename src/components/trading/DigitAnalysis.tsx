@@ -42,11 +42,6 @@ export default function DigitAnalysis({ market, snapshot, connection, mode, onMo
   const percent = (n: number) => total ? (n / total * 100).toFixed(1) + "%" : "—";
 
   return <section className={styles.root} aria-label="Digit analysis">
-    <header className={styles.header}>
-      <div><p className={styles.eyebrow}>LIVE MARKET TOOLS</p><h2>Digit analysis</h2>
-        <p className={styles.subtitle}>{market?.name ?? "No market selected"} · {market?.symbol ?? "Select a market"}</p></div>
-      <span className={stale || !live ? styles.statusStale : styles.statusLive}><i />{!live ? connection : stale ? "Feed stale" : "Live ticks"}</span>
-    </header>
     <div className={styles.controls}>
       <label className={styles.control}><span>Contract type</span><select value={mode} onChange={(e) => onModeChange(e.target.value as DigitContractMode)}>
         <option value="over-under">Over / Under</option><option value="even-odd">Even / Odd</option><option value="matches-differs">Matches / Differs</option>
