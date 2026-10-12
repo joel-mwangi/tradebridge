@@ -149,7 +149,7 @@ test("Deriv account session subscribes to authoritative balance and transaction 
 });
 
 test("transaction notifications cannot overwrite balance snapshots or trigger a request storm", () => {
-  const transactionHandler = tradingHook.match(/if \(message\.msg_type === "transaction" && message\.transaction\) \{([\s\S]*?)\n          \}\n\n          if \(message\.msg_type === "portfolio"/)?.[1];
+  const transactionHandler = tradingHook.match(/if \(message\.msg_type === "transaction" && message\.transaction\) \{([\s\S]*?)\r?\n\s*\}\s*if \(message\.msg_type === "portfolio"/)?.[1];
   assert.ok(transactionHandler, "transaction event handler must exist");
   assert.doesNotMatch(transactionHandler, /setBalance\(/);
   assert.doesNotMatch(transactionHandler, /refreshAccount\(/);

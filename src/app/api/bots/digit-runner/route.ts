@@ -15,7 +15,8 @@ type Reply = {
   req_id?: number; error?: { message?: string; code?: string };
   balance?: { balance?: number | string; currency?: string };
   portfolio?: { contracts?: Array<Record<string, unknown>> };
-  history?: { prices?: Array<string | number>; times?: number[] };
+  history?: { prices?: Array<string | number>; times?: number[]; pip_size?: number };
+  pip_size?: number;
   proposal?: { id?: string; ask_price?: number | string; payout?: number | string };
   buy?: { contract_id?: string | number; buy_price?: number | string };
   proposal_open_contract?: Record<string, unknown>;
@@ -61,7 +62,7 @@ async function demoSocket(token: string, accountId: string) {
   if (url.protocol !== "wss:" || url.hostname !== "api.derivws.com" || url.pathname !== "/trading/v1/options/ws/demo" || !url.searchParams.has("otp")) throw new Error("non_demo_session_rejected");
   return socket(url.toString());
 }
-function digitSeries(prices: Array<string | number>) { return prices.map(extractLastDigit).filter((x): x is number => x !== null); }
+function digitSeries(prices: Array<string | number>, pipSize?: number) { return prices.map((p) => extractLastDigit(p, pipSize)).filter((x): x is number => x !== null); }
 async function log(admin: ReturnType<typeof createAdminClient>, strategyId: string, userId: string, action: string, details: Obj) {
   await admin.from("digit_strategy_trades").update({ details }).eq("id", "00000000-0000-0000-0000-000000000000");
   await admin.from("bot_strategy_definitions").update({ last_error: action === "runner_error" ? String(details.reason ?? "runner_error") : null })
@@ -162,7 +163,9 @@ async function execute(admin: ReturnType<typeof createAdminClient>, strategy: Re
     }
     const rawPrices = historyReply.history?.prices ?? [];
     const rawTimes = historyReply.history?.times ?? [];
-    const digits = digitSeries(rawPrices);
+    const rawPipSize = historyReply.pip_size ?? historyReply.history?.pip_size;
+    const pipSize = Number.isInteger(rawPipSize) && (rawPipSize as number) >= 0 ? (rawPipSize as number) : undefined;
+    const digits = digitSeries(rawPrices, pipSize);
     const epochs = rawTimes.map(Number);
     if (digits.length < definition.frequency_window + 100) return { strategy_id: id, result: "insufficient_tick_history" };
     const latestEpoch = epochs.length ? epochs[epochs.length - 1] : null;

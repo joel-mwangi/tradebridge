@@ -21,6 +21,8 @@ test("accepts a valid Over digit strategy and rejects malformed risk inputs", ()
 test("extracts last displayed decimal digit without floating-point conversion", () => {
   assert.equal(extractLastDigit("123.450"), 0);
   assert.equal(extractLastDigit("123.45"), 5);
+  assert.equal(extractLastDigit(123.4, 2), 0);
+  assert.equal(extractLastDigit(123.456, 3), 6);
   assert.equal(extractLastDigit("abc"), null);
 });
 

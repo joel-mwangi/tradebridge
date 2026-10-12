@@ -168,6 +168,7 @@ export function useTradingSession(
     let cancelled = false;
     let localSocket: WebSocket | null = null;
     let refreshTimer: number | null = null;
+    let pingTimer: number | null = null;
 
     const clearTimeoutRef = () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -298,6 +299,7 @@ export function useTradingSession(
           refreshAccountRef.current = refreshAccount;
           refreshAccount();
           refreshTimer = window.setInterval(refreshAccount, 15_000);
+          pingTimer = window.setInterval(() => send({ ping: 1 }), 30_000);
         };
 
         localSocket.onmessage = (event) => {
@@ -343,6 +345,10 @@ export function useTradingSession(
               // An account-summary failure must not disable an authenticated trading session.
               setStatus(message.error.message ?? "Deriv could not load one of the account panels.");
             }
+            return;
+          }
+
+          if (message.msg_type === "ping" || (message as { ping?: unknown }).ping) {
             return;
           }
 
@@ -539,6 +545,8 @@ export function useTradingSession(
           if (socketRef.current === localSocket) socketRef.current = null;
           if (refreshTimer) window.clearInterval(refreshTimer);
           refreshTimer = null;
+          if (pingTimer) window.clearInterval(pingTimer);
+          pingTimer = null;
           statementRequestRef.current = null;
           setActivityLoading(false);
           if (buyRequestRef.current !== null || sellRequestRef.current !== null) {
@@ -571,6 +579,7 @@ export function useTradingSession(
     return () => {
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
+      if (pingTimer) window.clearInterval(pingTimer);
       refreshAccountRef.current = null;
       statementRequestRef.current = null;
       if (buyRequestRef.current !== null && orderResolutionKey) {

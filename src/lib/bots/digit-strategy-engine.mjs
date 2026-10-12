@@ -34,12 +34,28 @@ export function validateDigitStrategy(value) {
   } };
 }
 
-export function extractLastDigit(quote) {
-  const text = String(quote ?? "").trim();
-  if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
-  const decimals = text.includes(".") ? text.split(".")[1] : "";
-  const digit = decimals.length ? decimals[decimals.length - 1] : text[text.length - 1];
-  return Number(digit);
+export function extractLastDigit(quote, pipSize) {
+  const value = Number(quote);
+  if (!Number.isFinite(value)) return null;
+
+  const raw = String(quote ?? "").trim();
+  const hasPrecision = Number.isInteger(pipSize) && pipSize >= 0 && pipSize <= 12;
+  const inferredPrecision = typeof quote === "string" && raw.includes(".")
+    ? raw.split(".")[1]?.length
+    : undefined;
+  const precision = hasPrecision ? pipSize : inferredPrecision;
+  if (precision === undefined || precision < 0 || precision > 12) {
+    if (!/^\d+(?:\.\d+)?$/.test(raw)) return null;
+    const decimals = raw.includes(".") ? raw.split(".")[1] : "";
+    const digit = decimals.length ? decimals[decimals.length - 1] : raw[raw.length - 1];
+    return Number(digit);
+  }
+
+  const formatted = value.toFixed(precision);
+  const fraction = formatted.split(".")[1] ?? "";
+  const character = precision > 0 ? fraction.charAt(precision - 1) : formatted.slice(-1);
+  const digit = Number(character);
+  return Number.isInteger(digit) && digit >= 0 && digit <= 9 ? digit : null;
 }
 
 export function wilsonLowerBound(wins, total, z = 1.96) {

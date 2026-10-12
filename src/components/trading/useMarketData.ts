@@ -9,6 +9,7 @@ const MAX_POINTS = 1000;
 
 type PublicMessage = {
   msg_type?: string;
+  ping?: string;
   req_id?: number;
   error?: { message?: string };
   active_symbols?: Array<{
@@ -129,6 +130,16 @@ export function useMarketData() {
   useEffect(() => {
     let alive = true;
     let socket: WebSocket;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+
+    const startPing = () => {
+      if (pingTimer) clearInterval(pingTimer);
+      pingTimer = setInterval(() => {
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ ping: 1 }));
+        }
+      }, 30_000);
+    };
 
     const mergePoints = (symbol: string, incoming: PricePoint[]) => {
       if (!alive || !symbol || incoming.length === 0) return;
@@ -199,6 +210,7 @@ export function useMarketData() {
 
     socket.onopen = () => {
       if (!alive) return;
+      startPing();
       setConnection("Loading available markets");
       socket.send(JSON.stringify({
         active_symbols: "brief",
@@ -211,6 +223,7 @@ export function useMarketData() {
       if (!alive) return;
       try {
         const message = JSON.parse(event.data) as PublicMessage;
+        if (message.msg_type === "ping" || message.ping) return;
         if (message.error) {
           const historyRequest = message.req_id === undefined
             ? undefined
@@ -308,11 +321,13 @@ export function useMarketData() {
       if (alive) setConnection("Market data connection failed");
     };
     socket.onclose = () => {
+      if (pingTimer) clearInterval(pingTimer);
       if (alive) setConnection("Market stream disconnected");
     };
 
     return () => {
       alive = false;
+      if (pingTimer) clearInterval(pingTimer);
       if (socketRef.current === socket) socketRef.current = null;
       candleRequestsRef.current.clear();
       requestedCandleKeysRef.current.clear();
