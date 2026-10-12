@@ -86,6 +86,10 @@ The OAuth access token stays in a server-only HttpOnly cookie and is never expos
 - No live order has been placed as part of development or CI verification. Real trading must not be enabled until a server-side execution gateway exists and the complete provider integration is smoke-tested.
 - Deriv may change its API schemas, permitted contracts, account statuses, or authorization requirements; verify the current provider documentation before extending supported contract types.
 
+## Automation status
+
+Automated trading bot runtime, bot controls, and bot-specific API routes have been removed. Manual Demo trading and digit analysis remain supported. Historical Supabase migrations are retained for audit/history and do not re-enable bot execution by themselves.
+
 ## Verification
 
 GitHub Actions runs `npx tsc --noEmit` and `npm run build` for changes proposed to `main`. Build success does not replace live-provider verification. Test Demo ownership, quotes, order confirmation, order-timeout reconciliation, live P/L updates, early sale, statement refresh, and disconnection. Test Real accounts in read-only mode; do not add a Real order socket until server-side policy enforcement is deployed.
