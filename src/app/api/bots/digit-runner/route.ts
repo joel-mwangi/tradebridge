@@ -103,28 +103,57 @@ async function execute(admin: ReturnType<typeof createAdminClient>, strategy: Re
         return { strategy_id: id, result: "paused_unresolved_order" };
       }
       const contractId = String(trade.contract_id ?? "");
-      const open = openContracts.find((x) => String(x.contract_id ?? x.contractId ?? "") === contractId);
-      if (open) {
+      let contract: Record<string, unknown> = {};
+      try {
         const current = await rpc(ws, { proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 0 });
-        const contract = current.proposal_open_contract ?? {};
-        if (contract.is_sold === 1 || contract.is_expired === 1 || contract.status === "won" || contract.status === "lost" || contract.status === "sold") {
-          const profit = num(contract.profit);
-          if (profit === null) throw new Error("settlement_profit_unavailable");
-          const status = String(contract.status ?? (profit > 0 ? "won" : "lost"));
-          await admin.from("digit_strategy_trades").update({ status: ["won","lost","sold"].includes(status) ? status : (profit > 0 ? "won" : "lost"), realized_pnl: profit, settled_at: new Date().toISOString(), details: { settlement_verified: true } }).eq("id", trade.id).in("status", ["open"]);
-          await admin.from("bot_strategy_definitions").update({ session_pnl: Number(strategy.session_pnl ?? 0) + profit, session_trade_count: Number(strategy.session_trade_count ?? 0) + 1 }).eq("id", id);
-        }
-        return { strategy_id: id, result: "contract_reconciled_or_still_open" };
+        contract = current.proposal_open_contract ?? {};
+      } catch {
+        await admin.from("bot_strategy_definitions").update({ status: "paused", last_error: "settlement_check_failed" }).eq("id", id);
+        return { strategy_id: id, result: "paused_settlement_check_failed" };
       }
-      // Contract is no longer in the open portfolio: never guess a settlement from absence.
+      const terminal = contract.is_sold === 1 || contract.is_expired === 1 || contract.status === "won" || contract.status === "lost" || contract.status === "sold";
+      if (terminal) {
+        const profit = num(contract.profit);
+        if (profit === null) throw new Error("settlement_profit_unavailable");
+        const status = String(contract.status ?? (profit > 0 ? "won" : "lost"));
+        const settled = await admin.from("digit_strategy_trades").update({
+          status: ["won","lost","sold"].includes(status) ? status : (profit > 0 ? "won" : "lost"),
+          realized_pnl: profit, settled_at: new Date().toISOString(), details: { settlement_verified: true, broker_status: status },
+        }).eq("id", trade.id).eq("status", "open").select("id");
+        if (settled.error) throw new Error("settlement_persist_failed");
+        if (settled.data?.length) {
+          const pnl = Number(strategy.session_pnl ?? 0) + profit;
+          const lossLimit = Number(definition.max_session_loss);
+          const target = Number(definition.session_profit_target);
+          const hitLoss = lossLimit > 0 && pnl <= -lossLimit;
+          const hitTarget = target > 0 && pnl >= target;
+          await admin.from("bot_strategy_definitions").update({
+            session_pnl: pnl, session_trade_count: Number(strategy.session_trade_count ?? 0) + 1,
+            ...(hitLoss || hitTarget ? { status: "paused", last_error: hitLoss ? "session_loss_limit_reached" : "session_profit_target_reached" } : { last_error: null }),
+          }).eq("id", id);
+        }
+        return { strategy_id: id, result: "contract_settled", profit };
+      }
+      if (openContracts.some((x) => String(x.contract_id ?? x.contractId ?? "") === contractId)) {
+        return { strategy_id: id, result: "contract_still_open" };
+      }
       await admin.from("bot_strategy_definitions").update({ status: "paused", last_error: "contract_missing_from_portfolio_requires_reconciliation" }).eq("id", id);
-      await admin.from("digit_strategy_trades").update({ status: "unknown", details: { reason: "contract_missing_from_portfolio" } }).eq("id", trade.id).eq("status", "open");
+      await admin.from("digit_strategy_trades").update({ status: "unknown", details: { reason: "contract_missing_from_portfolio_and_not_terminal" } }).eq("id", trade.id).eq("status", "open");
       return { strategy_id: id, result: "paused_contract_requires_reconciliation" };
     }
     if (openContracts.length > 0) {
       await admin.from("bot_strategy_definitions").update({ status: "paused", last_error: "untracked_open_contract_on_account" }).eq("id", id);
       return { strategy_id: id, result: "untracked_open_contract" };
     }
+    const sessionPnl = Number(strategy.session_pnl ?? 0);
+    if ((definition.max_session_loss > 0 && sessionPnl <= -definition.max_session_loss)
+      || (definition.session_profit_target > 0 && sessionPnl >= definition.session_profit_target)) {
+      const reason = definition.max_session_loss > 0 && sessionPnl <= -definition.max_session_loss
+        ? "session_loss_limit_reached" : "session_profit_target_reached";
+      await admin.from("bot_strategy_definitions").update({ status: "paused", last_error: reason }).eq("id", id);
+      return { strategy_id: id, result: "session_risk_limit", reason };
+    }
+    if (definition.stake > balance) return { strategy_id: id, result: "stake_exceeds_demo_balance" };
     const rawPrices = historyReply.history?.prices ?? [];
     const rawTimes = historyReply.history?.times ?? [];
     const digits = digitSeries(rawPrices);
