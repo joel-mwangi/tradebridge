@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { AccountActivity, DemoQuote, DerivAccount, OpenPosition } from "./types";
+import type { AccountActivity, DemoQuote, DerivAccount, DigitContractType, OpenPosition } from "./types";
 
 const EMPTY_BALANCE = { balance: null as number | null, currency: "" };
 const STATEMENT_PAGE_SIZE = 30;
 
 type TradeInput = {
   symbol: string;
-  contractType: "CALL" | "PUT" | "DIGITOVER" | "DIGITUNDER";
+  contractType: DigitContractType;
   stake: number;
   duration: number;
-  durationUnit: "s" | "t";
+  durationUnit: "t";
   barrier?: string;
 };
 
@@ -623,8 +623,20 @@ export function useTradingSession(
       setStatus("Your configured daily loss stop has been reached. Live entries are blocked for this session; review your account directly with Deriv.");
       return;
     }
-    if (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 86400) {
-      setStatus("Enter a contract duration between 1 and 86,400 seconds.");
+    if (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 10 || input.durationUnit !== "t") {
+      setStatus("Digit contracts require a duration between 1 and 10 ticks.");
+      return;
+    }
+    const hasSingleDigitBarrier = typeof input.barrier === "string" && /^\d$/.test(input.barrier);
+    const barrierValue = hasSingleDigitBarrier ? Number(input.barrier) : null;
+    if ((input.contractType === "DIGITOVER" && (barrierValue === null || barrierValue > 8))
+      || (input.contractType === "DIGITUNDER" && (barrierValue === null || barrierValue < 1))
+      || ((input.contractType === "DIGITMATCH" || input.contractType === "DIGITDIFF") && !hasSingleDigitBarrier)) {
+      setStatus("The selected digit contract requires a valid barrier or target digit.");
+      return;
+    }
+    if ((input.contractType === "DIGITEVEN" || input.contractType === "DIGITODD") && input.barrier !== undefined) {
+      setStatus("Even/Odd contracts do not accept a target digit.");
       return;
     }
 

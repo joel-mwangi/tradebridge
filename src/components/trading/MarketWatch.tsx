@@ -58,8 +58,8 @@ export default function MarketWatch({
           <h2>{listOnly ? "Browse available markets" : "Market watch"}</h2>
           <p className={styles.panelSubtext}>
             {listOnly
-              ? "Choose any available instrument to open its chart and trade ticket."
-              : "Choose an instrument to view its live price chart."}
+              ? "Choose an instrument to open its live digit analysis and trade ticket."
+              : "Choose an instrument to inspect its live market data."}
           </p>
         </div>
         <span className={connection === "Live prices" ? styles.liveStatus : styles.connectionStatus}><i />{connection}</span>
@@ -110,7 +110,7 @@ export default function MarketWatch({
             type="button"
             className={selectedSymbol === market.symbol ? styles.marketItemActive : styles.marketItem}
             onClick={() => onSelect(market.symbol)}
-            aria-label={listOnly ? "Open " + market.name + " chart and trade ticket" : "Select " + market.name}
+            aria-label={listOnly ? "Open digit analysis and trade ticket for " + market.name : "Select " + market.name}
           >
             <span className={styles.marketIcon}>{market.market === "forex" ? "FX" : market.market === "commodities" ? "Au" : "↗"}</span>
             <span className={styles.marketInfo}><strong>{market.name}</strong><small>{market.symbol}</small></span>
@@ -127,7 +127,7 @@ export default function MarketWatch({
         <p>Try a different name, symbol or market category.</p>
       </div> : <div className={styles.marketEmpty}>
         <strong>Loading available markets</strong>
-        <p>TradeBridge asks Deriv for eligible instruments for CALL/PUT contracts. Market prices are loaded from Deriv and are never invented for display.</p>
+        <p>TradeBridge asks Deriv for instruments available for digit contracts. Market data comes from Deriv and is never invented for display.</p>
       </div>}
     </section>
     {!listOnly && (
