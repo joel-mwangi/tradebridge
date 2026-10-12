@@ -502,7 +502,6 @@ export default function TradingWorkspace() {
                   <DigitAnalysis
                     market={selectedMarket}
                     snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
-                    connection={connection}
                     mode={digitMode}
                     onModeChange={setDigitMode}
                     prediction={digitPrediction}
