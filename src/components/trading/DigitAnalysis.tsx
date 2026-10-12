@@ -73,7 +73,7 @@ export default function DigitAnalysis({ market, snapshot, mode, onModeChange, pr
         const r = rank(d);
         const cls = r === 1 ? styles.top : r === 2 ? styles.second : r === 10 ? styles.low : r === 9 ? styles.secondLow : "";
         return <div className={styles.frequencyItem} key={d}>
-          <div className={styles.ring + " " + cls}><strong>{d}</strong></div>
+          <div className={styles.ring + " " + cls}><strong>{d}</strong>{r === 1 && <span className={styles.star} aria-label="Highest frequency">★</span>}</div>
           <strong className={styles.percent}>{percent(counts[d])}</strong><span className={styles.count}>{counts[d]} ticks</span>
           <span className={styles.rank}>{r === 1 ? "Highest" : r === 2 ? "2nd high" : r === 9 ? "2nd low" : r === 10 ? "Lowest" : " "}</span>
         </div>;
