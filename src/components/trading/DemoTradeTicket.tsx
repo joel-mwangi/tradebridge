@@ -127,17 +127,17 @@ export default function DemoTradeTicket({
       <fieldset className={styles.directionField} disabled={!ready || busy}>
         <legend>Last digit prediction</legend>
         <div className={styles.directionChoices}>
-          <button type="button" className={digitDirection === "DIGITOVER" ? styles.callSelected : styles.callButton} onClick={() => setDigitDirection("DIGITOVER")} aria-pressed={digitDirection === "DIGITOVER"}>
+          <button type="button" className={digitDirection === "DIGITOVER" ? styles.callSelected : styles.callButton} onClick={() => { setDigitDirection("DIGITOVER"); if (Number(barrier) > 8) setBarrier("5"); }} aria-pressed={digitDirection === "DIGITOVER"}>
             <span>↑</span><span><strong>Over</strong></span>
           </button>
-          <button type="button" className={digitDirection === "DIGITUNDER" ? styles.putSelected : styles.putButton} onClick={() => setDigitDirection("DIGITUNDER")} aria-pressed={digitDirection === "DIGITUNDER"}>
+          <button type="button" className={digitDirection === "DIGITUNDER" ? styles.putSelected : styles.putButton} onClick={() => { setDigitDirection("DIGITUNDER"); if (Number(barrier) < 1) setBarrier("5"); }} aria-pressed={digitDirection === "DIGITUNDER"}>
             <span>↓</span><span><strong>Under</strong></span>
           </button>
         </div>
         <div className={styles.compactFieldGroup}>
           <label className={styles.fieldLabel} htmlFor="tradebridge-digit-barrier">Barrier digit (0–9)</label>
           <select id="tradebridge-digit-barrier" value={barrier} onChange={(event) => setBarrier(event.target.value)} disabled={!ready || busy}>
-            {Array.from({ length: 10 }, (_, digit) => <option key={digit} value={String(digit)}>{digit}</option>)}
+            {(digitDirection === "DIGITOVER" ? Array.from({ length: 9 }, (_, digit) => digit) : Array.from({ length: 9 }, (_, digit) => digit + 1)).map((digit) => <option key={digit} value={String(digit)}>{digit}</option>)}
           </select>
           <p className={styles.compactControlsHint}>Over wins when the last digit is greater than the barrier; Under wins when it is lower. Equal digits do not satisfy either prediction.</p>
         </div>
