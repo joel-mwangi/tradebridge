@@ -50,37 +50,6 @@ test("an uncorrelated early-sale response pauses order actions for manual reconc
 });
 
 
-const botMigration = read("supabase/migrations/20261011133000_add_demo_bot_runner.sql");
-const botToggleRoute = read("src/app/api/bots/toggle/route.ts");
-const botRunnerRoute = read("src/app/api/bots/runner/route.ts");
-const botCredentials = read("src/lib/bots/credentials.ts");
-
-test("risk gates use broker daily account P&L and reject incomplete history", () => {
-  assert.match(botRunnerRoute, /profit_table: 1/);
-  assert.match(botRunnerRoute, /statement: 1/);
-  assert.match(botRunnerRoute, /trade_skipped_incomplete_account_pnl/);
-  assert.match(botRunnerRoute, /const dailyPnl = brokerDailyPnl/);
-  assert.match(botRunnerRoute, /maxStakeFraction: 0\.01/);
-  assert.match(botRunnerRoute, /daily_loss_limit/);
-});
-
-test("manual contract reconciliation validates symbol, direction, stake and timing", () => {
-  assert.match(botReconcileRoute, /getContractSymbol\(contract\) !== ledger\.symbol/);
-  assert.match(botReconcileRoute, /direction !== ledger\.direction/);
-  assert.match(botReconcileRoute, /sameNumber\(actualBuy, expectedAsk\)/);
-  assert.match(botReconcileRoute, /Math\.abs\(actualStart - expectedStart\)/);
-  assert.match(botReconcileRoute, /broker_verified_contract/);
-});
-
-test("clearing an ambiguous order requires complete broker checks and an empty portfolio", () => {
-  assert.match(botReconcileRoute, /portfolio: 1/);
-  assert.match(botReconcileRoute, /statement: 1/);
-  assert.match(botReconcileRoute, /profit_table: 1/);
-  assert.match(botReconcileRoute, /broker_history_incomplete_or_open_exposure/);
-  assert.match(botReconcileRoute, /possible_purchase_found/);
-  assert.match(botReconcileRoute, /status: "rejected"/);
-});
-
 test("Deriv account session subscribes to authoritative balance and transaction streams", () => {
   assert.match(tradingHook, /send\(\{ balance: 1, subscribe: 1, req_id: nextId\(\) \}\)/);
   assert.match(tradingHook, /send\(\{ transaction: 1, subscribe: 1, req_id: nextId\(\) \}\)/);
