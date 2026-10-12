@@ -33,12 +33,15 @@ export interface MarketCandle {
   close: number;
 }
 
+export type DigitContractMode = "over-under" | "even-odd" | "matches-differs";
+export type DigitContractType = "DIGITOVER" | "DIGITUNDER" | "DIGITEVEN" | "DIGITODD" | "DIGITMATCH" | "DIGITDIFF";
+
 export interface DemoQuote {
   id: string;
   askPrice: number;
   payout: number | null;
   symbol: string;
-  contractType: "CALL" | "PUT" | "DIGITOVER" | "DIGITUNDER";
+  contractType: DigitContractType;
   barrier?: string;
   durationUnit: "s" | "t";
   stake: number;
