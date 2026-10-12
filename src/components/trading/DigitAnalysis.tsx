@@ -75,8 +75,8 @@ export default function DigitAnalysis({ market, snapshot, mode, onModeChange, pr
         const r = rank(d);
         const cls = r === 1 ? styles.top : r === 2 ? styles.second : r === 10 ? styles.low : r === 9 ? styles.secondLow : "";
         return <div className={styles.frequencyItem} key={d}>
-          <div className={[styles.ring, cls, d === latestDigit ? styles.latestDigitRing : ""].filter(Boolean).join(" ")}><strong>{d}</strong>{d === latestDigit && <span className={styles.star} aria-label="Latest incoming tick digit" title="Latest incoming tick">★</span>}</div>
-          <strong className={styles.percent}>{percent(counts[d])}</strong><span className={styles.count}>{counts[d]} ticks</span>
+          <div className={[styles.ring, cls, d === latestDigit ? styles.latestDigitRing : ""].filter(Boolean).join(" ")} aria-label={`Digit ${d}, ${percent(counts[d])} of observed ticks`}><strong className={styles.digitNumber}>{d}</strong><span className={styles.digitPercent}>{percent(counts[d])}</span>{d === latestDigit && <span className={styles.star} aria-label="Latest incoming tick digit" title="Latest incoming tick">★</span>}</div>
+          <span className={styles.count}>{counts[d]} ticks</span>
           <span className={styles.rank}>{r === 1 ? "Highest" : r === 2 ? "2nd high" : r === 9 ? "2nd low" : r === 10 ? "Lowest" : " "}</span>
         </div>;
       })}</div>
