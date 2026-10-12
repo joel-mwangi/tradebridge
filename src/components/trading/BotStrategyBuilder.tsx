@@ -45,7 +45,7 @@ function validateDraft(value: unknown): { draft?: StrategyDraft; errors: string[
   if (contract?.needsBarrier && (!Number.isInteger(barrier) || barrier! < 0 || barrier! > 9)) errors.push("This contract requires an integer barrier from 0 to 9.");
   if (!contract?.needsBarrier && v.barrier !== null) errors.push("Even and Odd contracts must have barrier set to null.");
   if (!Number.isInteger(v.duration_ticks) || Number(v.duration_ticks) < 1 || Number(v.duration_ticks) > 10_000) errors.push("duration_ticks must be an integer between 1 and 10000.");
-  if (typeof v.stake !== "number" || !Number.isFinite(v.stake) || v.stake <= 0 || v.stake > 10000) errors.push("stake must be a positive number no greater than 10000.");
+  if (typeof v.stake !== "number" || !Number.isFinite(v.stake) || v.stake <= 0 || v.stake > 100) errors.push("stake must be a positive number no greater than 100.");
   if (v.entry_rule !== "manual_review" && v.entry_rule !== "last_digit_frequency") errors.push("entry_rule is not supported.");
   if (!Number.isInteger(v.frequency_window) || Number(v.frequency_window) < 10 || Number(v.frequency_window) > 5000) errors.push("frequency_window must be between 10 and 5000 ticks.");
   for (const key of ["max_session_loss", "session_profit_target"] as const) {
@@ -240,7 +240,7 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
         </div>
         <div className="builderField">
           <label htmlFor="strategy-stake">Stake (account currency)</label>
-          <input id="strategy-stake" type="number" min="0.01" max="10000" step="0.01" value={stake} onChange={(e) => setStake(e.target.value)} />
+          <input id="strategy-stake" type="number" min="0.01" max="100" step="0.01" value={stake} onChange={(e) => setStake(e.target.value)} />
         </div>
         <div className="builderField">
           <label htmlFor="strategy-entry">Entry condition</label>
