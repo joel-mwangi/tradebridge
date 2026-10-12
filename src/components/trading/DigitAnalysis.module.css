@@ -20,14 +20,15 @@
 .panelTitle { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:16px; }
 .panelTitle h3 { margin:0; color:var(--ink); font-size:14px; font-weight:800; }
 .panelTitle p { margin:5px 0 0; color:var(--muted); font-size:10px; }
-.frequencyGrid { display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:8px; }
+.frequencyGrid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px 8px; }
 .frequencyItem { min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
-.ring { display:grid; place-items:center; width:44px; height:44px; flex:0 0 44px; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
+.ring { position:relative; display:grid; place-items:center; width:44px; height:44px; flex:0 0 44px; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
 .ring strong { font-size:16px; }
-.top { border-color:#22d3ee; background:#0e2933; color:#22d3ee; box-shadow:0 0 0 3px rgba(34,211,238,.08); }
-.second { border-color:#4ade80; background:#142d25; color:#4ade80; }
+.top { border-color:#4ade80; background:#142d25; color:#4ade80; box-shadow:0 0 0 3px rgba(74,222,128,.10), 0 0 12px rgba(74,222,128,.12); }
+.second { border-color:#60a5fa; background:#17283d; color:#60a5fa; }
 .low { border-color:#f87171; background:#351e23; color:#f87171; }
 .secondLow { border-color:#fbbf24; background:#332b19; color:#fbbf24; }
+.star { position:absolute; top:-9px; right:-5px; color:#4ade80; font-size:13px; line-height:1; text-shadow:0 0 7px rgba(74,222,128,.55); }
 .percent { color:var(--ink); font-size:11px; font-variant-numeric:tabular-nums; }
 .count { color:var(--muted); font-size:9px; }
 .rank { min-height:11px; color:var(--muted); font-size:8px; line-height:1.3; }
