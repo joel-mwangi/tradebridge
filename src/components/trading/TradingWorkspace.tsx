@@ -12,7 +12,7 @@ import DigitAnalysis from "./DigitAnalysis";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
-import type { DerivAccount, DigitContractMode } from "./types";
+import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 
 type AccountsResponse = {
   connected?: boolean;
@@ -116,8 +116,14 @@ export default function TradingWorkspace() {
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [digitMode, setDigitMode] = useState<DigitContractMode>("over-under");
+  const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
+  const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
   const [digitTarget, setDigitTarget] = useState(5);
+  function setDigitMode(mode: DigitContractMode) {
+    setDigitModeState(mode);
+    setDigitPrediction(mode === "over-under" ? "OVER" : mode === "even-odd" ? "EVEN" : "MATCHES");
+    setDigitTarget(mode === "over-under" && digitPrediction === "UNDER" ? 5 : 5);
+  }
   useEffect(() => {
     const saved = localStorage.getItem("tradebridge_theme");
     if (saved === "light" || saved === "dark") setTheme(saved);
@@ -503,6 +509,7 @@ export default function TradingWorkspace() {
                     connection={connection}
                     mode={digitMode}
                     onModeChange={setDigitMode}
+                    prediction={digitPrediction}
                     target={digitTarget}
                     onTargetChange={setDigitTarget}
                   />
@@ -539,6 +546,8 @@ export default function TradingWorkspace() {
                       acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
                       market={selectedMarket}
                       mode={digitMode}
+                      prediction={digitPrediction}
+                      onPredictionChange={setDigitPrediction}
                       target={digitTarget}
                       sessionState={trading.sessionState}
                       status={trading.status}
