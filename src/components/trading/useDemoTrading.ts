@@ -8,9 +8,11 @@ const STATEMENT_PAGE_SIZE = 30;
 
 type TradeInput = {
   symbol: string;
-  contractType: "CALL" | "PUT";
+  contractType: "CALL" | "PUT" | "DIGITOVER" | "DIGITUNDER";
   stake: number;
   duration: number;
+  durationUnit: "s" | "t";
+  barrier?: string;
 };
 
 type ApiMessage = {
@@ -448,6 +450,8 @@ export function useTradingSession(
               contractType: input.contractType,
               stake: input.stake,
               duration: input.duration,
+              durationUnit: input.durationUnit,
+              barrier: input.barrier,
               currency: activeAccount.currency ?? "USD",
               receivedAt: Date.now(),
             });
@@ -637,7 +641,8 @@ export function useTradingSession(
       contract_type: input.contractType,
       currency: account.currency ?? "USD",
       duration: input.duration,
-      duration_unit: "s",
+      duration_unit: input.durationUnit,
+      ...(input.barrier !== undefined ? { barrier: input.barrier } : {}),
       underlying_symbol: input.symbol,
       req_id: reqId,
     }));
