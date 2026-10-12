@@ -202,7 +202,7 @@ export function useMarketData() {
       setConnection("Loading available markets");
       socket.send(JSON.stringify({
         active_symbols: "brief",
-        contract_type: ["CALL", "PUT"],
+        contract_type: ["DIGITOVER", "DIGITUNDER", "DIGITEVEN", "DIGITODD", "DIGITMATCH", "DIGITDIFF"],
         req_id: 1,
       }));
     };
