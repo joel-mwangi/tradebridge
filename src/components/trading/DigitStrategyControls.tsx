@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
 type Item = { id: string; name: string; source_format: string; status: string; created_at: string; account_id?: string | null; last_error?: string | null; session_pnl?: number | string | null };
+type DemoAccount = { account_id: string; account_type: string | null; currency: string | null; balance?: number | null };
 
 export default function DigitStrategyControls({ userId }: { userId: string | null }) {
   const [items, setItems] = useState<Item[]>([]);
   const [accountId, setAccountId] = useState("");
+  const [accounts, setAccounts] = useState<DemoAccount[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +22,17 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
     if (error) setError("Could not load saved strategy states.");
     else setItems((data ?? []) as Item[]);
   }
-  useEffect(() => { void refresh(); }, [userId]);
+  useEffect(() => {
+    let alive = true;
+    void refresh();
+    void fetch("/api/auth/deriv/accounts", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) return;
+      const result = await response.json() as { accounts?: DemoAccount[] };
+      const demo = (result.accounts ?? []).filter((item) => (item.account_type ?? "").toLowerCase() === "demo" && Boolean(item.account_id));
+      if (alive) { setAccounts(demo); setAccountId((current) => current || demo[0]?.account_id || ""); }
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [userId]);
 
   async function act(item: Item, action: "start" | "pause") {
     if (action === "start" && !accountId.trim()) { setError("Enter the linked Deriv Demo account ID first."); return; }
@@ -40,9 +52,12 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
 
   return <section className="runtime panel" aria-labelledby="digit-runtime-title">
     <header><div><h2 id="digit-runtime-title">Digit strategy runtime</h2><p>Arm supported native strategies on Demo accounts and monitor the server-reported state.</p></div><button type="button" onClick={() => void refresh()}>Refresh</button></header>
-    <label htmlFor="digit-demo-account">Linked Deriv Demo account ID</label>
-    <input id="digit-demo-account" value={accountId} onChange={(e) => setAccountId(e.target.value)} placeholder="Enter your linked Demo account ID" autoComplete="off" />
-    <small>Real accounts are rejected by the server. Imported Blockly XML remains non-executable until translated to the native strategy format.</small>
+    <label htmlFor="digit-demo-account">Verified Deriv Demo account</label>
+    <select id="digit-demo-account" value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={accounts.length === 0}>
+      <option value="">{accounts.length ? "Choose a Demo account" : "Connect Deriv to load Demo accounts"}</option>
+      {accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.account_id} · {account.currency ?? "Currency unavailable"}{account.balance !== undefined && account.balance !== null ? " · " + Number(account.balance).toFixed(2) : ""}</option>)}
+    </select>
+    <small>Only linked Demo accounts appear here; the server verifies account ownership and rejects Real accounts. Imported Blockly XML remains non-executable until translated to the native strategy format.</small>
     {error && <p className="error" role="alert">{error}</p>}
     {message && <p className="message" role="status">{message}</p>}
     <div className="items">{items.map((item) => <article key={item.id}>
@@ -54,7 +69,7 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
       header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
       h2{margin:0;color:var(--bot-ink);font-size:18px} header p{margin:6px 0 0;color:var(--bot-muted);font-size:13px;line-height:1.5}
       label{display:block;color:var(--bot-label);font-size:13px;font-weight:650;margin-bottom:7px}
-      input{box-sizing:border-box;width:100%;border:1px solid var(--bot-border);border-radius:9px;background:var(--bot-card);color:var(--bot-ink);padding:11px 12px;font:inherit}
+      input,select{box-sizing:border-box;width:100%;border:1px solid var(--bot-border);border-radius:9px;background:var(--bot-card);color:var(--bot-ink);padding:11px 12px;font:inherit}
       small{display:block;color:var(--bot-muted);font-size:11px;margin-top:5px;overflow-wrap:anywhere}
       button{border:1px solid var(--bot-border);border-radius:8px;background:var(--bot-surface);color:var(--bot-ink);padding:8px 11px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
       button:disabled{opacity:.55;cursor:not-allowed}
