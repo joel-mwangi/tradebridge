@@ -250,7 +250,14 @@ export default function BotStrategyBuilder({ userId }: { userId: string | null }
         <button className="primary" type="button" onClick={() => void saveDraft()} disabled={saving || !userId}>{saving ? "Saving draft…" : "Save strategy draft"}</button>
       </div>
       <style jsx>{`
-        .strategyBuilder { grid-column: 1 / -1; }
+        .strategyBuilder { grid-column: 1 / -1; background:var(--bot-panel); border:1px solid var(--bot-line); border-radius:14px; padding:20px; min-width:0; }
+        .heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+        .heading h2 { margin:0; color:var(--bot-ink); font-size:18px; font-weight:750; }
+        .sub { color:var(--bot-muted); margin:6px 0 0; font-size:13px; line-height:1.5; }
+        .primary,.secondary { border-radius:9px; padding:10px 14px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+        .primary { border:1px solid var(--bot-teal); color:#052e24; background:var(--bot-teal); }
+        .secondary { border:1px solid var(--bot-border); color:var(--bot-ink); background:var(--bot-surface); }
+        .primary:disabled { opacity:.55; cursor:not-allowed; }
         .draftBadge { white-space:nowrap; border:1px solid #b45309; color:#fbbf24; border-radius:999px; padding:5px 9px; font-size:11px; font-weight:800; letter-spacing:.06em; }
         .builderGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
         .builderField { min-width:0; display:flex; flex-direction:column; gap:7px; }
