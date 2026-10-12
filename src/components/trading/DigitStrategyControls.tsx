@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
-type Item = { id: string; name: string; source_format: string; status: string; created_at: string; account_id?: string | null; last_error?: string | null; session_pnl?: number | string | null; strategy_definition?: { entry_rule?: string } | null };
+type Item = { id: string; name: string; source_format: string; status: string; created_at: string; account_id?: string | null; last_error?: string | null; session_pnl?: number | string | null; last_evaluated_at?: string | null; runner_last_result?: string | null; strategy_definition?: { entry_rule?: string; market?: string; contract_type?: string; stake?: number; duration_ticks?: number } | null };
 type DemoAccount = { account_id: string; account_type: string | null; currency: string | null; balance?: number | null };
 type Trade = { id: string; symbol: string; contract_type: string; status: string; stake: number | string; realized_pnl?: number | string | null; created_at: string };
 
@@ -19,7 +19,7 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
   async function refresh() {
     if (!userId) { setItems([]); return; }
     const { data, error } = await createClient().from("bot_strategy_definitions")
-      .select("id,name,source_format,status,created_at,account_id,last_error,session_pnl,strategy_definition")
+      .select("id,name,source_format,status,created_at,account_id,last_error,session_pnl,last_evaluated_at,runner_last_result,strategy_definition")
       .eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
     if (error) setError("Could not load saved strategy states.");
     else setItems((data ?? []) as Item[]);
@@ -37,7 +37,10 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
       const demo = (result.accounts ?? []).filter((item) => (item.account_type ?? "").toLowerCase() === "demo" && Boolean(item.account_id));
       if (alive) { setAccounts(demo); setAccountId((current) => current || demo[0]?.account_id || ""); }
     }).catch(() => undefined);
-    return () => { alive = false; };
+    const poll = window.setInterval(() => {
+      if (alive) void refresh();
+    }, 15000);
+    return () => { alive = false; window.clearInterval(poll); };
   }, [userId]);
 
   async function act(item: Item, action: "start" | "pause") {
@@ -50,14 +53,14 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
       });
       const data = await response.json() as { error?: string; details?: string[]; status?: string };
       if (!response.ok) throw new Error([data.error, ...(data.details ?? [])].filter(Boolean).join(": "));
-      setMessage(action === "start" ? "Demo strategy armed. It will be evaluated by the scheduled server runner." : "Strategy paused. New entries are disabled.");
+      setMessage(action === "start" ? "Demo strategy armed. This confirms configuration only; check Last completed evaluation and Runner result below to verify the scheduled runner is working." : "Strategy paused. New entries are disabled; an existing contract may still need settlement monitoring.");
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not update strategy."); }
     finally { setBusy(null); }
   }
 
   return <section className="runtime panel" aria-labelledby="digit-runtime-title">
-    <header><div><h2 id="digit-runtime-title">Digit strategy runtime</h2><p>Arm supported native strategies on Demo accounts and monitor the server-reported state.</p></div><button type="button" onClick={() => void refresh()}>Refresh</button></header>
+    <header><div><h2 id="digit-runtime-title">Digit strategy runtime</h2><p>Demo-only execution. “Armed” means eligible for runner evaluation; it does not mean a trade is currently open or that the scheduler is healthy.</p></div><button type="button" onClick={() => void refresh()}>Refresh</button></header>
     <label htmlFor="digit-demo-account">Verified Deriv Demo account</label>
     <select id="digit-demo-account" value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={accounts.length === 0}>
       <option value="">{accounts.length ? "Choose a Demo account" : "Connect Deriv to load Demo accounts"}</option>
@@ -67,8 +70,8 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
     {error && <p className="error" role="alert">{error}</p>}
     {message && <p className="message" role="status">{message}</p>}
     <div className="items">{items.map((item) => <article key={item.id}>
-      <div className="info"><strong>{item.name}</strong><small>{item.source_format.toUpperCase()} · {item.account_id ?? "No account linked"}</small>{!item.account_id && <small>Selecting an account above does not link it until this strategy is successfully armed.</small>}{item.strategy_definition?.entry_rule === "manual_review" && <small className="warning">Manual review only: this strategy cannot auto-place trades. Create a new strategy with the Last-digit frequency rule to enable automated Demo execution.</small>}{item.last_error && <small className="error">{item.last_error.replaceAll("_", " ")}</small>}{item.session_pnl !== null && item.session_pnl !== undefined && <small>Session P&amp;L: {Number(item.session_pnl).toFixed(2)}</small>}</div>
-      <div className="controls"><span className={item.status === "running" ? "running" : ""}>{item.status.toUpperCase()}</span>{item.status === "running" ? <button type="button" disabled={busy === item.id} onClick={() => void act(item, "pause")}>{busy === item.id ? "Working…" : "Pause"}</button> : <button type="button" disabled={busy === item.id || item.source_format === "xml" || item.strategy_definition?.entry_rule === "manual_review"} onClick={() => void act(item, "start")}>{busy === item.id ? "Working…" : "Start Demo"}</button>}</div>
+      <div className="info"><strong>{item.name}</strong><small>{item.source_format.toUpperCase()} · {item.account_id ?? "No account linked"}</small>{item.strategy_definition?.market && <small>Market: {item.strategy_definition.market} · Contract: {(item.strategy_definition.contract_type ?? "").replace("DIGIT", "") || "Digit"} · Stake: {item.strategy_definition.stake ?? "—"} · Duration: {item.strategy_definition.duration_ticks ?? "—"} tick(s)</small>}{!item.account_id && <small>Selecting an account above does not link it until this strategy is successfully armed.</small>}{item.strategy_definition?.entry_rule === "manual_review" && <small className="warning">Manual review only: this strategy cannot auto-place trades. Create a strategy with the Last-digit frequency rule to enable automated Demo execution.</small>}{item.last_evaluated_at ? <small>Last completed evaluation: {new Date(item.last_evaluated_at).toLocaleString()}</small> : <small className="warning">No completed runner evaluation recorded yet.</small>}{item.runner_last_result && <small>Runner result: {item.runner_last_result.replaceAll("_", " ")}</small>}{item.last_error && <small className="error">Blocker: {item.last_error.replaceAll("_", " ")}</small>}{item.session_pnl !== null && item.session_pnl !== undefined && <small>Session P&amp;L: {Number(item.session_pnl).toFixed(2)}</small>}</div>
+      <div className="controls"><span className={item.status === "running" ? "running" : ""}>{item.status === "running" ? "ARMED" : item.status.toUpperCase()}</span>{item.status === "running" ? <button type="button" disabled={busy === item.id} onClick={() => void act(item, "pause")}>{busy === item.id ? "Working…" : "Pause"}</button> : <button type="button" disabled={busy === item.id || item.source_format === "xml" || item.strategy_definition?.entry_rule === "manual_review"} onClick={() => void act(item, "start")}>{busy === item.id ? "Working…" : "Start Demo"}</button>}</div>
     </article>)}</div>
     <div className="tradeHistory">
       <h3>Recent digit trades</h3>
