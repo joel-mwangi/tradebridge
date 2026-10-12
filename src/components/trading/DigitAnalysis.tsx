@@ -1,18 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { MarketInstrument, MarketSnapshot } from "./types";
+import type { DigitContractMode, MarketInstrument, MarketSnapshot } from "./types";
 import styles from "./DigitAnalysis.module.css";
-
-type Mode = "over-under" | "even-odd" | "matches-differs";
 const DIGITS = Array.from({ length: 10 }, (_, i) => i);
 
-export default function DigitAnalysis({ market, snapshot, connection }: {
-  market: MarketInstrument | null; snapshot?: MarketSnapshot; connection: string;
+export default function DigitAnalysis({ market, snapshot, connection, mode, onModeChange, target, onTargetChange }: {
+  market: MarketInstrument | null;
+  snapshot?: MarketSnapshot;
+  connection: string;
+  mode: DigitContractMode;
+  onModeChange: (mode: DigitContractMode) => void;
+  target: number;
+  onTargetChange: (target: number) => void;
 }) {
-  const [mode, setMode] = useState<Mode>("over-under");
   const [windowSize, setWindowSize] = useState(100);
-  const [target, setTarget] = useState(5);
   const allPoints = snapshot?.points ?? [];
   const points = useMemo(() => allPoints.slice(-windowSize), [allPoints, windowSize]);
   const digits = useMemo(() => points.flatMap((p) =>
@@ -42,15 +44,18 @@ export default function DigitAnalysis({ market, snapshot, connection }: {
       <span className={stale || !live ? styles.statusStale : styles.statusLive}><i />{!live ? connection : stale ? "Feed stale" : "Live ticks"}</span>
     </header>
     <div className={styles.controls}>
-      <label className={styles.control}><span>Market type</span><select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+      <label className={styles.control}><span>Contract type</span><select value={mode} onChange={(e) => onModeChange(e.target.value as DigitContractMode)}>
         <option value="over-under">Over / Under</option><option value="even-odd">Even / Odd</option><option value="matches-differs">Matches / Differs</option>
       </select></label>
       <label className={styles.control}><span>Tick window</span><select value={windowSize} onChange={(e) => setWindowSize(Number(e.target.value))}>
         {[50,100,250,500,1000].map((n) => <option key={n} value={n}>{n.toLocaleString()} ticks</option>)}
       </select></label>
-      <label className={styles.control}><span>{mode === "over-under" ? "Barrier digit" : "Target digit"}</span><select value={target} onChange={(e) => setTarget(Number(e.target.value))}>
-        {DIGITS.map((d) => <option key={d} value={d}>{d}</option>)}
-      </select></label>
+      {mode !== "even-odd" && <label className={styles.control}>
+        <span>{mode === "over-under" ? "Barrier digit" : "Target digit"}</span>
+        <select value={target} onChange={(e) => onTargetChange(Number(e.target.value))}>
+          {DIGITS.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </label>}
     </div>
     <div className={styles.modeSummary}>
       {mode === "over-under" ? <>
