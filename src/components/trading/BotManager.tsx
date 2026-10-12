@@ -932,7 +932,7 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
                       disabled={busyBotId === bot.id}
                       aria-label={bot.is_active ? "Pause " + bot.bot_name : "Arm " + bot.bot_name}
                     >
-                      {busyBotId === bot.id ? "Saving…" : bot.is_active ? "Ⅱ Pause bot" : "▶ Arm Demo bot"}
+                      {busyBotId === bot.id ? "Saving…" : bot.is_active ? "Ⅱ Pause" : "▶ Run bot"}
                     </button>
                   </div>
                 </article>
