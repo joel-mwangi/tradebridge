@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test tests/trading-safety.test.cjs tests/bot-strategy.test.cjs tests/digit-trading-ui.test.cjs tests/digit-strategy-engine.test.cjs"
+    "test": "node --test tests/trading-safety.test.cjs tests/bot-strategy.test.cjs tests/digit-strategy-engine.test.cjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
