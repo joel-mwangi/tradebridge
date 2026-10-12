@@ -122,7 +122,14 @@ export default function TradingWorkspace() {
   function setDigitMode(mode: DigitContractMode) {
     setDigitModeState(mode);
     setDigitPrediction(mode === "over-under" ? "OVER" : mode === "even-odd" ? "EVEN" : "MATCHES");
-    setDigitTarget(mode === "over-under" && digitPrediction === "UNDER" ? 5 : 5);
+    setDigitTarget(5);
+  }
+
+  function setPredictionAndValidateTarget(prediction: DigitPrediction) {
+    setDigitPrediction(prediction);
+    if (digitMode !== "over-under") return;
+    if (prediction === "UNDER" && digitTarget < 1) setDigitTarget(5);
+    if (prediction === "OVER" && digitTarget > 8) setDigitTarget(5);
   }
   useEffect(() => {
     const saved = localStorage.getItem("tradebridge_theme");
@@ -547,7 +554,7 @@ export default function TradingWorkspace() {
                       market={selectedMarket}
                       mode={digitMode}
                       prediction={digitPrediction}
-                      onPredictionChange={setDigitPrediction}
+                      onPredictionChange={setPredictionAndValidateTarget}
                       target={digitTarget}
                       sessionState={trading.sessionState}
                       status={trading.status}
