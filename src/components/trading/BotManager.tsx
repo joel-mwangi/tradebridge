@@ -662,19 +662,11 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
         <div>
           <p className="eyebrow">Automation workspace</p>
           <h2 id="bot-manager-title">Automated trading bots</h2>
-          <p className="sub">Create and monitor strategy configurations, recent activity, and reported P&amp;L in one place.</p>
+          <p className="sub">Build strategies, configure risk limits, and monitor bot activity and recorded P&amp;L.</p>
         </div>
         <button className="secondary" type="button" onClick={() => void refresh()} disabled={loading || !client || !userId}>
           ↻ Refresh
         </button>
-      </div>
-
-      <div className="notice" role="note">
-        <span aria-hidden="true">⚠</span>
-        <div>
-          <strong>Execution engine not connected</strong>
-          <p>These controls save bot configuration and its enabled flag only. This module does not place trades. Keep bots inactive until a trusted server-side runner validates every order, enforces risk limits, and reconciles uncertain Deriv responses. Browser-side automation is not a safe substitute.</p>
-        </div>
       </div>
 
       {error && <div className="alert" role="alert">{error}</div>}
@@ -687,14 +679,14 @@ export default function BotManager({ theme }: { theme: "dark" | "light" }) {
           <small>Saved to your TradeBridge account</small>
         </div>
         <div className="stat">
-          <span>Enabled configurations</span>
+          <span>Armed bots</span>
           <strong>{loading ? "—" : activeCount}</strong>
-          <small>Not a count of running strategies</small>
+          <small>Enabled for server-runner evaluation</small>
         </div>
         <div className="stat">
-          <span>Reported total P&amp;L</span>
+          <span>Recorded total P&amp;L</span>
           <strong className={pnlClass(totalPnl)}>{loading ? "—" : formatPnl(totalPnl)}</strong>
-          <small>Summed from the bot records; account currency may vary</small>
+          <small>Aggregated from saved bot records</small>
         </div>
       </div>
 
