@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString();
   const { error: updateError } = await admin.from("bot_strategy_definitions").update({
-    status: "running", account_id: accountId, session_started_at: now, session_pnl: 0,
-    session_trade_count: 0, last_evaluated_at: null, last_tick_epoch: null, last_error: null,
+    status: "running", account_id: accountId, session_started_at: strategy.session_started_at ?? now,
+    last_evaluated_at: null, last_tick_epoch: null, last_error: null,
   }).eq("id", strategyId).eq("user_id", user.id);
   if (updateError) return NextResponse.json({ error: "strategy_start_failed" }, { status: 503, headers });
   return NextResponse.json({ success: true, status: "running", mode: "demo_only", account_id: accountId, message: "Strategy armed on the verified Demo account. Server runner evaluates it on scheduled invocations; no profit is guaranteed." }, { headers });
