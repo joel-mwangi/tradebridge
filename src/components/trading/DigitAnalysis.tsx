@@ -26,6 +26,8 @@ export default function DigitAnalysis({ market, snapshot, mode, onModeChange, pr
   ), [points]);
   const counts = useMemo(() => DIGITS.map((d) => digits.filter((p) => p.digit === d).length), [digits]);
   const total = digits.length;
+  // Frequency rank and newest tick are independent signals.
+  const latestDigit = digits.length ? digits[digits.length - 1].digit : null;
   const ranking = useMemo(() => [...DIGITS].sort((a, b) => counts[b] - counts[a] || a - b), [counts]);
   const rank = (d: number) => ranking.indexOf(d) + 1;
   const even = digits.filter((p) => p.digit % 2 === 0).length;
@@ -73,7 +75,7 @@ export default function DigitAnalysis({ market, snapshot, mode, onModeChange, pr
         const r = rank(d);
         const cls = r === 1 ? styles.top : r === 2 ? styles.second : r === 10 ? styles.low : r === 9 ? styles.secondLow : "";
         return <div className={styles.frequencyItem} key={d}>
-          <div className={styles.ring + " " + cls}><strong>{d}</strong>{r === 1 && <span className={styles.star} aria-label="Highest frequency">★</span>}</div>
+          <div className={[styles.ring, cls, d === latestDigit ? styles.latestDigitRing : ""].filter(Boolean).join(" ")}><strong>{d}</strong>{d === latestDigit && <span className={styles.star} aria-label="Latest incoming tick digit" title="Latest incoming tick">★</span>}</div>
           <strong className={styles.percent}>{percent(counts[d])}</strong><span className={styles.count}>{counts[d]} ticks</span>
           <span className={styles.rank}>{r === 1 ? "Highest" : r === 2 ? "2nd high" : r === 9 ? "2nd low" : r === 10 ? "Lowest" : " "}</span>
         </div>;
