@@ -504,8 +504,10 @@ export default function TradingWorkspace() {
                     mode={digitMode}
                     onModeChange={setDigitMode}
                     prediction={digitPrediction}
+                    onPredictionChange={setPredictionAndValidateTarget}
                     target={digitTarget}
                     onTargetChange={setDigitTarget}
+                    activeAccount={activeAccount}
                   />
                   <div className={styles.marketSelectionFooter}>
                     <span><strong>{selectedMarket?.name ?? "No market selected"}</strong><small>{selectedMarket?.symbol ?? "Choose an available instrument to begin"}</small></span>
