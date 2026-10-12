@@ -8,7 +8,7 @@ import BotManager from "./BotManager";
 import DemoTradeTicket from "./DemoTradeTicket";
 import LiveTradingControls from "./LiveTradingControls";
 import MarketWatch from "./MarketWatch";
-import PriceChart from "./PriceChart";
+import DigitAnalysis from "./DigitAnalysis";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
@@ -495,11 +495,10 @@ export default function TradingWorkspace() {
               <div className={styles.marketGrid}>
 
                 <div className={styles.marketColumn}>
-                  <PriceChart
+                  <DigitAnalysis
                     market={selectedMarket}
                     snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
-                    candlesByKey={candlesByKey}
-                    onLoadCandles={requestCandles}
+                    connection={connection}
                   />
                   <div className={styles.marketSelectionFooter}>
                     <span><strong>{selectedMarket?.name ?? "No market selected"}</strong><small>{selectedMarket?.symbol ?? "Choose an available instrument to begin"}</small></span>

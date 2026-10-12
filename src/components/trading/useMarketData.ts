@@ -5,7 +5,7 @@ import type { MarketCandle, MarketInstrument, MarketSnapshot, PricePoint } from 
 
 const PUBLIC_SOCKET = "wss://api.derivws.com/trading/v1/options/ws/public";
 const PREFERRED_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "R_100", "R_50", "frxEURUSD", "frxGBPUSD", "frxXAUUSD"];
-const MAX_POINTS = 180;
+const MAX_POINTS = 1000;
 
 type PublicMessage = {
   msg_type?: string;
@@ -24,8 +24,10 @@ type PublicMessage = {
     symbol?: string;
     quote?: number | string;
     epoch?: number;
+    pip_size?: number;
   };
   history?: { prices?: Array<number | string>; times?: number[] };
+  pip_size?: number;
   candles?: Array<{
     epoch?: number | string;
     open?: number | string;
@@ -34,6 +36,28 @@ type PublicMessage = {
     close?: number | string;
   }>;
 };
+
+function extractLastDigit(quote: number | string, pipSize?: number): number | undefined {
+  const value = Number(quote);
+  if (!Number.isFinite(value)) return undefined;
+
+  // Deriv pip_size is the number of decimal places, not a decimal increment.
+  // If precision is missing, only infer it from a string that preserves decimals;
+  // a numeric quote may already have lost trailing zeros, so do not guess.
+  const raw = String(quote);
+  const hasPrecision = Number.isInteger(pipSize) && pipSize! >= 0 && pipSize! <= 12;
+  const inferredPrecision = typeof quote === "string" && raw.includes(".")
+    ? raw.split(".")[1]?.length
+    : undefined;
+  const precision = hasPrecision ? pipSize! : inferredPrecision;
+  if (precision === undefined || precision < 0 || precision > 12) return undefined;
+
+  const formatted = value.toFixed(precision);
+  const fraction = formatted.split(".")[1] ?? "";
+  const character = precision > 0 ? fraction.charAt(precision - 1) : formatted.slice(-1);
+  const digit = Number(character);
+  return Number.isInteger(digit) && digit >= 0 && digit <= 9 ? digit : undefined;
+}
 
 export function useMarketData() {
   const [markets, setMarkets] = useState<MarketInstrument[]>([]);
@@ -44,6 +68,7 @@ export function useMarketData() {
   const socketRef = useRef<WebSocket | null>(null);
   const marketSequenceRef = useRef(100);
   const historyRequestsRef = useRef(new Map<number, string>());
+  const pipSizeBySymbolRef = useRef(new Map<string, number>());
   const subscribedSymbolsRef = useRef(new Set<string>());
   const candleSequenceRef = useRef(50_000);
   const candleRequestsRef = useRef(new Map<number, { key: string; symbol: string; granularity: number }>());
@@ -58,7 +83,7 @@ export function useMarketData() {
     activeSocket.send(JSON.stringify({
       ticks_history: symbol,
       end: "latest",
-      count: 120,
+      count: 1000,
       style: "ticks",
       req_id: historyReqId,
     }));
@@ -243,10 +268,16 @@ export function useMarketData() {
           historyRequestsRef.current.delete(message.req_id as number);
           const prices = message.history.prices ?? [];
           const times = message.history.times ?? [];
+          const pipSize = message.pip_size;
+          if (Number.isInteger(pipSize) && pipSize! >= 0 && pipSize! <= 12) {
+            pipSizeBySymbolRef.current.set(symbol, pipSize!);
+          }
           const points = prices.flatMap((price, index) => {
             const value = Number(price);
             const time = Number(times[index]);
-            return Number.isFinite(value) && Number.isFinite(time) ? [{ price: value, time }] : [];
+            return Number.isFinite(value) && Number.isFinite(time)
+              ? [{ price: value, time, lastDigit: extractLastDigit(price, pipSize) }]
+              : [];
           });
           mergePoints(symbol, points);
           return;
@@ -257,7 +288,15 @@ export function useMarketData() {
           const price = Number(message.tick.quote);
           const time = Number(message.tick.epoch) || Math.floor(Date.now() / 1000);
           if (!symbol || !Number.isFinite(price)) return;
-          mergePoints(symbol, [{ price, time }]);
+          const tickPipSize = message.tick.pip_size ?? pipSizeBySymbolRef.current.get(symbol);
+          if (Number.isInteger(tickPipSize) && tickPipSize! >= 0 && tickPipSize! <= 12) {
+            pipSizeBySymbolRef.current.set(symbol, tickPipSize!);
+          }
+          mergePoints(symbol, [{
+            price,
+            time,
+            lastDigit: extractLastDigit(message.tick.quote ?? price, tickPipSize),
+          }]);
           setConnection("Live prices");
         }
       } catch {
