@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
-type Item = { id: string; name: string; source_format: string; status: string; created_at: string; account_id?: string | null; last_error?: string | null; session_pnl?: number | string | null };
+type Item = { id: string; name: string; source_format: string; status: string; created_at: string; account_id?: string | null; last_error?: string | null; session_pnl?: number | string | null; strategy_definition?: { entry_rule?: string } | null };
 type DemoAccount = { account_id: string; account_type: string | null; currency: string | null; balance?: number | null };
 type Trade = { id: string; symbol: string; contract_type: string; status: string; stake: number | string; realized_pnl?: number | string | null; created_at: string };
 
@@ -19,7 +19,7 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
   async function refresh() {
     if (!userId) { setItems([]); return; }
     const { data, error } = await createClient().from("bot_strategy_definitions")
-      .select("id,name,source_format,status,created_at,account_id,last_error,session_pnl")
+      .select("id,name,source_format,status,created_at,account_id,last_error,session_pnl,strategy_definition")
       .eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
     if (error) setError("Could not load saved strategy states.");
     else setItems((data ?? []) as Item[]);
@@ -67,8 +67,8 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
     {error && <p className="error" role="alert">{error}</p>}
     {message && <p className="message" role="status">{message}</p>}
     <div className="items">{items.map((item) => <article key={item.id}>
-      <div className="info"><strong>{item.name}</strong><small>{item.source_format.toUpperCase()} · {item.account_id ?? "No account linked"}</small>{item.last_error && <small className="error">{item.last_error.replaceAll("_", " ")}</small>}{item.session_pnl !== null && item.session_pnl !== undefined && <small>Session P&amp;L: {Number(item.session_pnl).toFixed(2)}</small>}</div>
-      <div className="controls"><span className={item.status === "running" ? "running" : ""}>{item.status.toUpperCase()}</span>{item.status === "running" ? <button type="button" disabled={busy === item.id} onClick={() => void act(item, "pause")}>{busy === item.id ? "Working…" : "Pause"}</button> : <button type="button" disabled={busy === item.id || item.source_format === "xml"} onClick={() => void act(item, "start")}>{busy === item.id ? "Working…" : "Start Demo"}</button>}</div>
+      <div className="info"><strong>{item.name}</strong><small>{item.source_format.toUpperCase()} · {item.account_id ?? "No account linked"}</small>{!item.account_id && <small>Selecting an account above does not link it until this strategy is successfully armed.</small>}{item.strategy_definition?.entry_rule === "manual_review" && <small className="warning">Manual review only: this strategy cannot auto-place trades. Create a new strategy with the Last-digit frequency rule to enable automated Demo execution.</small>}{item.last_error && <small className="error">{item.last_error.replaceAll("_", " ")}</small>}{item.session_pnl !== null && item.session_pnl !== undefined && <small>Session P&amp;L: {Number(item.session_pnl).toFixed(2)}</small>}</div>
+      <div className="controls"><span className={item.status === "running" ? "running" : ""}>{item.status.toUpperCase()}</span>{item.status === "running" ? <button type="button" disabled={busy === item.id} onClick={() => void act(item, "pause")}>{busy === item.id ? "Working…" : "Pause"}</button> : <button type="button" disabled={busy === item.id || item.source_format === "xml" || item.strategy_definition?.entry_rule === "manual_review"} onClick={() => void act(item, "start")}>{busy === item.id ? "Working…" : "Start Demo"}</button>}</div>
     </article>)}</div>
     <div className="tradeHistory">
       <h3>Recent digit trades</h3>
@@ -88,7 +88,7 @@ export default function DigitStrategyControls({ userId }: { userId: string | nul
       button:disabled{opacity:.55;cursor:not-allowed}
       .items{margin-top:14px}.items article{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--bot-line)}
       .info{min-width:0}.info strong{font-size:13px;color:var(--bot-ink);overflow-wrap:anywhere}.controls{display:flex;align-items:center;gap:10px;flex-shrink:0}.controls span{font-size:10px;font-weight:800;color:var(--bot-muted)}.controls .running{color:var(--bot-success)}
-      .tradeHistory{margin-top:18px;border-top:1px solid var(--bot-line);padding-top:14px}.tradeHistory h3{font-size:14px;color:var(--bot-ink);margin:0 0 8px}.tradeHistory p{color:var(--bot-muted);font-size:12px}.tradeHistory article{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bot-line)}.tradeHistory article strong{font-size:12px;color:var(--bot-ink)}.tradeResult{display:flex;align-items:center;gap:10px;flex-shrink:0}.tradeResult span{font-size:10px;color:var(--bot-muted);font-weight:800}.tradeResult .positive{color:var(--bot-success)}.tradeResult .negative{color:#fca5a5}.error{color:#fca5a5}.message{color:var(--bot-success);font-size:13px}
+      .tradeHistory{margin-top:18px;border-top:1px solid var(--bot-line);padding-top:14px}.tradeHistory h3{font-size:14px;color:var(--bot-ink);margin:0 0 8px}.tradeHistory p{color:var(--bot-muted);font-size:12px}.tradeHistory article{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bot-line)}.tradeHistory article strong{font-size:12px;color:var(--bot-ink)}.tradeResult{display:flex;align-items:center;gap:10px;flex-shrink:0}.tradeResult span{font-size:10px;color:var(--bot-muted);font-weight:800}.tradeResult .positive{color:var(--bot-success)}.tradeResult .negative{color:#fca5a5}.error{color:#fca5a5}.warning{color:#fbbf24}.message{color:var(--bot-success);font-size:13px}
       @media(max-width:600px){header,.items article{align-items:flex-start}.items article{flex-direction:column}.controls{width:100%;justify-content:space-between}}
     `}</style>
   </section>;
