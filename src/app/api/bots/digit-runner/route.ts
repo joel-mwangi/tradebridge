@@ -145,6 +145,7 @@ async function execute(admin: ReturnType<typeof createAdminClient>, strategy: Re
       await admin.from("bot_strategy_definitions").update({ status: "paused", last_error: "untracked_open_contract_on_account" }).eq("id", id);
       return { strategy_id: id, result: "untracked_open_contract" };
     }
+    if (strategy.status !== "running") return { strategy_id: id, result: "paused_no_new_entries" };
     const sessionPnl = Number(strategy.session_pnl ?? 0);
     if ((definition.max_session_loss > 0 && sessionPnl <= -definition.max_session_loss)
       || (definition.session_profit_target > 0 && sessionPnl >= definition.session_profit_target)) {
@@ -221,18 +222,29 @@ export async function GET(request: NextRequest) {
   if (!received || !allowed.some((secret) => matches(received, secret))) return response("unauthorized", 401);
   let admin: ReturnType<typeof createAdminClient>;
   try { admin = createAdminClient(); } catch { return response("bot_database_not_configured", 503); }
-  const { data, error } = await admin.from("bot_strategy_definitions")
-    .select("*").eq("status", "running").not("account_id", "is", null)
-    .order("last_evaluated_at", { ascending: true, nullsFirst: true }).limit(5);
-  if (error) return response("digit_strategy_database_unavailable", 503);
+  const [{ data: running, error }, { data: openRows, error: openError }] = await Promise.all([
+    admin.from("bot_strategy_definitions").select("*").eq("status", "running").not("account_id", "is", null)
+      .order("last_evaluated_at", { ascending: true, nullsFirst: true }).limit(5),
+    admin.from("digit_strategy_trades").select("strategy_id").eq("status", "open").limit(50),
+  ]);
+  if (error || openError) return response("digit_strategy_database_unavailable", 503);
+  const candidates = new Map<string, Record<string, any>>();
+  for (const item of running ?? []) candidates.set(String(item.id), item as Record<string, any>);
+  const openIds = [...new Set((openRows ?? []).map((x) => String(x.strategy_id)))].filter((id) => !candidates.has(id));
+  if (openIds.length) {
+    const { data: pausedWithOpen, error: pausedError } = await admin.from("bot_strategy_definitions")
+      .select("*").in("id", openIds).eq("status", "paused").not("account_id", "is", null).limit(5);
+    if (pausedError) return response("digit_strategy_database_unavailable", 503);
+    for (const item of pausedWithOpen ?? []) candidates.set(String(item.id), item as Record<string, any>);
+  }
   const results = [];
-  for (const strategy of data ?? []) {
+  for (const strategy of candidates.values()) {
     // Claim one evaluation slot for 45 seconds using a conditional update. This reduces
     // duplicate work from overlapping cron invocations; unresolved order checks remain authoritative.
     const staleBefore = new Date(Date.now() - 45_000).toISOString();
     const claimedAt = new Date().toISOString();
     const claim = await admin.from("bot_strategy_definitions").update({ last_evaluated_at: claimedAt })
-      .eq("id", strategy.id).eq("status", "running")
+      .eq("id", strategy.id).eq("status", strategy.status)
       .or("last_evaluated_at.is.null,last_evaluated_at.lt." + staleBefore).select("id");
     if (claim.error || !claim.data?.length) continue;
     results.push(await execute(admin, { ...strategy, last_evaluated_at: claimedAt }));
