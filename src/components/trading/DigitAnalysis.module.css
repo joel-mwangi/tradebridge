@@ -20,17 +20,19 @@
 .panelTitle { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:16px; }
 .panelTitle h3 { margin:0; color:var(--ink); font-size:14px; font-weight:800; }
 .panelTitle p { margin:5px 0 0; color:var(--muted); font-size:10px; }
-.frequencyGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,78px),1fr)); gap:12px 8px; }
+.frequencyGrid { display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:12px; }
 .frequencyItem { min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
-.ring { position:relative; display:grid; place-items:center; width:clamp(34px,4vw,44px); height:clamp(34px,4vw,44px); flex:0 0 auto; aspect-ratio:1; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
-.ring strong { font-size:16px; }
+.ring { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; width:100%; max-width:88px; aspect-ratio:1 / 1; justify-self:center; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.digitNumber { font-size:1.4rem; font-weight:800; line-height:1.05; }
+.digitPercent { color:var(--muted); font-size:.8rem; line-height:1.1; font-variant-numeric:tabular-nums; }
+.top .digitPercent,.second .digitPercent,.low .digitPercent,.secondLow .digitPercent { color:currentColor; opacity:.9; }
 .top { border-color:#4ade80; background:#142d25; color:#4ade80; box-shadow:0 0 0 3px rgba(74,222,128,.10), 0 0 12px rgba(74,222,128,.12); }
 .second { border-color:#60a5fa; background:#17283d; color:#60a5fa; }
 .low { border-color:#f87171; background:#351e23; color:#f87171; }
 .secondLow { border-color:#fbbf24; background:#332b19; color:#fbbf24; }
-.latestDigitRing { animation: latestDigitPulse 1.25s ease-in-out infinite; }
-.star { position:absolute; top:-9px; right:-5px; z-index:1; color:#22d3ee; font-size:14px; line-height:1; text-shadow:0 0 7px rgba(34,211,238,.8); animation: latestStarPulse 1s ease-in-out infinite; }
-@keyframes latestDigitPulse { 0%,100% { box-shadow:0 0 0 1px rgba(34,211,238,.12); } 50% { box-shadow:0 0 0 3px rgba(34,211,238,.32), 0 0 12px rgba(34,211,238,.22); } }
+.latestDigitRing { transform:scale(1.08); filter:drop-shadow(0 0 5px rgba(34,211,238,.28)); }
+.star { position:absolute; top:-24px; left:50%; z-index:1; color:#facc15; font-size:18px; line-height:1; text-shadow:0 0 7px rgba(34,211,238,.9), 0 0 12px rgba(250,204,21,.65); transform:translateX(-50%); animation: latestStarPulse 1s ease-in-out infinite; }
+.latestDigitRing { outline:1px solid rgba(34,211,238,.28); outline-offset:3px; }
 @keyframes latestStarPulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.22); opacity:.78; } }
 @media (prefers-reduced-motion: reduce) { .latestDigitRing,.star { animation:none; } }
 .percent { color:var(--ink); font-size:11px; font-variant-numeric:tabular-nums; }
@@ -50,5 +52,6 @@
 .disclaimer { display:grid; gap:5px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
 .disclaimer strong { color:var(--teal); font-size:10px; font-weight:800; }
 .disclaimer p { margin:0; color:var(--muted); font-size:10px; line-height:1.55; }
-@media (max-width:850px) { .frequencyGrid { gap:12px 6px; } .lowerGrid { grid-template-columns:1fr; } }
+@media (max-width:900px) { .frequencyGrid { grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; } .lowerGrid { grid-template-columns:1fr; } }
+@media (max-width:520px) { .frequencyGrid { gap:14px 8px; } .digitNumber { font-size:1.2rem; } .digitPercent { font-size:.7rem; } .ring { max-width:76px; } }
 @media (max-width:520px) { .controls { grid-template-columns:1fr; } .header { flex-direction:column; } .statusLive,.statusStale { max-width:100%; } .modeSummary > div strong { font-size:20px; } .panel { padding:12px; } }
