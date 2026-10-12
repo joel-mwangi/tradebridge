@@ -88,7 +88,7 @@ async function execute(admin: ReturnType<typeof createAdminClient>, strategy: Re
     const [balanceReply, portfolioReply, historyReply] = await Promise.all([
       rpc(ws, { balance: 1 }),
       rpc(ws, { portfolio: 1 }),
-      rpc(ws, { ticks_history: definition.market, count: Math.min(5000, Math.max(500, definition.frequency_window * 5)), end: "latest", style: "ticks" }),
+      rpc(ws, { ticks_history: definition.market, count: Math.min(5000, Math.max(1200, definition.frequency_window * 3)), end: "latest", style: "ticks" }),
     ]);
     const balance = num(balanceReply.balance?.balance);
     if (balance === null || balance <= 0 || balanceReply.balance?.currency !== credentials.currency) throw new Error("demo_balance_validation_failed");
@@ -155,6 +155,11 @@ async function execute(admin: ReturnType<typeof createAdminClient>, strategy: Re
       return { strategy_id: id, result: "session_risk_limit", reason };
     }
     if (definition.stake > balance) return { strategy_id: id, result: "stake_exceeds_demo_balance" };
+    if (definition.stake > balance * 0.01) return { strategy_id: id, result: "stake_exceeds_one_percent_balance_cap" };
+    if (definition.max_session_loss === 0 && definition.session_profit_target === 0) {
+      await admin.from("bot_strategy_definitions").update({ status: "paused", last_error: "session_risk_limits_required" }).eq("id", id);
+      return { strategy_id: id, result: "paused_missing_session_risk_limits" };
+    }
     const rawPrices = historyReply.history?.prices ?? [];
     const rawTimes = historyReply.history?.times ?? [];
     const digits = digitSeries(rawPrices);
