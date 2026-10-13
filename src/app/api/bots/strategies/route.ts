@@ -73,19 +73,27 @@ export async function POST(request: NextRequest) {
       strategy_definition: definition,
       status: "draft",
     };
-    const query = id
-      ? supabase.from("bot_strategy_definitions").update({
+    const columns = "id,name,source_format,source_file_name,strategy_definition,status,created_at,updated_at";
+    if (id) {
+      const { data, error } = await supabase.from("bot_strategy_definitions")
+        .update({
           name: record.name,
           source_format: record.source_format,
           source_file_name: record.source_file_name,
           source_content: record.source_content,
           strategy_definition: record.strategy_definition,
           status: "draft",
-        }).eq("id", id).eq("user_id", user.id).eq("status", "draft")
-      : supabase.from("bot_strategy_definitions").insert(record);
-    const { data, error } = await query.select("id,name,source_format,source_file_name,strategy_definition,status,created_at,updated_at").single();
+        })
+        .eq("id", id).eq("user_id", user.id).eq("status", "draft")
+        .select(columns).maybeSingle();
+      if (error) return jsonError("strategy_draft_save_failed", 503);
+      if (!data) return jsonError("strategy_draft_not_found", 404);
+      return NextResponse.json({ draft: data }, { headers });
+    }
+    const { data, error } = await supabase.from("bot_strategy_definitions")
+      .insert(record).select(columns).single();
     if (error || !data) return jsonError("strategy_draft_save_failed", 503);
-    return NextResponse.json({ draft: data }, { status: id ? 200 : 201, headers });
+    return NextResponse.json({ draft: data }, { status: 201, headers });
   } catch {
     return jsonError("strategy_draft_save_failed", 503);
   }
