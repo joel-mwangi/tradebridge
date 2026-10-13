@@ -128,6 +128,7 @@ export function useBotRunner(
   const contractStatusSeenRef = useRef(false);
   const orderOutcomeUnknownRef = useRef(false);
   const purchaseAttemptedRef = useRef(false);
+  const stopHandledRef = useRef(false);
 
   // Keep refs in sync with latest state/props
   useEffect(() => { stateRef.current = runState; }, [runState]);
@@ -229,6 +230,8 @@ export function useBotRunner(
 
   const stopBot = useCallback(
     (reason?: string) => {
+      if (stopHandledRef.current) return;
+      stopHandledRef.current = true;
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
 
@@ -396,6 +399,7 @@ export function useBotRunner(
       return;
     }
     cancelledRef.current = false;
+    stopHandledRef.current = false;
     orderOutcomeUnknownRef.current = false;
     purchaseAttemptedRef.current = false;
     runAccountRef.current = account;
