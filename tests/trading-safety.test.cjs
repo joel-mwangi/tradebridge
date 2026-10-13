@@ -70,3 +70,45 @@ test("real-account OTP sessions stay disabled until execution is enforced server
   assert.match(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/demo"/);
   assert.doesNotMatch(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/real"/);
 });
+
+
+test("automated bot observes the shared WebSocket without replacing the trading session handler", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /addEventListener\('message', eventHandler\)/);
+  assert.match(botRunner, /removeEventListener\('message',/);
+  assert.doesNotMatch(botRunner, /ws\.onmessage\s*=/);
+});
+
+test("automated bot only accepts its own correlated requests and exact contract settlement", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /reqId === null \|\| !botReqIds\.has\(reqId\) \|\| requestStage\.get\(reqId\) !== 'proposal'/);
+  assert.match(botRunner, /requestStage\.get\(reqId\) !== 'buy'/);
+  assert.match(botRunner, /String\(poc\.contract_id\) !== inFlightContractIdRef\.current/);
+});
+
+test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /sessionStateRef\.current === 'Demo trading connected'/);
+  assert.match(botRunner, /account\.account_type \?\? ''\)\.toLowerCase\(\) !== 'demo'/);
+  assert.match(botRunner, /Unresolved order marker found/);
+  assert.match(botRunner, /localStorage\.getItem\(key\) !== null/);
+  assert.doesNotMatch(botRunner, /if \(stale\) localStorage\.removeItem\(key\)/);
+});
+
+test("bot request timeouts stop execution and retain ambiguous purchase state for reconciliation", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /Timed out waiting for Deriv proposal response/);
+  assert.match(botRunner, /Timed out waiting for Deriv purchase acknowledgement/);
+  assert.match(botRunner, /orderOutcomeUnknownRef\.current = true/);
+  assert.match(botRunner, /Reconcile the Deriv account before restarting/);
+});
+
+
+test("ambiguous bot orders require an explicit Deriv reconciliation acknowledgement", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  const runPanel = read("src/components/bots/RunPanel.tsx");
+  assert.match(botRunner, /acknowledgeOrderReconciled/);
+  assert.match(botRunner, /window\.confirm/);
+  assert.match(runPanel, /orderRecoveryRequired/);
+  assert.match(runPanel, /I checked Deriv — clear recovery lock/);
+});
