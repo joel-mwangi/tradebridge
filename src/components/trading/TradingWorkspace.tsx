@@ -8,6 +8,7 @@ import LiveTradingControls from "./LiveTradingControls";
 import MarketWatch from "./MarketWatch";
 import DigitAnalysis from "./DigitAnalysis";
 import TradingActivity from "./TradingActivity";
+import BotBuilder from "./BotBuilder";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
@@ -27,12 +28,13 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "settings";
+type WorkspacePage = "dashboard" | "markets" | "trade" | "bots" | "portfolio" | "settings";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "dashboard", label: "Dashboard", icon: "▦" },
   { id: "markets", label: "Markets", icon: "⌁" },
   { id: "trade", label: "Trade", icon: "↗" },
+  { id: "bots", label: "Automated Bots", icon: "▤" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
   { id: "settings", label: "Settings", icon: "⚙" },
 ];
@@ -41,6 +43,7 @@ const PAGE_TITLES: Record<WorkspacePage, string> = {
   dashboard: "Dashboard",
   markets: "Markets",
   trade: "Trade",
+  bots: "Automated Bots",
   portfolio: "Portfolio & History",
   settings: "Settings",
 };
@@ -527,6 +530,12 @@ export default function TradingWorkspace() {
                 onRefresh={trading.refreshAccount}
                 onLoadMore={trading.loadMoreActivity}
               />
+            </section>
+          )}
+
+          {page === "bots" && (
+            <section className={styles.workspaceSection} aria-label="Automated strategy builder">
+              <BotBuilder />
             </section>
           )}
 
