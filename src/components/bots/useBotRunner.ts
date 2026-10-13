@@ -538,17 +538,16 @@ export function useBotRunner(
         // Only handle our in-flight contract
         if (!inFlightContractIdRef.current || poc.contract_id === undefined || poc.contract_id === null) return;
         if (String(poc.contract_id) !== inFlightContractIdRef.current) return;
-        // The first matching status message proves the subscription is alive.
-        // Do not use the short subscription-ack timeout as a settlement timeout.
-        if (!contractStatusSeenRef.current) {
-          contractStatusSeenRef.current = true;
-          if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
-          responseTimerRef.current = setTimeout(() => {
-            if (!inFlightContractIdRef.current || cancelledRef.current) return;
-            orderOutcomeUnknownRef.current = true;
-            stopBot('Contract status stopped updating before settlement. Reconcile the open contract and account history in Deriv before restarting.');
-          }, Math.max(60000, cfg.durationUnit === 's' ? (cfg.duration + 60) * 1000 : 120000));
-        }
+        // Every matching update refreshes the inactivity watchdog. The bot must
+        // not time out a healthy long-running contract just because its duration
+        // exceeded the time of the first status message.
+        contractStatusSeenRef.current = true;
+        if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = setTimeout(() => {
+          if (!inFlightContractIdRef.current || cancelledRef.current) return;
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Contract status stopped updating before settlement. Reconcile the open contract and account history in Deriv before restarting.');
+        }, Math.max(60000, cfg.durationUnit === 's' ? (cfg.duration + 60) * 1000 : 120000));
 
         const isClosed = poc.is_sold === 1 || poc.is_sold === true
           || poc.is_expired === 1 || poc.is_expired === true
