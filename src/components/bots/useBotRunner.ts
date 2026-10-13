@@ -557,7 +557,7 @@ export function useBotRunner(
           currency: acc.currency ?? 'USD',
           startedAt: poc.date_start ? poc.date_start * 1000 : Date.now(),
           settledAt: Date.now(),
-          status: poc.status ?? 'sold',
+          status: poc.status === 'won' || profit > 0 ? 'won' : poc.status === 'lost' || profit < 0 ? 'lost' : 'break-even',
         };
 
         const isWin = poc.status === 'won' || (poc.status !== 'lost' && profit > 0);
@@ -630,7 +630,7 @@ export function useBotRunner(
         if (!stopReason && isLoss) {
           let consec = 0;
           for (const t of s.transactions) { if ((t.profit ?? 0) < 0) consec++; else break; }
-          if (consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
+          if (cfg.maxConsecutiveLosses > 0 && consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
         }
 
         if (stopReason) {
