@@ -116,6 +116,7 @@ export function useBotRunner(
   const handlerRef = useRef<EventListener | null>(null);
   const contractStatusSeenRef = useRef(false);
   const orderOutcomeUnknownRef = useRef(false);
+  const purchaseAttemptedRef = useRef(false);
 
   // Keep refs in sync with latest state/props
   useEffect(() => { stateRef.current = runState; }, [runState]);
@@ -220,7 +221,7 @@ export function useBotRunner(
       // Do not clear an unresolved order marker after a purchase may have been
       // accepted. A timeout/disconnect can lose the acknowledgement while Deriv
       // still owns an open contract; require reconciliation before another order.
-      if (acc && cfg && !orderOutcomeUnknownRef.current && !inFlightContractIdRef.current) {
+      if (acc && cfg && !orderOutcomeUnknownRef.current && !purchaseAttemptedRef.current && !inFlightContractIdRef.current) {
         const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
         try { localStorage.removeItem(key); setOrderRecoveryRequired(false); } catch { /* storage is best-effort */ }
       }
@@ -360,6 +361,7 @@ export function useBotRunner(
     }
     cancelledRef.current = false;
     orderOutcomeUnknownRef.current = false;
+    purchaseAttemptedRef.current = false;
     startTimeRef.current = Date.now();
     inFlightContractIdRef.current = null;
 
@@ -429,6 +431,8 @@ export function useBotRunner(
         // A rejected buy is an explicit broker response, so it is safe to clear
         // the marker. A lost acknowledgement is not and is handled by timeout.
         if (stage === 'buy') {
+          // A correlated broker rejection confirms that this purchase was not accepted.
+          purchaseAttemptedRef.current = false;
           try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); setOrderRecoveryRequired(false); } catch { /* ignore */ }
         }
         appendJournal('error', `Deriv error (${stage ?? 'request'}): ${err.message ?? JSON.stringify(msg.error)}`);
@@ -457,6 +461,7 @@ export function useBotRunner(
         botReqIds.add(buyReqId);
         requestStage.set(buyReqId, 'buy');
         activeRequestRef.current = buyReqId;
+        purchaseAttemptedRef.current = true;
         try {
           ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake, req_id: buyReqId }));
           if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
@@ -594,6 +599,7 @@ export function useBotRunner(
           return;
         }
         orderOutcomeUnknownRef.current = false;
+        purchaseAttemptedRef.current = false;
         inFlightContractIdRef.current = null;
         contractStatusSeenRef.current = false;
         const prior = stateRef.current;
@@ -676,6 +682,7 @@ export function useBotRunner(
     try {
       localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`);
       orderOutcomeUnknownRef.current = false;
+      purchaseAttemptedRef.current = false;
       inFlightContractIdRef.current = null;
       contractStatusSeenRef.current = false;
       setOrderRecoveryRequired(false);
