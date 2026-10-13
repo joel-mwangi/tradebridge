@@ -12,6 +12,34 @@ import type {
 } from './bot-types';
 import { saveNewRun } from './bot-storage';
 
+function utcDayKey(now = Date.now()): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+function dailyTradeStorageKey(accountId: string, configId: string, day: string): string {
+  return `tradebridge:bot-daily-trades:${accountId}:${configId}:${day}`;
+}
+
+function readDailyTradeCount(accountId: string, configId: string, day: string): number | null {
+  try {
+    const raw = localStorage.getItem(dailyTradeStorageKey(accountId, configId, day));
+    if (raw === null) return 0;
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDailyTradeCount(accountId: string, configId: string, day: string, count: number): boolean {
+  try {
+    localStorage.setItem(dailyTradeStorageKey(accountId, configId, day), String(count));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function makeInitialState(currency: string): BotRunState {
   return {
     status: 'idle',
@@ -307,6 +335,8 @@ export function useBotRunner(
       return;
     }
     const pendingKey = `tradebridge:bot-order-pending:${account.account_id}:${config.id}`;
+    let dailyTradeDate = utcDayKey();
+    let dailyTrades = readDailyTradeCount(account.account_id, config.id, dailyTradeDate);
     try {
       if (localStorage.getItem(pendingKey) !== null) {
         appendJournal('error', 'An unresolved order marker exists for this bot. Reconcile open contracts and account history in Deriv before restarting.');
@@ -314,6 +344,14 @@ export function useBotRunner(
       }
     } catch {
       appendJournal('error', 'Browser storage is unavailable; cannot safely confirm there is no unresolved order.');
+      return;
+    }
+    if (config.maxTradesPerDay > 0 && dailyTrades === null) {
+      appendJournal('error', 'Cannot read the daily trade counter safely. Trading is blocked until browser storage is available.');
+      return;
+    }
+    if (config.maxTradesPerDay > 0 && dailyTrades !== null && dailyTrades >= config.maxTradesPerDay) {
+      appendJournal('warn', `Daily trade cap already reached (${dailyTrades}/${config.maxTradesPerDay} UTC-day trades).`);
       return;
     }
     if (stateRef.current.status === 'running' || stateRef.current.status === 'cooldown' || stateRef.current.status === 'connecting') {
@@ -326,6 +364,14 @@ export function useBotRunner(
     inFlightContractIdRef.current = null;
 
     const initialStake = nextStakeAmount(config.stakeStrategy, null, 0);
+    if (!Number.isFinite(initialStake) || initialStake <= 0) {
+      appendJournal('error', 'Invalid initial stake. Set a finite stake greater than zero before starting.');
+      return;
+    }
+    if (!Number.isFinite(config.duration) || config.duration <= 0 || !config.symbol || !config.contractType) {
+      appendJournal('error', 'Invalid bot configuration: symbol, contract type, and positive duration are required.');
+      return;
+    }
 
     const initialState: BotRunState = {
       status: 'running',
@@ -519,14 +565,36 @@ export function useBotRunner(
           status: poc.status ?? 'sold',
         };
 
-        const isWin = poc.status === 'won' || (poc.status !== 'lost' && (profit ?? 0) > 0);
+        const isWin = poc.status === 'won' || (poc.status !== 'lost' && profit > 0);
+        const isLoss = poc.status === 'lost' || profit < 0;
+        // Count only authoritative settled contracts; persist the UTC-day cap
+        // before allowing the next proposal. Browser storage is a client-side
+        // guard, not a substitute for a server-enforced account risk limit.
+        const settlementDay = utcDayKey();
+        if (settlementDay !== dailyTradeDate) {
+          dailyTradeDate = settlementDay;
+          const refreshedCount = readDailyTradeCount(acc.account_id, cfg.id, dailyTradeDate);
+          if (refreshedCount === null) {
+            orderOutcomeUnknownRef.current = true;
+            stopBot('Could not read the daily trade counter after settlement. Trading paused; reconcile this contract and storage before restarting.');
+            return;
+          }
+          dailyTrades = refreshedCount;
+        }
+        const nextDailyTrades = (dailyTrades ?? 0) + 1;
+        if (cfg.maxTradesPerDay > 0 && !writeDailyTradeCount(acc.account_id, cfg.id, dailyTradeDate, nextDailyTrades)) {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Could not persist the daily trade counter after settlement. Trading paused; reconcile account history before restarting.');
+          return;
+        }
+        dailyTrades = nextDailyTrades;
         const prior = stateRef.current;
         const nextTransactions = [tx, ...prior.transactions];
         const nextRunState: BotRunState = {
           ...prior,
           tradeCount: prior.tradeCount + 1,
           wins: prior.wins + (isWin ? 1 : 0),
-          losses: prior.losses + (isWin ? 0 : 1),
+          losses: prior.losses + (isLoss ? 1 : 0),
           netPnl: prior.netPnl + profit,
           transactions: nextTransactions,
         };
@@ -534,8 +602,8 @@ export function useBotRunner(
         stateRef.current = nextRunState;
         patchState(nextRunState);
 
-        appendJournal(isWin ? 'info' : 'warn',
-          `Trade ${isWin ? 'WON' : 'LOST'} — profit: ${(profit ?? 0) >= 0 ? '+' : ''}${(profit ?? 0).toFixed(2)} ${acc.currency}`);
+        appendJournal(isWin ? 'info' : isLoss ? 'warn' : 'info',
+          `Trade ${isWin ? 'WON' : isLoss ? 'LOST' : 'BREAK-EVEN'} — profit: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)} ${acc.currency}`);
 
         // Check stop conditions
         const s = nextRunState;
@@ -548,10 +616,10 @@ export function useBotRunner(
           if (cond.type === 'tradeCount' && s.tradeCount >= cond.max) { stopReason = `Max trades reached (${s.tradeCount})`; break; }
           if (cond.type === 'time' && elapsed >= cond.seconds) { stopReason = `Time limit reached (${Math.round(elapsed)}s)`; break; }
         }
-        if (!stopReason && cfg.maxTradesPerDay > 0 && s.tradeCount >= cfg.maxTradesPerDay) {
-          stopReason = `Daily trade cap reached (${s.tradeCount})`;
+        if (!stopReason && cfg.maxTradesPerDay > 0 && (dailyTrades ?? 0) >= cfg.maxTradesPerDay) {
+          stopReason = `Daily trade cap reached (${dailyTrades}/${cfg.maxTradesPerDay} UTC-day trades)`;
         }
-        if (!stopReason && !isWin) {
+        if (!stopReason && isLoss) {
           let consec = 0;
           for (const t of s.transactions) { if ((t.profit ?? 0) < 0) consec++; else break; }
           if (consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
