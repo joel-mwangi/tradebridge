@@ -81,7 +81,10 @@ export function useBotRunner(
   const sessionStateRef = useRef(sessionState);
   const startTimeRef = useRef<number | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const responseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightContractIdRef = useRef<string | null>(null);
+  const activeRequestRef = useRef<number | null>(null);
+  const orderOutcomeUnknownRef = useRef(false);
 
   // Keep refs in sync with latest state/props
   useEffect(() => { stateRef.current = runState; }, [runState]);
@@ -145,10 +148,14 @@ export function useBotRunner(
     return () => {
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
-      // Remove any dangling onmessage handler we installed
+      if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+      // Bot handlers are registered as independent listeners; never replace the
+      // shared trading session's onmessage callback.
       const ws = sharedSocketRef.current;
-      if (ws && (ws as unknown as { _botHandler?: unknown })._botHandler) {
-        delete (ws as unknown as { _botHandler?: unknown })._botHandler;
+      const handler = (ws as (WebSocket & { __tradeBridgeBotHandler?: EventListener }) | null)?.__tradeBridgeBotHandler;
+      if (ws && handler) {
+        ws.removeEventListener('message', handler);
+        delete (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler;
       }
     };
   }, [connected, account?.account_id, account?.currency, config?.id, sharedSocketRef]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -162,15 +169,15 @@ export function useBotRunner(
       const acc = accountRef.current;
       const s = stateRef.current;
 
-      // Flush pending marker
-      if (acc && cfg) {
+      // Do not clear an unresolved order marker after a purchase may have been
+      // accepted. A timeout/disconnect can lose the acknowledgement while Deriv
+      // still owns an open contract; require reconciliation before another order.
+      if (acc && cfg && !orderOutcomeUnknownRef.current && !inFlightContractIdRef.current) {
         const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
-        try {
-          localStorage.removeItem(key);
-        } catch {
-          // ignore
-        }
+        try { localStorage.removeItem(key); } catch { /* storage is best-effort */ }
       }
+      if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+      responseTimerRef.current = null;
 
       // We do not own the shared socket — do not close it.
       // Just cancel the bot loop; the trading session manages the socket lifetime.
@@ -208,14 +215,24 @@ export function useBotRunner(
       const cfg = configRef.current;
       const acc = accountRef.current;
       const ws = sharedSocketRef.current;
-      if (!cfg || !acc || cancelledRef.current || !ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!cfg || !acc || cancelledRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
+        stopBot('Cannot send proposal: bot configuration, account, or authenticated WebSocket is unavailable.');
+        return;
+      }
 
       const pendingKey = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
       try { localStorage.setItem(pendingKey, 'pending'); } catch { /* ignore */ }
 
       appendJournal('info', `Requesting quote: ${cfg.contractType} ${cfg.symbol} stake=${stake} ${acc.currency}`);
 
-      ws.send(JSON.stringify({
+      activeRequestRef.current = reqId;
+      if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+      responseTimerRef.current = setTimeout(() => {
+        if (activeRequestRef.current !== reqId || cancelledRef.current) return;
+        orderOutcomeUnknownRef.current = true;
+        stopBot('Timed out waiting for Deriv proposal response. Trading is paused; check the Deriv session before restarting.');
+      }, 15000);
+      try { ws.send(JSON.stringify({
         proposal: 1,
         amount: stake,
         basis: 'stake',
@@ -226,9 +243,13 @@ export function useBotRunner(
         symbol: cfg.symbol,
         ...(cfg.barrier ? { barrier: cfg.barrier } : {}),
         req_id: reqId,
-      }));
+      })); } catch {
+        if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = null;
+        stopBot('Could not send proposal on the Deriv WebSocket.');
+      }
     },
-    [appendJournal, sharedSocketRef]
+    [appendJournal, sharedSocketRef, stopBot]
   );
 
   const start = useCallback(() => {
@@ -238,7 +259,7 @@ export function useBotRunner(
     }
 
     // Check that the shared session is ready — read from ref, never stale
-    const sessionReady = sessionStateRef.current === 'Demo trading connected' || sessionStateRef.current === 'Real trading connected';
+    const sessionReady = sessionStateRef.current === 'Demo trading connected';
     if (!sessionReady) {
       appendJournal('warn', `Trading session not ready (${sessionStateRef.current}). Connect your Deriv account on the Trade page first.`);
       stopBot(`Session not ready: ${sessionStateRef.current}`);
@@ -251,7 +272,18 @@ export function useBotRunner(
       return;
     }
 
+    // This client-side runner is intentionally demo-only. Real-account orders
+    // must never be reachable through a stale UI/session state.
+    if ((account.account_type ?? '').toLowerCase() !== 'demo') {
+      appendJournal('error', 'Demo-only bot blocked: select a verified Demo account.');
+      return;
+    }
+    if (stateRef.current.status === 'running' || stateRef.current.status === 'cooldown' || stateRef.current.status === 'connecting') {
+      appendJournal('warn', 'This bot is already active. Stop it before starting another run.');
+      return;
+    }
     cancelledRef.current = false;
+    orderOutcomeUnknownRef.current = false;
     startTimeRef.current = Date.now();
     inFlightContractIdRef.current = null;
 
@@ -276,18 +308,16 @@ export function useBotRunner(
 
     // Track bot-owned req_ids so we only handle our own messages
     const botReqIds = new Set<number>();
+    const requestStage = new Map<number, 'proposal' | 'buy' | 'monitor'>();
 
     const proposalReqId = nextSharedSeqId();
     botReqIds.add(proposalReqId);
+    requestStage.set(proposalReqId, 'proposal');
 
-    // Install a message handler that multiplexes on req_id —
-    // any message whose req_id is not in our set is passed through
-    // to the previous handler (the trading session's own handler).
-    const prevOnMessage = ws.onmessage;
-
-    const botMessageHandler = (ev: MessageEvent) => {
-      // Always forward to the trading session's handler first
-      if (prevOnMessage) (prevOnMessage as (e: MessageEvent) => void)(ev);
+    // Observe the shared socket without taking ownership of its onmessage
+    // callback. Only exact req_id matches and the exact open contract are ours.
+    const botMessageHandler = (event: Event) => {
+      const ev = event as MessageEvent;
 
       if (cancelledRef.current) return;
 
@@ -305,37 +335,79 @@ export function useBotRunner(
 
       // Error on one of our requests
       if (msg.error && reqId !== null && botReqIds.has(reqId)) {
+        if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = null;
+        activeRequestRef.current = null;
         const err = msg.error as { message?: string };
-        appendJournal('error', `Deriv error: ${err.message ?? JSON.stringify(msg.error)}`);
-        if (ws.onmessage === botMessageHandler) ws.onmessage = prevOnMessage;
+        const stage = requestStage.get(reqId);
+        // A rejected buy is an explicit broker response, so it is safe to clear
+        // the marker. A lost acknowledgement is not and is handled by timeout.
+        if (stage === 'buy') {
+          try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); } catch { /* ignore */ }
+        }
+        appendJournal('error', `Deriv error (${stage ?? 'request'}): ${err.message ?? JSON.stringify(msg.error)}`);
         stopBot(err.message ?? 'Deriv error');
         return;
       }
 
-      // Proposal response — match by req_id when present, otherwise by msg_type
-      // Deriv's Options API always includes req_id on proposal responses.
+      // Never infer ownership from msg_type alone: a missing req_id is not ours.
       if (msgType === 'proposal') {
-        if (reqId !== null && !botReqIds.has(reqId)) return; // belongs to trading session
+        if (reqId === null || !botReqIds.has(reqId) || requestStage.get(reqId) !== 'proposal') return;
+        if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = null;
+        activeRequestRef.current = null;
         const proposal = msg.proposal as { id?: string } | undefined;
         if (!proposal?.id) { stopBot('Invalid proposal response'); return; }
         appendJournal('info', `Quote received (id=${proposal.id}). Buying…`);
         const buyReqId = nextSharedSeqId();
         botReqIds.add(buyReqId);
-        ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake, req_id: buyReqId }));
+        requestStage.set(buyReqId, 'buy');
+        activeRequestRef.current = buyReqId;
+        try {
+          ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake, req_id: buyReqId }));
+          if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+          responseTimerRef.current = setTimeout(() => {
+            if (activeRequestRef.current !== buyReqId || cancelledRef.current) return;
+            orderOutcomeUnknownRef.current = true;
+            stopBot('Timed out waiting for Deriv purchase acknowledgement. The order outcome is unknown; reconcile the Deriv account before restarting.');
+          }, 15000);
+        } catch {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Purchase request could not be sent reliably. Reconcile the Deriv account before restarting.');
+        }
         return;
       }
 
-      // Buy response
+      // Buy response: require the exact request id and buy stage.
       if (msgType === 'buy') {
-        if (reqId !== null && !botReqIds.has(reqId)) return; // belongs to trading session
-        const buyResp = msg.buy as { contract_id?: number } | undefined;
-        if (!buyResp?.contract_id) { stopBot('Buy response missing contract ID'); return; }
+        if (reqId === null || !botReqIds.has(reqId) || requestStage.get(reqId) !== 'buy') return;
+        if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = null;
+        activeRequestRef.current = null;
+        const buyResp = msg.buy as { contract_id?: number | string } | undefined;
+        if (buyResp?.contract_id === undefined || buyResp?.contract_id === null || String(buyResp.contract_id) === '') {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Buy response missing contract ID. Reconcile the Deriv account before restarting.');
+          return;
+        }
         const contractId = String(buyResp.contract_id);
         inFlightContractIdRef.current = contractId;
         appendJournal('info', `Contract ${contractId} purchased. Awaiting settlement…`);
         const monitorReqId = nextSharedSeqId();
         botReqIds.add(monitorReqId);
-        ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: buyResp.contract_id, subscribe: 1, req_id: monitorReqId }));
+        requestStage.set(monitorReqId, 'monitor');
+        activeRequestRef.current = monitorReqId;
+        try {
+          ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: buyResp.contract_id, subscribe: 1, req_id: monitorReqId }));
+          responseTimerRef.current = setTimeout(() => {
+            if (activeRequestRef.current !== monitorReqId || cancelledRef.current || !inFlightContractIdRef.current) return;
+            orderOutcomeUnknownRef.current = true;
+            stopBot('Timed out waiting for contract status. The contract may still be open; reconcile it in Deriv before restarting.');
+          }, 30000);
+        } catch {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Could not subscribe to contract status. The contract may still be open; reconcile it in Deriv before restarting.');
+        }
         return;
       }
 
@@ -349,8 +421,8 @@ export function useBotRunner(
         if (!poc) return;
 
         // Only handle our in-flight contract
-        if (!inFlightContractIdRef.current) return;
-        if (poc.contract_id && String(poc.contract_id) !== inFlightContractIdRef.current) return;
+        if (!inFlightContractIdRef.current || poc.contract_id === undefined || poc.contract_id === null) return;
+        if (String(poc.contract_id) !== inFlightContractIdRef.current) return;
 
         const isClosed = poc.is_sold === 1 || poc.is_sold === true
           || poc.is_expired === 1 || poc.is_expired === true
@@ -358,11 +430,20 @@ export function useBotRunner(
           || poc.status === 'sold' || poc.status === 'expired';
         if (!isClosed) return;
 
-        const profit = typeof poc.profit === 'number' ? poc.profit : null;
-        const payout = typeof poc.payout === 'number' ? poc.payout : null;
+        const profit = typeof poc.profit === 'number' ? poc.profit : Number.isFinite(Number(poc.profit)) ? Number(poc.profit) : null;
+        const payout = typeof poc.payout === 'number' ? poc.payout : Number.isFinite(Number(poc.payout)) ? Number(poc.payout) : null;
+        if (profit === null) {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Deriv closed the contract without a usable realized profit value. Reconcile account history before restarting.');
+          return;
+        }
+        if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = null;
+        activeRequestRef.current = null;
         const stake = stateRef.current.currentStake;
 
         try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); } catch { /* ignore */ }
+        orderOutcomeUnknownRef.current = false;
         inFlightContractIdRef.current = null;
 
         const tx: BotTransaction = {
@@ -378,19 +459,25 @@ export function useBotRunner(
         };
 
         const isWin = poc.status === 'won' || (poc.status !== 'lost' && (profit ?? 0) > 0);
-        patchState((prev) => ({
-          tradeCount: prev.tradeCount + 1,
-          wins: prev.wins + (isWin ? 1 : 0),
-          losses: prev.losses + (isWin ? 0 : 1),
-          netPnl: prev.netPnl + (profit ?? 0),
-          transactions: [tx, ...prev.transactions],
-        }));
+        const prior = stateRef.current;
+        const nextTransactions = [tx, ...prior.transactions];
+        const nextRunState: BotRunState = {
+          ...prior,
+          tradeCount: prior.tradeCount + 1,
+          wins: prior.wins + (isWin ? 1 : 0),
+          losses: prior.losses + (isWin ? 0 : 1),
+          netPnl: prior.netPnl + profit,
+          transactions: nextTransactions,
+        };
+        // Update the authoritative ref synchronously before evaluating stop gates.
+        stateRef.current = nextRunState;
+        patchState(nextRunState);
 
         appendJournal(isWin ? 'info' : 'warn',
           `Trade ${isWin ? 'WON' : 'LOST'} — profit: ${(profit ?? 0) >= 0 ? '+' : ''}${(profit ?? 0).toFixed(2)} ${acc.currency}`);
 
         // Check stop conditions
-        const s = stateRef.current;
+        const s = nextRunState;
         const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
         let stopReason: string | null = null;
 
@@ -411,7 +498,6 @@ export function useBotRunner(
 
         if (stopReason) {
           appendJournal('info', stopReason);
-          if (ws.onmessage === botMessageHandler) ws.onmessage = prevOnMessage;
           stopBot();
           return;
         }
@@ -423,18 +509,20 @@ export function useBotRunner(
 
         cooldownTimerRef.current = setTimeout(() => {
           if (cancelledRef.current) {
-            if (ws.onmessage === botMessageHandler) ws.onmessage = prevOnMessage;
             return;
           }
           patchState({ status: 'running' });
           const nextReqId = nextSharedSeqId();
           botReqIds.add(nextReqId);
+          requestStage.set(nextReqId, 'proposal');
           sendProposal(nextReqId, nextStake);
         }, cfg.cooldownSeconds * 1000);
       }
     };
 
-    ws.onmessage = botMessageHandler;
+    const eventHandler = botMessageHandler as EventListener;
+    ws.addEventListener('message', eventHandler);
+    (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler = eventHandler;
     sendProposal(proposalReqId, initialStake);
 
   }, [connected, account, config, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
