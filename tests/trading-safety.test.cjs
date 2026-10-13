@@ -195,3 +195,11 @@ test("stopping one bot run is idempotent and cannot persist duplicate run summar
   assert.match(botRunner, /if \(stopHandledRef\.current\) return/);
   assert.match(botRunner, /stopHandledRef\.current = false/);
 });
+
+
+test("bot releases its own Deriv contract-status subscription on settlement, stop, and unmount", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /contractSubscriptionIdRef/);
+  assert.match(botRunner, /forget: subscriptionId/);
+  assert.match(botRunner, /forgetContractSubscription\(\)/);
+});
