@@ -179,11 +179,6 @@ export function useBotRunner(
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (!connected && ['running', 'cooldown', 'connecting'].includes(stateRef.current.status)) {
-      stopBot('Deriv session disconnected while the bot was active. Check open contracts and account history before restarting.');
-    }
-  }, [connected, stopBot]);
 
   const stopBot = useCallback(
     (reason?: string) => {
@@ -238,6 +233,13 @@ export function useBotRunner(
     },
     [patchState, appendJournal, sharedSocketRef]
   );
+
+
+  useEffect(() => {
+    if (!connected && ['running', 'cooldown', 'connecting'].includes(stateRef.current.status)) {
+      stopBot('Deriv session disconnected while the bot was active. Check open contracts and account history before restarting.');
+    }
+  }, [connected, stopBot]);
 
   const sendProposal = useCallback(
     (reqId: number, stake: number) => {
