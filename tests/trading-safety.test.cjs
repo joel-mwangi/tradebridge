@@ -142,3 +142,19 @@ test("disconnect after purchase submission cannot clear the unresolved-order loc
   assert.match(botRunner, /!purchaseAttemptedRef\.current && !inFlightContractIdRef\.current/);
   assert.match(botRunner, /purchaseAttemptedRef\.current = false/);
 });
+
+
+test("settlement parsing rejects null and blank profit values instead of recording zero profit", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /function parseFiniteNumber\(value: unknown\): number \| null/);
+  assert.match(botRunner, /if \(typeof value !== 'string' \|\| value\.trim\(\) === ''\) return null/);
+  assert.match(botRunner, /const profit = parseFiniteNumber\(poc\.profit\)/);
+  assert.match(botRunner, /if \(profit === null\)/);
+});
+
+test("bot validates legacy or malformed configuration and recalculated stake before sending another order", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /!Array\.isArray\(config\.stopConditions\)/);
+  assert.match(botRunner, /Invalid bot configuration/);
+  assert.match(botRunner, /Invalid next stake calculated by the selected staking strategy/);
+});
