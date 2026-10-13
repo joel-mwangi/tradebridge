@@ -6,6 +6,7 @@ import styles from "./BotBuilder.module.css";
 type BlockKind = "purchase" | "condition" | "risk" | "restart" | "stop";
 type StrategyBlock = { id: string; kind: BlockKind; title: string; detail: string; enabled: boolean };
 type Draft = {
+  id?: string;
   name: string; symbol: string; contract: "DIGITOVER" | "DIGITUNDER" | "DIGITEVEN" | "DIGITODD" | "DIGITMATCH" | "DIGITDIFF";
   barrier: number; stake: number; duration: number; maxTrades: number; dailyLoss: number; maxLossStreak: number;
   blocks: StrategyBlock[];
@@ -41,11 +42,30 @@ export default function BotBuilder() {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("tradebridge_bot_builder_drafts_v1");
-      if (raw) setSaved(JSON.parse(raw) as Draft[]);
       const active = localStorage.getItem("tradebridge_bot_builder_active_v1");
       if (active) setDraft(JSON.parse(active) as Draft);
-    } catch { setNotice("Saved drafts could not be read. You can still create and export a new draft."); }
+      const raw = localStorage.getItem("tradebridge_bot_builder_drafts_v1");
+      if (raw) setSaved(JSON.parse(raw) as Draft[]);
+    } catch { setNotice("Local drafts could not be read. You can still create and export a new draft."); }
+    void (async () => {
+      try {
+        const response = await fetch("/api/bots/strategies", { cache: "no-store" });
+        if (!response.ok) {
+          if (response.status === 401) setNotice("Sign in to sync strategy drafts across devices. Browser-local drafts remain available.");
+          return;
+        }
+        const data = await response.json() as { drafts?: Array<{ id: string; name: string; strategy_definition: Draft }> };
+        const remote = (data.drafts ?? []).map((item) => ({ ...item.strategy_definition, id: item.id, name: item.name }));
+        setSaved((current) => {
+          const merged = [...remote, ...current.filter((local) => !remote.some((item) => item.name === local.name))];
+          try { localStorage.setItem("tradebridge_bot_builder_drafts_v1", JSON.stringify(merged)); } catch {}
+          return merged;
+        });
+        setNotice("Strategy drafts synced with your signed-in TradeBridge account. Execution remains gated.");
+      } catch {
+        setNotice("Cloud draft sync is unavailable right now. Browser-local drafts remain available.");
+      }
+    })();
   }, []);
 
   const issues = useMemo(() => {
@@ -72,12 +92,41 @@ export default function BotBuilder() {
       localStorage.setItem("tradebridge_bot_builder_drafts_v1", JSON.stringify(nextSaved));
       localStorage.setItem("tradebridge_bot_builder_active_v1", JSON.stringify(nextDraft));
       setSaved(nextSaved);
-      setNotice("Draft saved in this browser. It has not been sent to the trading engine.");
     } catch { setNotice("Could not save locally. Export the strategy JSON to keep a copy."); }
   }
-  function saveDraft() {
-    const next = [draft, ...saved.filter((item) => item.name !== draft.name)].slice(0, 20);
-    persist(next);
+  async function saveDraft() {
+    const localNext = { ...draft };
+    try {
+      localStorage.setItem("tradebridge_bot_builder_active_v1", JSON.stringify(localNext));
+      const response = await fetch("/api/bots/strategies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(draft.id ? { id: draft.id } : {}),
+          name: draft.name,
+          source_format: "native",
+          strategy_definition: { ...draft, id: undefined },
+        }),
+      });
+      if (response.ok) {
+        const payload = await response.json() as { draft: { id: string; name: string } };
+        const persisted = { ...localNext, id: payload.draft.id, name: payload.draft.name };
+        const next = [persisted, ...saved.filter((item) => item.id !== persisted.id && item.name !== persisted.name)].slice(0, 50);
+        persist(next, persisted);
+        setDraft(persisted);
+        setNotice("Draft saved to your TradeBridge account and cached in this browser. It is not executable.");
+        return;
+      }
+      const next = [localNext, ...saved.filter((item) => item.name !== localNext.name)].slice(0, 20);
+      persist(next, localNext);
+      setNotice(response.status === 401
+        ? "Not signed in: draft saved locally only. Sign in to sync it across devices."
+        : "Cloud save failed; draft saved locally. Check that the bot_strategy_definitions migration is applied.");
+    } catch {
+      const next = [localNext, ...saved.filter((item) => item.name !== localNext.name)].slice(0, 20);
+      persist(next, localNext);
+      setNotice("Cloud save is unavailable; draft saved locally. Export JSON for an additional backup.");
+    }
   }
   function loadDraft(item: Draft) {
     setDraft(item);
