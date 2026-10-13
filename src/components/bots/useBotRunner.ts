@@ -40,6 +40,13 @@ function writeDailyTradeCount(accountId: string, configId: string, day: string, 
   }
 }
 
+function parseFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function makeInitialState(currency: string): BotRunState {
   return {
     status: 'idle',
@@ -541,8 +548,8 @@ export function useBotRunner(
           || poc.status === 'sold' || poc.status === 'expired';
         if (!isClosed) return;
 
-        const profit = typeof poc.profit === 'number' ? poc.profit : Number.isFinite(Number(poc.profit)) ? Number(poc.profit) : null;
-        const payout = typeof poc.payout === 'number' ? poc.payout : Number.isFinite(Number(poc.payout)) ? Number(poc.payout) : null;
+        const profit = parseFiniteNumber(poc.profit);
+        const payout = parseFiniteNumber(poc.payout);
         if (profit === null) {
           orderOutcomeUnknownRef.current = true;
           stopBot('Deriv closed the contract without a usable realized profit value. Reconcile account history before restarting.');
