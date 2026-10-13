@@ -78,20 +78,16 @@ export function useBotRunner(
   const stateRef = useRef<BotRunState>(runState);
   const configRef = useRef<BotConfig | null>(config);
   const accountRef = useRef<DerivAccount | null>(account);
+  const sessionStateRef = useRef(sessionState);
   const startTimeRef = useRef<number | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightContractIdRef = useRef<string | null>(null);
 
   // Keep refs in sync with latest state/props
-  useEffect(() => {
-    stateRef.current = runState;
-  }, [runState]);
-  useEffect(() => {
-    configRef.current = config;
-  }, [config]);
-  useEffect(() => {
-    accountRef.current = account;
-  }, [account]);
+  useEffect(() => { stateRef.current = runState; }, [runState]);
+  useEffect(() => { configRef.current = config; }, [config]);
+  useEffect(() => { accountRef.current = account; }, [account]);
+  useEffect(() => { sessionStateRef.current = sessionState; }, [sessionState]);
 
   const patchState = useCallback(
     (patch: Partial<BotRunState> | ((prev: BotRunState) => Partial<BotRunState>)) => {
@@ -241,10 +237,11 @@ export function useBotRunner(
       return;
     }
 
-    // Check that the shared session is ready — no cold start, no OTP needed
-    const sessionReady = sessionState === 'Demo trading connected' || sessionState === 'Real trading connected';
+    // Check that the shared session is ready — read from ref, never stale
+    const sessionReady = sessionStateRef.current === 'Demo trading connected' || sessionStateRef.current === 'Real trading connected';
     if (!sessionReady) {
-      appendJournal('warn', `Trading session not ready (${sessionState}). Connect your Deriv account first.`);
+      appendJournal('warn', `Trading session not ready (${sessionStateRef.current}). Connect your Deriv account on the Trade page first.`);
+      stopBot(`Session not ready: ${sessionStateRef.current}`);
       return;
     }
 
@@ -440,7 +437,7 @@ export function useBotRunner(
     ws.onmessage = botMessageHandler;
     sendProposal(proposalReqId, initialStake);
 
-  }, [connected, account, config, sessionState, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connected, account, config, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stop = useCallback(() => {
     setStatus('stopping');
