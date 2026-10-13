@@ -211,7 +211,6 @@ export function useBotRunner(
       const handler = handlerRef.current;
       if (ws && handler) ws.removeEventListener('message', handler);
       handlerRef.current = null;
-      if (ws) delete (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -237,7 +236,6 @@ export function useBotRunner(
       const currentSocket = sharedSocketRef.current;
       if (currentSocket && handlerRef.current) currentSocket.removeEventListener('message', handlerRef.current);
       handlerRef.current = null;
-      if (currentSocket) delete (currentSocket as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler;
 
       // We do not own the shared socket — do not close it.
       // Just cancel the bot loop; the trading session manages the socket lifetime.
@@ -461,6 +459,8 @@ export function useBotRunner(
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = null;
         activeRequestRef.current = null;
+        botReqIds.delete(reqId);
+        requestStage.delete(reqId);
         const proposal = msg.proposal as { id?: string } | undefined;
         if (!proposal?.id) { stopBot('Invalid proposal response'); return; }
         appendJournal('info', `Quote received (id=${proposal.id}). Buying…`);
@@ -498,6 +498,8 @@ export function useBotRunner(
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = null;
         activeRequestRef.current = null;
+        botReqIds.delete(reqId);
+        requestStage.delete(reqId);
         const buyResp = msg.buy as { contract_id?: number | string } | undefined;
         if (buyResp?.contract_id === undefined || buyResp?.contract_id === null || String(buyResp.contract_id) === '') {
           orderOutcomeUnknownRef.current = true;
@@ -542,6 +544,10 @@ export function useBotRunner(
         // not time out a healthy long-running contract just because its duration
         // exceeded the time of the first status message.
         contractStatusSeenRef.current = true;
+        if (reqId !== null && requestStage.get(reqId) === 'monitor') {
+          botReqIds.delete(reqId);
+          requestStage.delete(reqId);
+        }
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = setTimeout(() => {
           if (!inFlightContractIdRef.current || cancelledRef.current) return;
@@ -685,7 +691,6 @@ export function useBotRunner(
     const eventHandler = botMessageHandler as EventListener;
     handlerRef.current = eventHandler;
     ws.addEventListener('message', eventHandler);
-    (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler = eventHandler;
     sendProposal(proposalReqId, initialStake);
 
   }, [connected, account, config, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
