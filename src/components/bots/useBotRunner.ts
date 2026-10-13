@@ -114,6 +114,9 @@ export function useBotRunner(
   const stateRef = useRef<BotRunState>(runState);
   const configRef = useRef<BotConfig | null>(config);
   const accountRef = useRef<DerivAccount | null>(account);
+  const runAccountRef = useRef<DerivAccount | null>(null);
+  const runConfigRef = useRef<BotConfig | null>(null);
+  const recoveryKeyRef = useRef<string | null>(null);
   const sessionStateRef = useRef(sessionState);
   const startTimeRef = useRef<number | null>(null);
   const runAccountIdRef = useRef<string | null>(null);
@@ -166,8 +169,14 @@ export function useBotRunner(
       setOrderRecoveryRequired(false);
       return;
     }
+    const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
     try {
-      setOrderRecoveryRequired(localStorage.getItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`) !== null);
+      if (localStorage.getItem(key) !== null) {
+        recoveryKeyRef.current = key;
+        setOrderRecoveryRequired(true);
+      } else if (recoveryKeyRef.current === null) {
+        setOrderRecoveryRequired(false);
+      }
     } catch {
       setOrderRecoveryRequired(true);
     }
@@ -183,6 +192,8 @@ export function useBotRunner(
     const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
     try {
       if (localStorage.getItem(key) !== null) {
+        recoveryKeyRef.current = key;
+        setOrderRecoveryRequired(true);
         const entry: JournalEntry = {
           timestamp: Date.now(),
           level: 'warn',
@@ -221,8 +232,8 @@ export function useBotRunner(
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
 
-      const cfg = configRef.current;
-      const acc = accountRef.current;
+      const cfg = runConfigRef.current ?? configRef.current;
+      const acc = runAccountRef.current ?? accountRef.current;
       const s = stateRef.current;
 
       // Do not clear an unresolved order marker after a purchase may have been
@@ -230,7 +241,11 @@ export function useBotRunner(
       // still owns an open contract; require reconciliation before another order.
       if (acc && cfg && !orderOutcomeUnknownRef.current && !purchaseAttemptedRef.current && !inFlightContractIdRef.current) {
         const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
-        try { localStorage.removeItem(key); setOrderRecoveryRequired(false); } catch { /* storage is best-effort */ }
+        try {
+          localStorage.removeItem(key);
+          if (recoveryKeyRef.current === key) recoveryKeyRef.current = null;
+          setOrderRecoveryRequired(recoveryKeyRef.current !== null);
+        } catch { /* storage is best-effort */ }
       }
       if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
       responseTimerRef.current = null;
@@ -265,6 +280,8 @@ export function useBotRunner(
           currency: s.currency,
         });
       }
+      runAccountRef.current = null;
+      runConfigRef.current = null;
     },
     [patchState, appendJournal, sharedSocketRef]
   );
@@ -349,6 +366,10 @@ export function useBotRunner(
       return;
     }
     const pendingKey = `tradebridge:bot-order-pending:${account.account_id}:${config.id}`;
+    if (recoveryKeyRef.current !== null && recoveryKeyRef.current !== pendingKey) {
+      appendJournal('error', 'Another account or bot has an unresolved order. Reconcile that order in Deriv before starting a different bot.');
+      return;
+    }
     let dailyTradeDate = utcDayKey();
     let dailyTrades = readDailyTradeCount(account.account_id, config.id, dailyTradeDate);
     try {
@@ -375,6 +396,8 @@ export function useBotRunner(
     cancelledRef.current = false;
     orderOutcomeUnknownRef.current = false;
     purchaseAttemptedRef.current = false;
+    runAccountRef.current = account;
+    runConfigRef.current = config;
     startTimeRef.current = Date.now();
     runAccountIdRef.current = account.account_id;
     inFlightContractIdRef.current = null;
@@ -455,7 +478,12 @@ export function useBotRunner(
         if (stage === 'buy') {
           // A correlated broker rejection confirms that this purchase was not accepted.
           purchaseAttemptedRef.current = false;
-          try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); setOrderRecoveryRequired(false); } catch { /* ignore */ }
+          try {
+            const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
+            localStorage.removeItem(key);
+            if (recoveryKeyRef.current === key) recoveryKeyRef.current = null;
+            setOrderRecoveryRequired(recoveryKeyRef.current !== null);
+          } catch { /* ignore */ }
         }
         appendJournal('error', `Deriv error (${stage ?? 'request'}): ${err.message ?? JSON.stringify(msg.error)}`);
         stopBot(err.message ?? 'Deriv error');
@@ -474,7 +502,9 @@ export function useBotRunner(
         if (!proposal?.id) { stopBot('Invalid proposal response'); return; }
         appendJournal('info', `Quote received (id=${proposal.id}). Buying…`);
         try {
-          localStorage.setItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`, 'pending');
+          const pendingKey = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
+          localStorage.setItem(pendingKey, 'pending');
+          recoveryKeyRef.current = pendingKey;
           setOrderRecoveryRequired(true);
         } catch {
           orderOutcomeUnknownRef.current = true;
@@ -620,8 +650,10 @@ export function useBotRunner(
         // Only release the recovery lock after settlement and its daily risk
         // counter have both been persisted successfully.
         try {
-          localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`);
-          setOrderRecoveryRequired(false);
+          const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
+          localStorage.removeItem(key);
+          if (recoveryKeyRef.current === key) recoveryKeyRef.current = null;
+          setOrderRecoveryRequired(recoveryKeyRef.current !== null);
         } catch {
           orderOutcomeUnknownRef.current = true;
           stopBot('Could not clear the order recovery marker after settlement. Reconcile account history before restarting.');
@@ -705,15 +737,15 @@ export function useBotRunner(
   }, [connected, account, config, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const acknowledgeOrderReconciled = useCallback(() => {
-    const acc = accountRef.current;
-    const cfg = configRef.current;
-    if (!acc || !cfg || typeof window === 'undefined') return;
+    const key = recoveryKeyRef.current;
+    if (!key || typeof window === 'undefined') return;
     const confirmed = window.confirm(
-      'Only continue if you checked Deriv directly and confirmed there is no unresolved/open contract from this bot. Clear the recovery lock?'
+      'Only continue if you checked the correct Deriv Demo account and confirmed there is no unresolved/open contract associated with this recovery lock. Clear the lock?'
     );
     if (!confirmed) return;
     try {
-      localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`);
+      localStorage.removeItem(key);
+      recoveryKeyRef.current = null;
       orderOutcomeUnknownRef.current = false;
       purchaseAttemptedRef.current = false;
       inFlightContractIdRef.current = null;
