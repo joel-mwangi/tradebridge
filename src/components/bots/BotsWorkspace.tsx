@@ -40,7 +40,7 @@ export function BotsWorkspace({
   }, []);
 
   const activeConfig = configs.find((c) => c.id === activeConfigId) ?? null;
-  const { runState, start, stop } = useBotRunner(
+  const { runState, start, stop, orderRecoveryRequired, acknowledgeOrderReconciled } = useBotRunner(
     connected, account, activeConfig, sharedSocketRef, nextSharedSeqId, sessionState,
   );
 
@@ -142,6 +142,8 @@ export function BotsWorkspace({
             runState={runState}
             onStart={start}
             onStop={stop}
+            orderRecoveryRequired={orderRecoveryRequired}
+            onAcknowledgeOrderReconciled={acknowledgeOrderReconciled}
             config={activeConfig}
           />
         </aside>
