@@ -19,6 +19,42 @@ const starters: StrategyBlock[] = [
   { id: "stop", kind: "stop", title: "Stop conditions", detail: "Stop on the configured consecutive-loss limit.", enabled: true },
 ];
 const defaultDraft: Draft = { name: "My digit strategy", symbol: "1HZ75V", contract: "DIGITOVER", barrier: 5, stake: 1, duration: 1, maxTrades: 10, dailyLoss: 5, maxLossStreak: 3, blocks: starters };
+const validBlockKinds: BlockKind[] = ["purchase", "condition", "risk", "restart", "stop"];
+
+function sanitizeDraft(value: unknown): Draft | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Partial<Draft>;
+  if (typeof candidate.name !== "string" || typeof candidate.symbol !== "string" || !Array.isArray(candidate.blocks)) return null;
+  const blocks = candidate.blocks.filter((block): block is StrategyBlock =>
+    Boolean(block && typeof block === "object" &&
+      typeof block.id === "string" &&
+      validBlockKinds.includes((block as StrategyBlock).kind) &&
+      typeof (block as StrategyBlock).title === "string" &&
+      typeof (block as StrategyBlock).detail === "string" &&
+      typeof (block as StrategyBlock).enabled === "boolean")
+  );
+  const contracts: Draft["contract"][] = ["DIGITOVER", "DIGITUNDER", "DIGITEVEN", "DIGITODD", "DIGITMATCH", "DIGITDIFF"];
+  return {
+    ...defaultDraft,
+    ...candidate,
+    name: candidate.name.slice(0, 80),
+    symbol: candidate.symbol.slice(0, 32),
+    contract: contracts.includes(candidate.contract as Draft["contract"]) ? candidate.contract as Draft["contract"] : defaultDraft.contract,
+    barrier: Number.isFinite(candidate.barrier) ? Number(candidate.barrier) : defaultDraft.barrier,
+    stake: Number.isFinite(candidate.stake) ? Number(candidate.stake) : defaultDraft.stake,
+    duration: Number.isFinite(candidate.duration) ? Number(candidate.duration) : defaultDraft.duration,
+    maxTrades: Number.isFinite(candidate.maxTrades) ? Number(candidate.maxTrades) : defaultDraft.maxTrades,
+    dailyLoss: Number.isFinite(candidate.dailyLoss) ? Number(candidate.dailyLoss) : defaultDraft.dailyLoss,
+    maxLossStreak: Number.isFinite(candidate.maxLossStreak) ? Number(candidate.maxLossStreak) : defaultDraft.maxLossStreak,
+    blocks,
+  };
+}
+
+function sanitizeSaved(value: unknown): Draft[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(sanitizeDraft).filter((item): item is Draft => item !== null).slice(0, 50);
+}
+
 const palette: Array<{ kind: BlockKind; title: string; detail: string }> = [
   { kind: "purchase", title: "Trade parameters", detail: "Market, contract, stake and duration." },
   { kind: "condition", title: "Purchase condition", detail: "Entry rule and signal conditions." },
@@ -43,9 +79,9 @@ export default function BotBuilder() {
   useEffect(() => {
     try {
       const active = localStorage.getItem("tradebridge_bot_builder_active_v1");
-      if (active) setDraft(JSON.parse(active) as Draft);
+      if (active) setDraft(sanitizeDraft(JSON.parse(active)) ?? defaultDraft);
       const raw = localStorage.getItem("tradebridge_bot_builder_drafts_v1");
-      if (raw) setSaved(JSON.parse(raw) as Draft[]);
+      if (raw) setSaved(sanitizeSaved(JSON.parse(raw)));
     } catch { setNotice("Local drafts could not be read. You can still create and export a new draft."); }
     void (async () => {
       try {
@@ -55,7 +91,7 @@ export default function BotBuilder() {
           return;
         }
         const data = await response.json() as { drafts?: Array<{ id: string; name: string; strategy_definition: Draft }> };
-        const remote = (data.drafts ?? []).map((item) => ({ ...item.strategy_definition, id: item.id, name: item.name }));
+        const remote = sanitizeSaved((data.drafts ?? []).map((item) => ({ ...(item.strategy_definition ?? {}), id: item.id, name: item.name })));
         setSaved((current) => {
           const merged = [...remote, ...current.filter((local) => !remote.some((item) => item.name === local.name))];
           try { localStorage.setItem("tradebridge_bot_builder_drafts_v1", JSON.stringify(merged)); } catch {}
@@ -162,7 +198,8 @@ export default function BotBuilder() {
       if (file.size > 1_000_000) throw new Error("File is larger than 1 MB.");
       const parsed = JSON.parse(await file.text()) as Partial<Draft> & { format?: string };
       if (typeof parsed.name !== "string" || typeof parsed.symbol !== "string" || !Array.isArray(parsed.blocks)) throw new Error("This file does not look like a TradeBridge strategy draft.");
-      const next: Draft = { ...defaultDraft, ...parsed, blocks: parsed.blocks.map((b) => ({ ...b, id: typeof b.id === "string" ? b.id : makeBlock(b.kind as BlockKind).id })) } as Draft;
+      const next = sanitizeDraft({ ...parsed, blocks: parsed.blocks.map((b) => ({ ...b, id: typeof b?.id === "string" ? b.id : makeBlock(b?.kind as BlockKind).id })) });
+      if (!next) throw new Error("This file contains invalid strategy settings or blocks.");
       setDraft(next);
       setNotice("Imported draft. Review all settings and validation warnings before saving.");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not import this file."); }
