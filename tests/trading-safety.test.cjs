@@ -172,3 +172,18 @@ test("bot run is stopped if the selected Deriv account changes", () => {
   assert.match(botRunner, /runAccountIdRef\.current = account\.account_id/);
   assert.match(botRunner, /Selected Deriv account changed while the bot was active/);
 });
+
+
+test("unresolved order lock remains attached to its original account and bot when selections change", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /const recoveryKeyRef = useRef<string \| null>\(null\)/);
+  assert.match(botRunner, /Another account or bot has an unresolved order/);
+  assert.match(botRunner, /const key = recoveryKeyRef\.current/);
+  assert.match(botRunner, /const cfg = runConfigRef\.current \?\? configRef\.current/);
+});
+
+test("settlement status watchdog is refreshed by every matching contract update", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /Every matching update refreshes the inactivity watchdog/);
+  assert.match(botRunner, /contractStatusSeenRef\.current = true/);
+});
