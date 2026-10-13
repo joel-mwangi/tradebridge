@@ -158,3 +158,17 @@ test("bot validates legacy or malformed configuration and recalculated stake bef
   assert.match(botRunner, /Invalid bot configuration/);
   assert.match(botRunner, /Invalid next stake calculated by the selected staking strategy/);
 });
+
+
+test("bot configuration cannot be switched, edited, or deleted while a run is active", () => {
+  const workspace = read("src/components/bots/BotsWorkspace.tsx");
+  assert.match(workspace, /Stop the active bot before editing its configuration/);
+  assert.match(workspace, /Stop the active bot before deleting its configuration/);
+  assert.match(workspace, /Stop the active bot before switching to another bot/);
+});
+
+test("bot run is stopped if the selected Deriv account changes", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /runAccountIdRef\.current = account\.account_id/);
+  assert.match(botRunner, /Selected Deriv account changed while the bot was active/);
+});
