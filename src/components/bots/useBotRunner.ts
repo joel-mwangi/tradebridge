@@ -402,10 +402,6 @@ export function useBotRunner(
     stopHandledRef.current = false;
     orderOutcomeUnknownRef.current = false;
     purchaseAttemptedRef.current = false;
-    runAccountRef.current = account;
-    runConfigRef.current = config;
-    startTimeRef.current = Date.now();
-    runAccountIdRef.current = account.account_id;
     inFlightContractIdRef.current = null;
 
     if (!config.stakeStrategy || !['fixed', 'martingale', 'dalembert'].includes(config.stakeStrategy.type)
@@ -425,6 +421,11 @@ export function useBotRunner(
       appendJournal('error', 'Invalid initial stake. Set a finite stake greater than zero before starting.');
       return;
     }
+
+    runAccountRef.current = account;
+    runConfigRef.current = config;
+    startTimeRef.current = Date.now();
+    runAccountIdRef.current = account.account_id;
 
     const initialState: BotRunState = {
       status: 'running',
