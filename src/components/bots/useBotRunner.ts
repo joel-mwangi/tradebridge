@@ -222,6 +222,11 @@ export function useBotRunner(
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
       if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
       const ws = sharedSocketRef.current;
+      const subscriptionId = contractSubscriptionIdRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN && subscriptionId) {
+        try { ws.send(JSON.stringify({ forget: subscriptionId, req_id: nextSharedSeqId() })); } catch { /* socket may be closing */ }
+      }
+      contractSubscriptionIdRef.current = null;
       const handler = handlerRef.current;
       if (ws && handler) ws.removeEventListener('message', handler);
       handlerRef.current = null;
