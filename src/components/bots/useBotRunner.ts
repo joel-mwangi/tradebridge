@@ -269,12 +269,13 @@ export function useBotRunner(
       netPnl: 0,
       currency: account.currency ?? 'USD',
       transactions: [],
-      journal: [{ timestamp: Date.now(), level: 'info', message: 'Bot started on existing session — no reconnect needed.' }],
+      journal: [
+        { timestamp: Date.now(), level: 'info', message: 'Bot started on existing session — no reconnect needed.' },
+        { timestamp: Date.now(), level: 'info', message: 'Sending first proposal on shared session…' },
+      ],
       startedAt: Date.now(),
       lastError: null,
     });
-
-    appendJournal('info', 'Sending first proposal on shared session…');
 
     // Track bot-owned req_ids so we only handle our own messages
     const botReqIds = new Set<number>();
@@ -299,33 +300,37 @@ export function useBotRunner(
       const msgType = msg.msg_type as string | undefined;
       const reqId = typeof msg.req_id === 'number' ? msg.req_id : null;
 
-      // Only handle messages that belong to us
-      if (reqId !== null && !botReqIds.has(reqId)) return;
-
       const cfg = configRef.current;
       const acc = accountRef.current;
       if (!cfg || !acc) return;
 
       if (msgType === 'ping' || (msg as { ping?: unknown }).ping) return;
 
+      // Error on one of our requests
       if (msg.error && reqId !== null && botReqIds.has(reqId)) {
         const err = msg.error as { message?: string };
         appendJournal('error', `Deriv error: ${err.message ?? JSON.stringify(msg.error)}`);
+        if (ws.onmessage === botMessageHandler) ws.onmessage = prevOnMessage;
         stopBot(err.message ?? 'Deriv error');
         return;
       }
 
-      if (msgType === 'proposal' && reqId !== null && botReqIds.has(reqId)) {
+      // Proposal response — match by req_id when present, otherwise by msg_type
+      // Deriv's Options API always includes req_id on proposal responses.
+      if (msgType === 'proposal') {
+        if (reqId !== null && !botReqIds.has(reqId)) return; // belongs to trading session
         const proposal = msg.proposal as { id?: string } | undefined;
         if (!proposal?.id) { stopBot('Invalid proposal response'); return; }
-        appendJournal('info', `Quote received. Buying contract…`);
+        appendJournal('info', `Quote received (id=${proposal.id}). Buying…`);
         const buyReqId = nextSharedSeqId();
         botReqIds.add(buyReqId);
         ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake, req_id: buyReqId }));
         return;
       }
 
-      if (msgType === 'buy' && reqId !== null && botReqIds.has(reqId)) {
+      // Buy response
+      if (msgType === 'buy') {
+        if (reqId !== null && !botReqIds.has(reqId)) return; // belongs to trading session
         const buyResp = msg.buy as { contract_id?: number } | undefined;
         if (!buyResp?.contract_id) { stopBot('Buy response missing contract ID'); return; }
         const contractId = String(buyResp.contract_id);
@@ -337,6 +342,7 @@ export function useBotRunner(
         return;
       }
 
+      // Settlement — subscription pushes have no req_id; filter by contract_id instead
       if (msgType === 'proposal_open_contract') {
         const poc = msg.proposal_open_contract as {
           contract_id?: number; is_sold?: number | boolean; is_expired?: number | boolean;
@@ -345,17 +351,20 @@ export function useBotRunner(
         } | undefined;
         if (!poc) return;
 
-        // Only handle our contract
+        // Only handle our in-flight contract
+        if (!inFlightContractIdRef.current) return;
         if (poc.contract_id && String(poc.contract_id) !== inFlightContractIdRef.current) return;
 
-        const isClosed = poc.is_sold === 1 || poc.is_sold === true || poc.is_expired === 1 || poc.is_expired === true;
+        const isClosed = poc.is_sold === 1 || poc.is_sold === true
+          || poc.is_expired === 1 || poc.is_expired === true
+          || poc.status === 'won' || poc.status === 'lost'
+          || poc.status === 'sold' || poc.status === 'expired';
         if (!isClosed) return;
 
         const profit = typeof poc.profit === 'number' ? poc.profit : null;
         const payout = typeof poc.payout === 'number' ? poc.payout : null;
         const stake = stateRef.current.currentStake;
 
-        // Clear pending marker
         try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); } catch { /* ignore */ }
         inFlightContractIdRef.current = null;
 
@@ -405,7 +414,6 @@ export function useBotRunner(
 
         if (stopReason) {
           appendJournal('info', stopReason);
-          // Restore previous handler before stopping
           if (ws.onmessage === botMessageHandler) ws.onmessage = prevOnMessage;
           stopBot();
           return;
@@ -417,7 +425,10 @@ export function useBotRunner(
         appendJournal('info', `Cooldown ${cfg.cooldownSeconds}s…`);
 
         cooldownTimerRef.current = setTimeout(() => {
-          if (cancelledRef.current) return;
+          if (cancelledRef.current) {
+            if (ws.onmessage === botMessageHandler) ws.onmessage = prevOnMessage;
+            return;
+          }
           patchState({ status: 'running' });
           const nextReqId = nextSharedSeqId();
           botReqIds.add(nextReqId);
