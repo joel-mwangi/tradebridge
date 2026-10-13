@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BotConfig, BotRun } from './bot-types';
 import {
   loadBotConfigs,
@@ -20,9 +20,14 @@ type InnerTab = 'dashboard' | 'builder';
 interface BotsWorkspaceProps {
   connected: boolean;
   account: DerivAccount | null;
+  sharedSocketRef: React.RefObject<WebSocket | null>;
+  nextSharedSeqId: () => number;
+  sessionState: string;
 }
 
-export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
+export function BotsWorkspace({
+  connected, account, sharedSocketRef, nextSharedSeqId, sessionState,
+}: BotsWorkspaceProps) {
   const [innerTab, setInnerTab] = useState<InnerTab>('dashboard');
   const [configs, setConfigs] = useState<BotConfig[]>([]);
   const [runs, setRuns] = useState<BotRun[]>([]);
@@ -35,7 +40,9 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
   }, []);
 
   const activeConfig = configs.find((c) => c.id === activeConfigId) ?? null;
-  const { runState, start, stop } = useBotRunner(connected, account, activeConfig);
+  const { runState, start, stop } = useBotRunner(
+    connected, account, activeConfig, sharedSocketRef, nextSharedSeqId, sessionState,
+  );
 
   function handleSaveConfig(config: BotConfig) {
     upsertBotConfig(config);

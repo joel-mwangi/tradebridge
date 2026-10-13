@@ -562,7 +562,13 @@ export default function TradingWorkspace() {
           )}
 
           {page === "bots" && (
-            <BotsWorkspace connected={connected} account={activeAccount} />
+            <BotsWorkspace
+              connected={connected}
+              account={activeAccount}
+              sharedSocketRef={trading.sharedSocketRef}
+              nextSharedSeqId={trading.nextSharedSeqId}
+              sessionState={trading.sessionState}
+            />
           )}
 
           {page === "settings" && (

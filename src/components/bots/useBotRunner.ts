@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { DerivAccount } from '../trading/types';
 import type {
   BotConfig,
@@ -59,7 +59,13 @@ function nextStakeAmount(
 export function useBotRunner(
   connected: boolean,
   account: DerivAccount | null,
-  config: BotConfig | null
+  config: BotConfig | null,
+  /** Shared WebSocket from useTradingSession — already authenticated, always live */
+  sharedSocketRef: React.RefObject<WebSocket | null>,
+  /** Sequence ID generator shared with the trading session — prevents req_id collisions */
+  nextSharedSeqId: () => number,
+  /** Session state string from useTradingSession — bot only starts when session is connected */
+  sessionState: string,
 ): { runState: BotRunState; start: () => void; stop: () => void } {
   const currency = account?.currency ?? 'USD';
   const [runState, setRunState] = useState<BotRunState>(() =>
@@ -67,7 +73,7 @@ export function useBotRunner(
   );
 
   // Internal mutable refs (do not trigger re-renders)
-  const socketRef = useRef<WebSocket | null>(null);
+  // NOTE: we do NOT own a socket — we use sharedSocketRef from useTradingSession.
   const cancelledRef = useRef(false);
   const stateRef = useRef<BotRunState>(runState);
   const configRef = useRef<BotConfig | null>(config);
@@ -138,17 +144,18 @@ export function useBotRunner(
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tear down socket when key dependencies change
+  // Tear down bot loop when key dependencies change — do NOT close the shared socket
   useEffect(() => {
     return () => {
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
+      // Remove any dangling onmessage handler we installed
+      const ws = sharedSocketRef.current;
+      if (ws && (ws as unknown as { _botHandler?: unknown })._botHandler) {
+        delete (ws as unknown as { _botHandler?: unknown })._botHandler;
       }
     };
-  }, [connected, account?.account_id, account?.currency, config?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connected, account?.account_id, account?.currency, config?.id, sharedSocketRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopBot = useCallback(
     (reason?: string) => {
@@ -169,10 +176,8 @@ export function useBotRunner(
         }
       }
 
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
-      }
+      // We do not own the shared socket — do not close it.
+      // Just cancel the bot loop; the trading session manages the socket lifetime.
 
       const finalStatus: BotStatus = reason ? 'error' : 'stopped';
       patchState({
@@ -203,40 +208,49 @@ export function useBotRunner(
   );
 
   const sendProposal = useCallback(
-    (ws: WebSocket, stake: number) => {
+    (reqId: number, stake: number) => {
       const cfg = configRef.current;
       const acc = accountRef.current;
-      if (!cfg || !acc || cancelledRef.current) return;
+      const ws = sharedSocketRef.current;
+      if (!cfg || !acc || cancelledRef.current || !ws || ws.readyState !== WebSocket.OPEN) return;
 
       const pendingKey = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
-      try {
-        localStorage.setItem(pendingKey, 'pending');
-      } catch {
-        // ignore
-      }
+      try { localStorage.setItem(pendingKey, 'pending'); } catch { /* ignore */ }
 
-      appendJournal('info', `Sending proposal: ${cfg.contractType} ${cfg.symbol} stake=${stake} ${acc.currency}`);
+      appendJournal('info', `Requesting quote: ${cfg.contractType} ${cfg.symbol} stake=${stake} ${acc.currency}`);
 
-      ws.send(
-        JSON.stringify({
-          proposal: 1,
-          amount: stake,
-          basis: 'stake',
-          contract_type: cfg.contractType,
-          currency: acc.currency ?? 'USD',
-          duration: cfg.duration,
-          duration_unit: cfg.durationUnit,
-          symbol: cfg.symbol,
-          ...(cfg.barrier ? { barrier: cfg.barrier } : {}),
-        })
-      );
+      ws.send(JSON.stringify({
+        proposal: 1,
+        amount: stake,
+        basis: 'stake',
+        contract_type: cfg.contractType,
+        currency: acc.currency ?? 'USD',
+        duration: cfg.duration,
+        duration_unit: cfg.durationUnit,
+        symbol: cfg.symbol,
+        ...(cfg.barrier ? { barrier: cfg.barrier } : {}),
+        req_id: reqId,
+      }));
     },
-    [appendJournal]
+    [appendJournal, sharedSocketRef]
   );
 
   const start = useCallback(() => {
     if (!connected || !account || !config) {
       appendJournal('warn', 'Cannot start: not connected or missing account/config.');
+      return;
+    }
+
+    // Check that the shared session is ready — no cold start, no OTP needed
+    const sessionReady = sessionState === 'Demo trading connected' || sessionState === 'Real trading connected';
+    if (!sessionReady) {
+      appendJournal('warn', `Trading session not ready (${sessionState}). Connect your Deriv account first.`);
+      return;
+    }
+
+    const ws = sharedSocketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      appendJournal('warn', 'Shared WebSocket is not open. Reconnect your Deriv account.');
       return;
     }
 
@@ -246,9 +260,8 @@ export function useBotRunner(
 
     const initialStake = nextStakeAmount(config.stakeStrategy, null, 0);
 
-    // Reset state
     setRunState({
-      status: 'connecting',
+      status: 'running',
       currentStake: initialStake,
       tradeCount: 0,
       wins: 0,
@@ -256,239 +269,173 @@ export function useBotRunner(
       netPnl: 0,
       currency: account.currency ?? 'USD',
       transactions: [],
-      journal: [{ timestamp: Date.now(), level: 'info', message: 'Starting bot...' }],
+      journal: [{ timestamp: Date.now(), level: 'info', message: 'Bot started on existing session — no reconnect needed.' }],
       startedAt: Date.now(),
       lastError: null,
     });
 
-    // POST to /api/auth/deriv/trade-session to get an authenticated OTP WebSocket URL.
-    // This is the same pattern used by useDemoTrading.ts — the URL already embeds
-    // the one-time password so no separate authorize message is needed.
-    fetch('/api/auth/deriv/trade-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_id: account.account_id }),
-      cache: 'no-store',
-    })
-      .then((r) => r.json())
-      .then((data: { url?: string; error?: string }) => {
-        if (cancelledRef.current) return;
-        if (!data.url) {
-          stopBot(data.error ?? 'Failed to obtain trade session URL.');
+    appendJournal('info', 'Sending first proposal on shared session…');
+
+    // Track bot-owned req_ids so we only handle our own messages
+    const botReqIds = new Set<number>();
+
+    const proposalReqId = nextSharedSeqId();
+    botReqIds.add(proposalReqId);
+
+    // Install a message handler that multiplexes on req_id —
+    // any message whose req_id is not in our set is passed through
+    // to the previous handler (the trading session's own handler).
+    const prevOnMessage = ws.onmessage;
+
+    const botMessageHandler = (ev: MessageEvent) => {
+      // Always forward to the trading session's handler first
+      if (prevOnMessage) (prevOnMessage as (e: MessageEvent) => void)(ev);
+
+      if (cancelledRef.current) return;
+
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(ev.data as string) as Record<string, unknown>; } catch { return; }
+
+      const msgType = msg.msg_type as string | undefined;
+      const reqId = typeof msg.req_id === 'number' ? msg.req_id : null;
+
+      // Only handle messages that belong to us
+      if (reqId !== null && !botReqIds.has(reqId)) return;
+
+      const cfg = configRef.current;
+      const acc = accountRef.current;
+      if (!cfg || !acc) return;
+
+      if (msgType === 'ping' || (msg as { ping?: unknown }).ping) return;
+
+      if (msg.error && reqId !== null && botReqIds.has(reqId)) {
+        const err = msg.error as { message?: string };
+        appendJournal('error', `Deriv error: ${err.message ?? JSON.stringify(msg.error)}`);
+        stopBot(err.message ?? 'Deriv error');
+        return;
+      }
+
+      if (msgType === 'proposal' && reqId !== null && botReqIds.has(reqId)) {
+        const proposal = msg.proposal as { id?: string } | undefined;
+        if (!proposal?.id) { stopBot('Invalid proposal response'); return; }
+        appendJournal('info', `Quote received. Buying contract…`);
+        const buyReqId = nextSharedSeqId();
+        botReqIds.add(buyReqId);
+        ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake, req_id: buyReqId }));
+        return;
+      }
+
+      if (msgType === 'buy' && reqId !== null && botReqIds.has(reqId)) {
+        const buyResp = msg.buy as { contract_id?: number } | undefined;
+        if (!buyResp?.contract_id) { stopBot('Buy response missing contract ID'); return; }
+        const contractId = String(buyResp.contract_id);
+        inFlightContractIdRef.current = contractId;
+        appendJournal('info', `Contract ${contractId} purchased. Awaiting settlement…`);
+        const monitorReqId = nextSharedSeqId();
+        botReqIds.add(monitorReqId);
+        ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: buyResp.contract_id, subscribe: 1, req_id: monitorReqId }));
+        return;
+      }
+
+      if (msgType === 'proposal_open_contract') {
+        const poc = msg.proposal_open_contract as {
+          contract_id?: number; is_sold?: number | boolean; is_expired?: number | boolean;
+          profit?: number; payout?: number; contract_type?: string;
+          underlying?: string; date_start?: number; status?: string;
+        } | undefined;
+        if (!poc) return;
+
+        // Only handle our contract
+        if (poc.contract_id && String(poc.contract_id) !== inFlightContractIdRef.current) return;
+
+        const isClosed = poc.is_sold === 1 || poc.is_sold === true || poc.is_expired === 1 || poc.is_expired === true;
+        if (!isClosed) return;
+
+        const profit = typeof poc.profit === 'number' ? poc.profit : null;
+        const payout = typeof poc.payout === 'number' ? poc.payout : null;
+        const stake = stateRef.current.currentStake;
+
+        // Clear pending marker
+        try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); } catch { /* ignore */ }
+        inFlightContractIdRef.current = null;
+
+        const tx: BotTransaction = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          contractId: poc.contract_id ? String(poc.contract_id) : '',
+          contractType: poc.contract_type ?? cfg.contractType,
+          symbol: poc.underlying ?? cfg.symbol,
+          stake, payout, profit,
+          currency: acc.currency ?? 'USD',
+          startedAt: poc.date_start ? poc.date_start * 1000 : Date.now(),
+          settledAt: Date.now(),
+          status: poc.status ?? 'sold',
+        };
+
+        const isWin = poc.status === 'won' || (poc.status !== 'lost' && (profit ?? 0) > 0);
+        patchState((prev) => ({
+          tradeCount: prev.tradeCount + 1,
+          wins: prev.wins + (isWin ? 1 : 0),
+          losses: prev.losses + (isWin ? 0 : 1),
+          netPnl: prev.netPnl + (profit ?? 0),
+          transactions: [tx, ...prev.transactions],
+        }));
+
+        appendJournal(isWin ? 'info' : 'warn',
+          `Trade ${isWin ? 'WON' : 'LOST'} — profit: ${(profit ?? 0) >= 0 ? '+' : ''}${(profit ?? 0).toFixed(2)} ${acc.currency}`);
+
+        // Check stop conditions
+        const s = stateRef.current;
+        const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
+        let stopReason: string | null = null;
+
+        for (const cond of cfg.stopConditions) {
+          if (cond.type === 'profit' && s.netPnl >= cond.target) { stopReason = `Profit target reached (+${s.netPnl.toFixed(2)})`; break; }
+          if (cond.type === 'loss' && s.netPnl <= -Math.abs(cond.limit)) { stopReason = `Loss limit reached (${s.netPnl.toFixed(2)})`; break; }
+          if (cond.type === 'tradeCount' && s.tradeCount >= cond.max) { stopReason = `Max trades reached (${s.tradeCount})`; break; }
+          if (cond.type === 'time' && elapsed >= cond.seconds) { stopReason = `Time limit reached (${Math.round(elapsed)}s)`; break; }
+        }
+        if (!stopReason && cfg.maxTradesPerDay > 0 && s.tradeCount >= cfg.maxTradesPerDay) {
+          stopReason = `Daily trade cap reached (${s.tradeCount})`;
+        }
+        if (!stopReason && !isWin) {
+          let consec = 0;
+          for (const t of s.transactions) { if ((t.profit ?? 0) < 0) consec++; else break; }
+          if (consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
+        }
+
+        if (stopReason) {
+          appendJournal('info', stopReason);
+          // Restore previous handler before stopping
+          if (ws.onmessage === botMessageHandler) ws.onmessage = prevOnMessage;
+          stopBot();
           return;
         }
 
-        const ws = new WebSocket(data.url);
-        socketRef.current = ws;
+        // Schedule next trade after cooldown
+        const nextStake = nextStakeAmount(cfg.stakeStrategy, profit, stake);
+        patchState({ currentStake: nextStake, status: 'cooldown' });
+        appendJournal('info', `Cooldown ${cfg.cooldownSeconds}s…`);
 
-        ws.onopen = () => {
-          if (cancelledRef.current) { ws.close(); return; }
-          // The OTP URL authenticates the connection — no authorize message needed.
-          setStatus('running');
-          appendJournal('info', 'Authenticated session connected. Sending first proposal…');
-          const stake = stateRef.current.currentStake;
-          sendProposal(ws, stake);
-        };
-
-        ws.onmessage = (ev) => {
+        cooldownTimerRef.current = setTimeout(() => {
           if (cancelledRef.current) return;
+          patchState({ status: 'running' });
+          const nextReqId = nextSharedSeqId();
+          botReqIds.add(nextReqId);
+          sendProposal(nextReqId, nextStake);
+        }, cfg.cooldownSeconds * 1000);
+      }
+    };
 
-          let msg: Record<string, unknown>;
-          try {
-            msg = JSON.parse(ev.data as string) as Record<string, unknown>;
-          } catch {
-            return;
-          }
+    ws.onmessage = botMessageHandler;
+    sendProposal(proposalReqId, initialStake);
 
-          const cfg = configRef.current;
-          const acc = accountRef.current;
-          if (!cfg || !acc) return;
-
-          const msgType = msg.msg_type as string | undefined;
-
-          // Ping/pong — ignore
-          if (msgType === 'ping' || (msg as { ping?: unknown }).ping) return;
-
-          if (msgType === 'proposal') {
-            const proposal = msg.proposal as { id?: string } | undefined;
-            if (!proposal?.id) return;
-            appendJournal('info', `Got proposal ${proposal.id}. Buying…`);
-            ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake }));
-            return;
-          }
-
-          if (msgType === 'buy') {
-            const buyResp = msg.buy as { contract_id?: number } | undefined;
-            if (buyResp?.contract_id) {
-              inFlightContractIdRef.current = String(buyResp.contract_id);
-              appendJournal('info', `Contract bought: ${buyResp.contract_id}`);
-              ws.send(
-                JSON.stringify({
-                  proposal_open_contract: 1,
-                  contract_id: buyResp.contract_id,
-                  subscribe: 1,
-                })
-              );
-            }
-            return;
-          }
-
-          if (msgType === 'proposal_open_contract') {
-            const poc = msg.proposal_open_contract as {
-              contract_id?: number;
-              is_sold?: number | boolean;
-              is_expired?: number | boolean;
-              profit?: number;
-              buy_price?: number;
-              payout?: number;
-              contract_type?: string;
-              underlying?: string;
-              date_start?: number;
-              date_expiry?: number;
-              status?: string;
-            } | undefined;
-            if (!poc) return;
-
-            const isSold =
-              poc.is_sold === 1 || poc.is_sold === true;
-            const isExpired =
-              poc.is_expired === 1 || poc.is_expired === true;
-
-            if (!isSold && !isExpired) return; // Still in-flight
-
-            const profit = typeof poc.profit === 'number' ? poc.profit : null;
-            const payout = typeof poc.payout === 'number' ? poc.payout : null;
-            const stake = stateRef.current.currentStake;
-
-            const tx: BotTransaction = {
-              id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              contractId: poc.contract_id ? String(poc.contract_id) : '',
-              contractType: poc.contract_type ?? cfg.contractType,
-              symbol: poc.underlying ?? cfg.symbol,
-              stake,
-              payout,
-              profit,
-              currency: acc.currency ?? 'USD',
-              startedAt: poc.date_start ? poc.date_start * 1000 : Date.now(),
-              settledAt: Date.now(),
-              status: poc.status ?? 'sold',
-            };
-
-            // Clear pending marker
-            const pendingKey = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
-            try { localStorage.removeItem(pendingKey); } catch { /* ignore */ }
-
-            inFlightContractIdRef.current = null;
-
-            // Update counts
-            const isWin = (profit ?? 0) > 0;
-            patchState((prev) => ({
-              tradeCount: prev.tradeCount + 1,
-              wins: prev.wins + (isWin ? 1 : 0),
-              losses: prev.losses + (isWin ? 0 : 1),
-              netPnl: prev.netPnl + (profit ?? 0),
-              transactions: [tx, ...prev.transactions],
-            }));
-
-            appendJournal(
-              isWin ? 'info' : 'warn',
-              `Trade settled: ${isWin ? 'WIN' : 'LOSS'} profit=${profit ?? 0} ${acc.currency}`
-            );
-
-            // Check stop conditions
-            const s = stateRef.current;
-            const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
-            let stopReason: string | null = null;
-
-            for (const cond of cfg.stopConditions) {
-              if (cond.type === 'profit' && s.netPnl >= cond.target) {
-                stopReason = `Profit target reached (${s.netPnl.toFixed(2)} >= ${cond.target})`;
-                break;
-              }
-              if (cond.type === 'loss' && s.netPnl <= -Math.abs(cond.limit)) {
-                stopReason = `Loss limit reached (${s.netPnl.toFixed(2)} <= -${cond.limit})`;
-                break;
-              }
-              if (cond.type === 'tradeCount' && s.tradeCount >= cond.max) {
-                stopReason = `Max trade count reached (${s.tradeCount})`;
-                break;
-              }
-              if (cond.type === 'time' && elapsed >= cond.seconds) {
-                stopReason = `Time limit reached (${Math.round(elapsed)}s)`;
-                break;
-              }
-            }
-
-            // Enforce maxTradesPerDay cap
-            if (!stopReason && cfg.maxTradesPerDay > 0 && s.tradeCount >= cfg.maxTradesPerDay) {
-              stopReason = `Daily trade limit reached (${s.tradeCount}/${cfg.maxTradesPerDay})`;
-            }
-
-            if (stopReason) {
-              appendJournal('info', stopReason);
-              stopBot();
-              return;
-            }
-
-            // Max consecutive losses guard
-            if (!isWin && s.losses > 0) {
-              // Count consecutive losses from transactions
-              let consec = 0;
-              for (const t of s.transactions) {
-                if ((t.profit ?? 0) < 0) consec++;
-                else break;
-              }
-              if (consec >= cfg.maxConsecutiveLosses) {
-                appendJournal('warn', `Max consecutive losses (${consec}) reached.`);
-                stopBot();
-                return;
-              }
-            }
-
-            // Compute next stake
-            const nextStake = nextStakeAmount(cfg.stakeStrategy, profit, stake);
-            patchState({ currentStake: nextStake, status: 'cooldown' });
-            appendJournal('info', `Cooling down ${cfg.cooldownSeconds}s…`);
-
-            cooldownTimerRef.current = setTimeout(() => {
-              if (cancelledRef.current) return;
-              patchState({ status: 'running' });
-              sendProposal(ws, nextStake);
-            }, cfg.cooldownSeconds * 1000);
-
-            return;
-          }
-
-          if (msg.error) {
-            const err = msg.error as { message?: string };
-            appendJournal('error', `WS error: ${err.message ?? JSON.stringify(msg.error)}`);
-            stopBot(err.message ?? 'WebSocket error');
-          }
-        };
-
-        ws.onerror = () => {
-          if (!cancelledRef.current) stopBot('WebSocket connection error');
-        };
-
-        ws.onclose = () => {
-          if (!cancelledRef.current) {
-            const s = stateRef.current;
-            if (s.status === 'running' || s.status === 'cooldown' || s.status === 'connecting') {
-              stopBot('WebSocket closed unexpectedly');
-            }
-          }
-        };
-      })
-      .catch((err: unknown) => {
-        if (!cancelledRef.current) {
-          stopBot(`Failed to fetch trade session: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      });
-  }, [connected, account, config, appendJournal, setStatus, sendProposal, stopBot, patchState]);
+  }, [connected, account, config, sessionState, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stop = useCallback(() => {
     setStatus('stopping');
     appendJournal('info', 'Stop requested…');
+    cancelledRef.current = true;
+    if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
     stopBot();
   }, [setStatus, appendJournal, stopBot]);
 

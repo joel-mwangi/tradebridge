@@ -817,10 +817,23 @@ export function useTradingSession(
     }
   }
 
+  // Expose the shared socket and sequence counter so co-located hooks (e.g.
+  // useBotRunner) can send messages on the same authenticated session without
+  // opening a second WebSocket connection.  Callers MUST use nextSharedSeqId()
+  // for every req_id they send so ids never collide with the trading session's
+  // own requests.
+  function nextSharedSeqId(): number {
+    sequenceRef.current += 1;
+    return sequenceRef.current;
+  }
+
   return {
     sessionState, status, busy, quote, positions, activity, balance, realizedProfit,
     orderResolutionRequired, acknowledgeOrderResolution,
     activityHasMore, activityLoading, loadMoreActivity,
     requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow,
+    // Shared session primitives for bot runner
+    sharedSocketRef: socketRef,
+    nextSharedSeqId,
   };
 }
