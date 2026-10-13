@@ -126,6 +126,7 @@ export function useBotRunner(
   const activeRequestRef = useRef<number | null>(null);
   const handlerRef = useRef<EventListener | null>(null);
   const contractStatusSeenRef = useRef(false);
+  const contractSubscriptionIdRef = useRef<string | null>(null);
   const orderOutcomeUnknownRef = useRef(false);
   const purchaseAttemptedRef = useRef(false);
   const stopHandledRef = useRef(false);
@@ -228,6 +229,20 @@ export function useBotRunner(
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
+  const forgetContractSubscription = useCallback(() => {
+    const ws = sharedSocketRef.current;
+    const subscriptionId = contractSubscriptionIdRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN && subscriptionId) {
+      try {
+        ws.send(JSON.stringify({ forget: subscriptionId, req_id: nextSharedSeqId() }));
+      } catch {
+        // The socket may be closing. The account's contract remains authoritative
+        // and the next session will rebuild subscriptions from current state.
+      }
+    }
+    contractSubscriptionIdRef.current = null;
+  }, [sharedSocketRef, nextSharedSeqId]);
+
   const stopBot = useCallback(
     (reason?: string) => {
       if (stopHandledRef.current) return;
@@ -252,6 +267,7 @@ export function useBotRunner(
       }
       if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
       responseTimerRef.current = null;
+      forgetContractSubscription();
       const currentSocket = sharedSocketRef.current;
       if (currentSocket && handlerRef.current) currentSocket.removeEventListener('message', handlerRef.current);
       handlerRef.current = null;
@@ -286,7 +302,7 @@ export function useBotRunner(
       runAccountRef.current = null;
       runConfigRef.current = null;
     },
-    [patchState, appendJournal, sharedSocketRef]
+    [patchState, appendJournal, sharedSocketRef, forgetContractSubscription]
   );
 
 
@@ -580,6 +596,7 @@ export function useBotRunner(
           contract_id?: number; is_sold?: number | boolean; is_expired?: number | boolean;
           profit?: number; payout?: number; contract_type?: string;
           underlying?: string; date_start?: number; status?: string;
+          subscription?: { id?: string };
         } | undefined;
         if (!poc) return;
 
@@ -590,6 +607,9 @@ export function useBotRunner(
         // not time out a healthy long-running contract just because its duration
         // exceeded the time of the first status message.
         contractStatusSeenRef.current = true;
+        if (typeof poc.subscription?.id === 'string' && poc.subscription.id.length > 0) {
+          contractSubscriptionIdRef.current = poc.subscription.id;
+        }
         if (reqId !== null && requestStage.get(reqId) === 'monitor') {
           botReqIds.delete(reqId);
           requestStage.delete(reqId);
@@ -666,6 +686,7 @@ export function useBotRunner(
           stopBot('Could not clear the order recovery marker after settlement. Reconcile account history before restarting.');
           return;
         }
+        forgetContractSubscription();
         orderOutcomeUnknownRef.current = false;
         purchaseAttemptedRef.current = false;
         inFlightContractIdRef.current = null;
@@ -757,12 +778,13 @@ export function useBotRunner(
       purchaseAttemptedRef.current = false;
       inFlightContractIdRef.current = null;
       contractStatusSeenRef.current = false;
+      forgetContractSubscription();
       setOrderRecoveryRequired(false);
       appendJournal('warn', 'Recovery lock cleared after manual Deriv reconciliation.');
     } catch {
       appendJournal('error', 'Could not clear recovery lock because browser storage is unavailable.');
     }
-  }, [appendJournal]);
+  }, [appendJournal, forgetContractSubscription]);
 
   const stop = useCallback(() => {
     setStatus('stopping');
