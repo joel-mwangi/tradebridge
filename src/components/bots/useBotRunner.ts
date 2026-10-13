@@ -166,7 +166,7 @@ export function useBotRunner(
     const acc = accountRef.current;
     const cfg = configRef.current;
     if (!acc || !cfg) {
-      setOrderRecoveryRequired(false);
+      setOrderRecoveryRequired(recoveryKeyRef.current !== null);
       return;
     }
     const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
@@ -302,8 +302,8 @@ export function useBotRunner(
 
   const sendProposal = useCallback(
     (reqId: number, stake: number) => {
-      const cfg = configRef.current;
-      const acc = accountRef.current;
+      const cfg = runConfigRef.current ?? configRef.current;
+      const acc = runAccountRef.current ?? accountRef.current;
       const ws = sharedSocketRef.current;
       if (!cfg || !acc || cancelledRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
         stopBot('Cannot send proposal: bot configuration, account, or authenticated WebSocket is unavailable.');
@@ -374,6 +374,8 @@ export function useBotRunner(
     let dailyTrades = readDailyTradeCount(account.account_id, config.id, dailyTradeDate);
     try {
       if (localStorage.getItem(pendingKey) !== null) {
+        recoveryKeyRef.current = pendingKey;
+        setOrderRecoveryRequired(true);
         appendJournal('error', 'An unresolved order marker exists for this bot. Reconcile open contracts and account history in Deriv before restarting.');
         return;
       }
@@ -460,8 +462,8 @@ export function useBotRunner(
       const msgType = msg.msg_type as string | undefined;
       const reqId = typeof msg.req_id === 'number' ? msg.req_id : null;
 
-      const cfg = configRef.current;
-      const acc = accountRef.current;
+      const cfg = runConfigRef.current ?? configRef.current;
+      const acc = runAccountRef.current ?? accountRef.current;
       if (!cfg || !acc) return;
 
       if (msgType === 'ping' || (msg as { ping?: unknown }).ping) return;
