@@ -163,21 +163,27 @@ export function useBotRunner(
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tear down bot loop when key dependencies change — do NOT close the shared socket
+  // A render caused by a connection/config change must not silently clear
+  // the active run's only response timeout. Stop on disconnect separately;
+  // detach the listener and clear timers only when this hook is unmounted.
   useEffect(() => {
     return () => {
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
       if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
-      // Bot handlers are registered as independent listeners; never replace the
-      // shared trading session's onmessage callback.
       const ws = sharedSocketRef.current;
       const handler = handlerRef.current;
       if (ws && handler) ws.removeEventListener('message', handler);
       handlerRef.current = null;
       if (ws) delete (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler;
     };
-  }, [connected, account?.account_id, account?.currency, config?.id, sharedSocketRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!connected && ['running', 'cooldown', 'connecting'].includes(stateRef.current.status)) {
+      stopBot('Deriv session disconnected while the bot was active. Check open contracts and account history before restarting.');
+    }
+  }, [connected, stopBot]);
 
   const stopBot = useCallback(
     (reason?: string) => {
