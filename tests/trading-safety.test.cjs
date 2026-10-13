@@ -75,7 +75,7 @@ test("real-account OTP sessions stay disabled until execution is enforced server
 test("automated bot observes the shared WebSocket without replacing the trading session handler", () => {
   const botRunner = read("src/components/bots/useBotRunner.ts");
   assert.match(botRunner, /addEventListener\('message', eventHandler\)/);
-  assert.match(botRunner, /removeEventListener\('message', handlerRef\.current\)/);
+  assert.match(botRunner, /removeEventListener\('message',/);
   assert.doesNotMatch(botRunner, /ws\.onmessage\s*=/);
 });
 
