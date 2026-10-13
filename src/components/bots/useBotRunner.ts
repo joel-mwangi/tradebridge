@@ -372,13 +372,21 @@ export function useBotRunner(
     startTimeRef.current = Date.now();
     inFlightContractIdRef.current = null;
 
+    if (!config.stakeStrategy || !['fixed', 'martingale', 'dalembert'].includes(config.stakeStrategy.type)
+      || !Array.isArray(config.stopConditions)
+      || !Number.isFinite(config.cooldownSeconds) || config.cooldownSeconds < 0
+      || !Number.isFinite(config.maxTradesPerDay) || config.maxTradesPerDay < 0
+      || !Number.isFinite(config.maxConsecutiveLosses) || config.maxConsecutiveLosses < 0) {
+      appendJournal('error', 'Invalid bot configuration: stake strategy, stop conditions, cooldown, and risk limits must be valid.');
+      return;
+    }
+    if (!Number.isFinite(config.duration) || config.duration <= 0 || !['t', 's'].includes(config.durationUnit) || !config.symbol || !config.contractType) {
+      appendJournal('error', 'Invalid bot configuration: symbol, contract type, duration unit, and positive duration are required.');
+      return;
+    }
     const initialStake = nextStakeAmount(config.stakeStrategy, null, 0);
     if (!Number.isFinite(initialStake) || initialStake <= 0) {
       appendJournal('error', 'Invalid initial stake. Set a finite stake greater than zero before starting.');
-      return;
-    }
-    if (!Number.isFinite(config.duration) || config.duration <= 0 || !config.symbol || !config.contractType) {
-      appendJournal('error', 'Invalid bot configuration: symbol, contract type, and positive duration are required.');
       return;
     }
 
@@ -654,6 +662,11 @@ export function useBotRunner(
 
         // Schedule next trade after cooldown
         const nextStake = nextStakeAmount(cfg.stakeStrategy, profit, stake);
+        if (!Number.isFinite(nextStake) || nextStake <= 0) {
+          appendJournal('error', 'Next stake calculated as invalid. Bot stopped before submitting another order.');
+          stopBot('Invalid next stake calculated by the selected staking strategy.');
+          return;
+        }
         patchState({ currentStake: nextStake, status: 'cooldown' });
         appendJournal('info', `Cooldown ${cfg.cooldownSeconds}s…`);
 
