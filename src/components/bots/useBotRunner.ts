@@ -261,25 +261,33 @@ export function useBotRunner(
       lastError: null,
     });
 
-    // Fetch a trade session token then open the WebSocket
-    fetch('/api/auth/deriv/trade-session')
+    // POST to /api/auth/deriv/trade-session to get an authenticated OTP WebSocket URL.
+    // This is the same pattern used by useDemoTrading.ts — the URL already embeds
+    // the one-time password so no separate authorize message is needed.
+    fetch('/api/auth/deriv/trade-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: account.account_id }),
+      cache: 'no-store',
+    })
       .then((r) => r.json())
-      .then((data: { token?: string; error?: string }) => {
+      .then((data: { url?: string; error?: string }) => {
         if (cancelledRef.current) return;
-        if (!data.token) {
-          stopBot(data.error ?? 'Failed to obtain trade session token.');
+        if (!data.url) {
+          stopBot(data.error ?? 'Failed to obtain trade session URL.');
           return;
         }
 
-        const ws = new WebSocket(
-          `wss://ws.binaryws.com/websockets/v3?app_id=1089&l=EN&brand=deriv`
-        );
+        const ws = new WebSocket(data.url);
         socketRef.current = ws;
 
         ws.onopen = () => {
           if (cancelledRef.current) { ws.close(); return; }
-          appendJournal('info', 'WebSocket connected. Authorising…');
-          ws.send(JSON.stringify({ authorize: data.token }));
+          // The OTP URL authenticates the connection — no authorize message needed.
+          setStatus('running');
+          appendJournal('info', 'Authenticated session connected. Sending first proposal…');
+          const stake = stateRef.current.currentStake;
+          sendProposal(ws, stake);
         };
 
         ws.onmessage = (ev) => {
@@ -298,13 +306,8 @@ export function useBotRunner(
 
           const msgType = msg.msg_type as string | undefined;
 
-          if (msgType === 'authorize') {
-            setStatus('running');
-            appendJournal('info', 'Authorised. Sending first proposal…');
-            const stake = stateRef.current.currentStake;
-            sendProposal(ws, stake);
-            return;
-          }
+          // Ping/pong — ignore
+          if (msgType === 'ping' || (msg as { ping?: unknown }).ping) return;
 
           if (msgType === 'proposal') {
             const proposal = msg.proposal as { id?: string } | undefined;
