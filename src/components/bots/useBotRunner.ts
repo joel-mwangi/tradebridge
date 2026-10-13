@@ -120,27 +120,30 @@ export function useBotRunner(
     [patchState]
   );
 
-  // On mount: clear any stale pending marker left by a prior run that survived a page refresh
+  // On mount, preserve unresolved order markers. Clearing one on page load can
+  // allow a duplicate purchase if Deriv accepted the prior order but the browser
+  // lost its acknowledgement.
   useEffect(() => {
     const acc = accountRef.current;
     const cfg = configRef.current;
-    if (acc && cfg) {
-      const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
-      let stale = false;
-      try {
-        stale = localStorage.getItem(key) !== null;
-        if (stale) localStorage.removeItem(key);
-      } catch {
-        // ignore
-      }
-      if (stale) {
+    if (!acc || !cfg) return;
+    const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
+    try {
+      if (localStorage.getItem(key) !== null) {
         const entry: JournalEntry = {
           timestamp: Date.now(),
           level: 'warn',
-          message: 'Stale pending order detected on load — previous run may not have settled cleanly.',
+          message: 'Unresolved order marker found. Check Deriv open contracts and account history before restarting this bot.',
         };
         patchState((prev) => ({ journal: [entry, ...prev.journal] }));
       }
+    } catch {
+      const entry: JournalEntry = {
+        timestamp: Date.now(),
+        level: 'error',
+        message: 'Browser storage is unavailable; order recovery cannot be verified safely.',
+      };
+      patchState((prev) => ({ journal: [entry, ...prev.journal] }));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -211,7 +214,7 @@ export function useBotRunner(
         });
       }
     },
-    [patchState, appendJournal]
+    [patchState, appendJournal, sharedSocketRef]
   );
 
   const sendProposal = useCallback(
