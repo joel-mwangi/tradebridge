@@ -548,11 +548,6 @@ export function useBotRunner(
         activeRequestRef.current = null;
         const stake = stateRef.current.currentStake;
 
-        try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); setOrderRecoveryRequired(false); } catch { /* ignore */ }
-        orderOutcomeUnknownRef.current = false;
-        inFlightContractIdRef.current = null;
-        contractStatusSeenRef.current = false;
-
         const tx: BotTransaction = {
           id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           contractId: poc.contract_id ? String(poc.contract_id) : '',
@@ -588,6 +583,19 @@ export function useBotRunner(
           return;
         }
         dailyTrades = nextDailyTrades;
+        // Only release the recovery lock after settlement and its daily risk
+        // counter have both been persisted successfully.
+        try {
+          localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`);
+          setOrderRecoveryRequired(false);
+        } catch {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Could not clear the order recovery marker after settlement. Reconcile account history before restarting.');
+          return;
+        }
+        orderOutcomeUnknownRef.current = false;
+        inFlightContractIdRef.current = null;
+        contractStatusSeenRef.current = false;
         const prior = stateRef.current;
         const nextTransactions = [tx, ...prior.transactions];
         const nextRunState: BotRunState = {
