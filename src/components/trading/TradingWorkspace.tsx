@@ -11,6 +11,7 @@ import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
+import { BotsWorkspace } from "../bots/BotsWorkspace";
 
 type AccountsResponse = {
   connected?: boolean;
@@ -27,13 +28,14 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "settings";
+type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "bots" | "settings";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "dashboard", label: "Dashboard", icon: "▦" },
   { id: "markets", label: "Markets", icon: "⌁" },
   { id: "trade", label: "Trade", icon: "↗" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
+  { id: "bots", label: "Bots", icon: "⚡" },
   { id: "settings", label: "Settings", icon: "⚙" },
 ];
 
@@ -42,6 +44,7 @@ const PAGE_TITLES: Record<WorkspacePage, string> = {
   markets: "Markets",
   trade: "Trade",
   portfolio: "Portfolio & History",
+  bots: "Automated Bots",
   settings: "Settings",
 };
 
@@ -556,6 +559,10 @@ export default function TradingWorkspace() {
                 onLoadMore={trading.loadMoreActivity}
               />
             </section>
+          )}
+
+          {page === "bots" && (
+            <BotsWorkspace connected={connected} account={activeAccount} />
           )}
 
           {page === "settings" && (

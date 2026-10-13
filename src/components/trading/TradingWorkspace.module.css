@@ -670,3 +670,9 @@
   .ticketPanelCompact .preset,
   .ticketPanelCompact .presetActive { padding: 0 1px; font-size: 8px !important; }
 }
+
+.botsPage { min-width: 0; display: grid; gap: 20px; }
+.botsLayout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 900px) {
+  .botsLayout { grid-template-columns: minmax(0, 1fr); }
+}

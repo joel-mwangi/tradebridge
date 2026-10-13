@@ -1,0 +1,5 @@
+{
+  "verdict": "APPROVED",
+  "checkedAt": "2025-01-01T00:00:00.000Z",
+  "summary": "Integration verification passed. npx tsc --noEmit exits 0, npm run build exits 0. No seam errors between FEAT-001, FEAT-002, or FEAT-003. Build output confirms /bots served via /[section] dynamic route. No fixes were required."
+}
