@@ -112,3 +112,25 @@ test("ambiguous bot orders require an explicit Deriv reconciliation acknowledgem
   assert.match(runPanel, /orderRecoveryRequired/);
   assert.match(runPanel, /I checked Deriv — clear recovery lock/);
 });
+
+
+test("bot runner persists a UTC-day trade count and blocks starting after the configured cap", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /tradebridge:bot-daily-trades/);
+  assert.match(botRunner, /dailyTrades >= config\.maxTradesPerDay/);
+  assert.match(botRunner, /writeDailyTradeCount\(acc\.account_id, cfg\.id, dailyTradeDate, nextDailyTrades\)/);
+  assert.match(botRunner, /Daily trade cap reached/);
+});
+
+test("bot runner distinguishes break-even contracts from losses", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /const isLoss = poc\.status === 'lost' \|\| profit < 0/);
+  assert.match(botRunner, /losses: prior\.losses \+ \(isLoss \? 1 : 0\)/);
+  assert.match(botRunner, /'break-even'/);
+});
+
+test("bot runner does not detach response timeouts on ordinary connection-state renders", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /detach the listener and clear timers only when this hook is unmounted/);
+  assert.match(botRunner, /Deriv session disconnected while the bot was active/);
+});
