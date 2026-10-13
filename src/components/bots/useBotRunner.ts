@@ -85,6 +85,7 @@ export function useBotRunner(
   const inFlightContractIdRef = useRef<string | null>(null);
   const activeRequestRef = useRef<number | null>(null);
   const handlerRef = useRef<EventListener | null>(null);
+  const contractStatusSeenRef = useRef(false);
   const orderOutcomeUnknownRef = useRef(false);
 
   // Keep refs in sync with latest state/props
@@ -413,6 +414,7 @@ export function useBotRunner(
         }
         const contractId = String(buyResp.contract_id);
         inFlightContractIdRef.current = contractId;
+        contractStatusSeenRef.current = false;
         appendJournal('info', `Contract ${contractId} purchased. Awaiting settlement…`);
         const monitorReqId = nextSharedSeqId();
         botReqIds.add(monitorReqId);
@@ -444,6 +446,17 @@ export function useBotRunner(
         // Only handle our in-flight contract
         if (!inFlightContractIdRef.current || poc.contract_id === undefined || poc.contract_id === null) return;
         if (String(poc.contract_id) !== inFlightContractIdRef.current) return;
+        // The first matching status message proves the subscription is alive.
+        // Do not use the short subscription-ack timeout as a settlement timeout.
+        if (!contractStatusSeenRef.current) {
+          contractStatusSeenRef.current = true;
+          if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+          responseTimerRef.current = setTimeout(() => {
+            if (!inFlightContractIdRef.current || cancelledRef.current) return;
+            orderOutcomeUnknownRef.current = true;
+            stopBot('Contract status stopped updating before settlement. Reconcile the open contract and account history in Deriv before restarting.');
+          }, Math.max(60000, cfg.durationUnit === 's' ? (cfg.duration + 60) * 1000 : 120000));
+        }
 
         const isClosed = poc.is_sold === 1 || poc.is_sold === true
           || poc.is_expired === 1 || poc.is_expired === true
@@ -466,6 +479,7 @@ export function useBotRunner(
         try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); } catch { /* ignore */ }
         orderOutcomeUnknownRef.current = false;
         inFlightContractIdRef.current = null;
+        contractStatusSeenRef.current = false;
 
         const tx: BotTransaction = {
           id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
