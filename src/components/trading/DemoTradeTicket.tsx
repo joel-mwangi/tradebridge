@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
 import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument } from "./types";
 
@@ -47,12 +47,13 @@ type Props = {
   quote: DemoQuote | null;
   requestQuote: (input: { symbol: string; contractType: DigitContractType; stake: number; duration: number; durationUnit: "t"; barrier?: string }) => void;
   confirmQuote: () => void;
+  cancelQuote: () => void;
 };
 
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
   orderResolutionRequired, acknowledgeOrderResolution,
-  market, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote,
+  market, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote, cancelQuote,
 }: Props) {
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("5");
@@ -74,6 +75,29 @@ export default function DemoTradeTicket({
   const contractType = getContractType(mode, activePrediction);
   const requiresTarget = mode !== "even-odd";
 
+  // A canonical key that uniquely identifies all inputs that define a valid
+  // quote. Any change — market, contract type, stake, duration, barrier — must
+  // immediately invalidate the current quote so the user never confirms a price
+  // that was priced for a different order. The key is the single source of
+  // truth: no scattered useEffect guards needed as the form grows.
+  const quoteKey = [
+    market?.symbol ?? "",
+    contractType,
+    stake,
+    duration,
+    requiresTarget ? String(target) : "",
+  ].join("|");
+
+  const quoteKeyRef = useRef(quoteKey);
+  useEffect(() => {
+    if (quoteKeyRef.current !== quoteKey) {
+      quoteKeyRef.current = quoteKey;
+      cancelQuote();
+    }
+  }, [quoteKey, cancelQuote]);
+
+  // Reset duration when mode changes (tick range is the same but a clean
+  // default avoids carrying over an out-of-range value from a future mode).
   useEffect(() => {
     setDuration("5");
   }, [mode]);

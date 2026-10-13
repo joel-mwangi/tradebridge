@@ -817,10 +817,22 @@ export function useTradingSession(
     }
   }
 
+  function cancelQuote() {
+    // Cancels any in-flight quote request and clears displayed quote state.
+    // Safe to call at any time — no-ops if nothing is pending.
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    quoteRequestRef.current = null;
+    setQuote(null);
+    setBusy(false);
+  }
+
   return {
     sessionState, status, busy, quote, positions, activity, balance, realizedProfit,
     orderResolutionRequired, acknowledgeOrderResolution,
     activityHasMore, activityLoading, loadMoreActivity,
-    requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow,
+    requestQuote, confirmQuote, cancelQuote, sellPosition, refreshAccount: refreshAccountNow,
   };
 }
