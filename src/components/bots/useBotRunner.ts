@@ -116,6 +116,7 @@ export function useBotRunner(
   const accountRef = useRef<DerivAccount | null>(account);
   const sessionStateRef = useRef(sessionState);
   const startTimeRef = useRef<number | null>(null);
+  const runAccountIdRef = useRef<string | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const responseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightContractIdRef = useRef<string | null>(null);
@@ -275,6 +276,13 @@ export function useBotRunner(
     }
   }, [connected, stopBot]);
 
+  useEffect(() => {
+    const active = ['running', 'cooldown', 'connecting'].includes(stateRef.current.status);
+    if (active && runAccountIdRef.current !== null && account?.account_id !== runAccountIdRef.current) {
+      stopBot('Selected Deriv account changed while the bot was active. The run was stopped; reconcile any open contract before restarting.');
+    }
+  }, [account?.account_id, stopBot]);
+
   const sendProposal = useCallback(
     (reqId: number, stake: number) => {
       const cfg = configRef.current;
@@ -368,6 +376,7 @@ export function useBotRunner(
     orderOutcomeUnknownRef.current = false;
     purchaseAttemptedRef.current = false;
     startTimeRef.current = Date.now();
+    runAccountIdRef.current = account.account_id;
     inFlightContractIdRef.current = null;
 
     if (!config.stakeStrategy || !['fixed', 'martingale', 'dalembert'].includes(config.stakeStrategy.type)
