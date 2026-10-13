@@ -187,3 +187,11 @@ test("settlement status watchdog is refreshed by every matching contract update"
   assert.match(botRunner, /Every matching update refreshes the inactivity watchdog/);
   assert.match(botRunner, /contractStatusSeenRef\.current = true/);
 });
+
+
+test("stopping one bot run is idempotent and cannot persist duplicate run summaries", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /const stopHandledRef = useRef\(false\)/);
+  assert.match(botRunner, /if \(stopHandledRef\.current\) return/);
+  assert.match(botRunner, /stopHandledRef\.current = false/);
+});
