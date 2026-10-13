@@ -102,3 +102,13 @@ test("bot request timeouts stop execution and retain ambiguous purchase state fo
   assert.match(botRunner, /orderOutcomeUnknownRef\.current = true/);
   assert.match(botRunner, /Reconcile the Deriv account before restarting/);
 });
+
+
+test("ambiguous bot orders require an explicit Deriv reconciliation acknowledgement", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  const runPanel = read("src/components/bots/RunPanel.tsx");
+  assert.match(botRunner, /acknowledgeOrderReconciled/);
+  assert.match(botRunner, /window\.confirm/);
+  assert.match(runPanel, /orderRecoveryRequired/);
+  assert.match(runPanel, /I checked Deriv — clear recovery lock/);
+});
