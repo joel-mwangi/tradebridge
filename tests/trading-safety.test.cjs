@@ -134,3 +134,11 @@ test("bot runner does not detach response timeouts on ordinary connection-state 
   assert.match(botRunner, /detach the listener and clear timers only when this hook is unmounted/);
   assert.match(botRunner, /Deriv session disconnected while the bot was active/);
 });
+
+
+test("disconnect after purchase submission cannot clear the unresolved-order lock", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /purchaseAttemptedRef\.current = true/);
+  assert.match(botRunner, /!purchaseAttemptedRef\.current && !inFlightContractIdRef\.current/);
+  assert.match(botRunner, /purchaseAttemptedRef\.current = false/);
+});
