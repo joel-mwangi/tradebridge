@@ -8,6 +8,8 @@ interface RunPanelProps {
   runState: BotRunState;
   onStart: () => void;
   onStop: () => void;
+  orderRecoveryRequired: boolean;
+  onAcknowledgeOrderReconciled: () => void;
   config: BotConfig | null;
 }
 
@@ -22,7 +24,7 @@ function levelClass(level: JournalEntry['level'], styles: Record<string, string>
   return styles.journalInfo;
 }
 
-export function RunPanel({ runState, onStart, onStop, config }: RunPanelProps) {
+export function RunPanel({ runState, onStart, onStop, orderRecoveryRequired, onAcknowledgeOrderReconciled, config }: RunPanelProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('summary');
 
   const {
@@ -112,6 +114,14 @@ export function RunPanel({ runState, onStart, onStop, config }: RunPanelProps) {
               <button className={styles.stopButton} onClick={onStop}>
                 ■ Stop Bot
               </button>
+            )}
+            {orderRecoveryRequired && !isActive && (
+              <div role="alert" className={styles.emptyState}>
+                <p>An order outcome is unresolved. Check Deriv open contracts and account history before clearing this lock.</p>
+                <button className={styles.stopButton} onClick={onAcknowledgeOrderReconciled}>
+                  I checked Deriv — clear recovery lock
+                </button>
+              </div>
             )}
           </>
         )}
