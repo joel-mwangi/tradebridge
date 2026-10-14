@@ -194,9 +194,13 @@ export function useMarketData() {
         return;
       }
 
-      // Keep a small live watchlist streaming; any other market is subscribed
-      // on demand when the user selects it from the full directory.
-      chosen.slice(0, 8).forEach((market) => requestMarket(market.symbol));
+      // Subscribe all markets with a 50ms throttle between each so Deriv
+      // doesn't drop the connection under a burst of simultaneous requests.
+      chosen.forEach((market, index) => {
+        setTimeout(() => {
+          if (alive) requestMarket(market.symbol);
+        }, index * 50);
+      });
       setConnection("Live market stream connected");
     };
 
