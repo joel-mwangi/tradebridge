@@ -672,13 +672,7 @@ export default function TradingWorkspace() {
                       target={digitTarget}
                       onTargetChange={setDigitTarget}
                     />
-                    <div className={styles.marketSelectionFooter}>
-                      <span>
-                        <strong>{selectedMarket?.name ?? "No market selected"}</strong>
-                        <small>{selectedMarket?.symbol ?? "Choose an available instrument to begin"}</small>
-                      </span>
-                      <Link href="/markets" className={styles.secondaryButton}>Change market</Link>
-                    </div>
+
                   </div>
                 </div>
 

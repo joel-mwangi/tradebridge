@@ -93,16 +93,6 @@ export default function DigitAnalysis({
       })}</div>
     </section>
     <div className={styles.lowerGrid}>
-      <section className={styles.panel}><div className={styles.panelTitle}><div><h3>Recent tick digits</h3><p>Newest first · {recent.length} most recent valid ticks</p></div></div>
-        {recent.length ? <div className={styles.recentGrid}>{recent.map((p, i) => <div key={p.time + "-" + i} className={i === 0 ? styles.recentLatest : styles.recentDigit} title={new Date(p.time * 1000).toLocaleTimeString()}>{p.digit}</div>)}</div>
-          : <div className={styles.empty}>Waiting for valid tick digits from the selected market.</div>}
-      </section>
-      <section className={styles.panel}><div className={styles.panelTitle}><div><h3>Distribution</h3><p>Observed counts and shares</p></div></div>
-        <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Digit</th><th>Count</th><th>Share</th><th>Rank</th></tr></thead>
-          <tbody>{DIGITS.map((d) => <tr key={d}><td><span className={styles.tableDigit}>{d}</span></td><td>{counts[d]}</td><td>{percent(counts[d])}</td><td>#{rank(d)}</td></tr>)}</tbody>
-        </table></div>
-      </section>
     </div>
-    <footer className={styles.disclaimer}><strong>ⓘ Descriptive statistics only</strong><p>Observed frequency does not establish a profitable edge. Analysis settings never place or modify an order.</p></footer>
   </section>;
 }
