@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import LiveTradingControls from "./LiveTradingControls";
 import MarketWatch from "./MarketWatch";
@@ -97,7 +97,6 @@ function accountTypeLabel(account: DerivAccount) {
 
 // ─── Most Traded Markets section ──────────────────────────────────────────────
 
-// Candidate pool — all volatility 1s indices we watch
 const MOST_TRADED_SYMBOLS = ["1HZ100V", "1HZ10V", "1HZ75V", "1HZ50V", "1HZ25V"];
 
 function getSymbolLabel(symbol: string): string {
@@ -111,21 +110,14 @@ function getSymbolLabel(symbol: string): string {
   return labels[symbol] ?? symbol.replace(/[^0-9]/g, "");
 }
 
-/**
- * Count how many new ticks arrived per symbol in the last window and return
- * the MOST_TRADED_SYMBOLS pool sorted by tick frequency (descending).
- * Re-evaluates every `intervalMs` milliseconds.
- */
 function useSortedByActivity(
   snapshots: Record<string, import("./types").MarketSnapshot>,
   intervalMs = 10_000,
 ): string[] {
-  // We track the snapshot point-count per symbol at last sort time
   const baselineRef = useRef<Record<string, number>>({});
   const [sorted, setSorted] = useState<string[]>(MOST_TRADED_SYMBOLS);
 
   useEffect(() => {
-    // Initialise baseline immediately
     const init: Record<string, number> = {};
     for (const sym of MOST_TRADED_SYMBOLS) {
       init[sym] = snapshots[sym]?.points.length ?? 0;
@@ -138,20 +130,18 @@ function useSortedByActivity(
         const current = snapshots[sym]?.points.length ?? 0;
         const baseline = baselineRef.current[sym] ?? current;
         ticksSince[sym] = current - baseline;
-        baselineRef.current[sym] = current; // roll the window forward
+        baselineRef.current[sym] = current;
       }
       setSorted((prev) => {
         const next = [...MOST_TRADED_SYMBOLS].sort(
           (a, b) => (ticksSince[b] ?? 0) - (ticksSince[a] ?? 0),
         );
-        // Only trigger a re-render if order actually changed
         return next.join(",") === prev.join(",") ? prev : next;
       });
     }, intervalMs);
 
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intervalMs]);
+  }, [intervalMs, snapshots]);
 
   return sorted;
 }
@@ -259,7 +249,6 @@ function MostTradedMarkets({
               }}
               aria-label={`Open ${market.name} trading workspace`}
             >
-              {/* header: badge + live dot */}
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -278,17 +267,14 @@ function MostTradedMarkets({
                 </span>
               </div>
 
-              {/* name */}
               <p style={{ margin: 0, fontSize: "12px", fontWeight: 600, color: "var(--muted)", lineHeight: 1.3 }}>
                 {market.name}
               </p>
 
-              {/* price */}
               <strong style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums", color: "var(--ink)" }}>
                 {quote !== undefined ? formatQ(quote) : "—"}
               </strong>
 
-              {/* sparkline + change */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
                 <div style={{ color: isUp ? "var(--teal)" : "var(--red)", flexShrink: 0 }}>
                   <MiniSparkline points={recent} isUp={isUp} />
@@ -306,7 +292,6 @@ function MostTradedMarkets({
           );
         })}
 
-        {/* View all card */}
         <a
           href="/markets"
           style={{
@@ -346,10 +331,17 @@ function MostTradedMarkets({
 export default function TradingWorkspace() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const routeSegment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
   const page: WorkspacePage = PRIMARY_NAV.some((item) => item.id === routeSegment)
     ? routeSegment as WorkspacePage
     : "dashboard";
+
+  // Safely retrieve query parameters
+  const requestedSymbol = searchParams.get("symbol");
+  const authErrorParam = searchParams.get("auth_error");
+  const connectionParam = searchParams.get("connection");
 
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
@@ -366,6 +358,7 @@ export default function TradingWorkspace() {
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
   const [digitTarget, setDigitTarget] = useState(5);
+
   function setDigitMode(mode: DigitContractMode) {
     setDigitModeState(mode);
     setDigitPrediction(mode === "over-under" ? "OVER" : mode === "even-odd" ? "EVEN" : "MATCHES");
@@ -378,6 +371,7 @@ export default function TradingWorkspace() {
     if (prediction === "UNDER" && digitTarget < 1) setDigitTarget(5);
     if (prediction === "OVER" && digitTarget > 8) setDigitTarget(5);
   }
+
   useEffect(() => {
     const saved = localStorage.getItem("tradebridge_theme");
     if (saved === "light" || saved === "dark") setTheme(saved);
@@ -388,6 +382,7 @@ export default function TradingWorkspace() {
     setTheme(next);
     localStorage.setItem("tradebridge_theme", next);
   }
+
   const {
     markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket,
     candlesByKey, requestCandles,
@@ -395,12 +390,11 @@ export default function TradingWorkspace() {
 
   useEffect(() => {
     if (page !== "trade") return;
-    const requestedSymbol = new URLSearchParams(window.location.search).get("symbol");
     if (requestedSymbol && requestedSymbol !== selectedSymbol
       && markets.some((market) => market.symbol === requestedSymbol)) {
       selectMarket(requestedSymbol);
     }
-  }, [page, markets, selectedSymbol, selectMarket]);
+  }, [page, requestedSymbol, selectedSymbol, markets, selectMarket]);
 
   function openMarket(symbol: string) {
     selectMarket(symbol);
@@ -431,11 +425,10 @@ export default function TradingWorkspace() {
 
   useEffect(() => {
     let active = true;
-    const params = new URLSearchParams(window.location.search);
-    const firstAuthMessage = authErrorMessage(params.get("auth_error"));
-    if (params.get("connection") === "connected") setAuthMessage("Authorization completed. Verifying linked accounts and trading permissions…");
-    if (params.get("auth_error")) setAuthMessage(firstAuthMessage);
-    if (params.has("connection") || params.has("auth_error")) {
+    const firstAuthMessage = authErrorMessage(authErrorParam);
+    if (connectionParam === "connected") setAuthMessage("Authorization completed. Verifying linked accounts and trading permissions…");
+    if (authErrorParam) setAuthMessage(firstAuthMessage);
+    if (connectionParam || authErrorParam) {
       window.history.replaceState({}, "", window.location.pathname);
     }
 
@@ -465,7 +458,7 @@ export default function TradingWorkspace() {
       });
 
     return () => { active = false; };
-  }, []);
+  }, [authErrorParam, connectionParam]);
 
   useEffect(() => {
     let active = true;
@@ -511,84 +504,12 @@ export default function TradingWorkspace() {
       });
 
     return () => { active = false; };
-  }, [connected, activeAccountIsReal, activeAccount?.account_id]);
+  }, [connected, activeAccountIsReal, activeAccount]);
 
   function startDerivConnect() {
     window.location.href = "/api/auth/deriv/start";
   }
 
-  async function enableLiveTrading(stakeLimit: number, dailyLossLimit: number) {
-    if (!activeAccountIsReal || !activeAccount) return;
-    setLiveConsentBusy(true);
-    setLiveConsentMessage("Saving your risk acknowledgement and limits…");
-    try {
-      const response = await fetch("/api/auth/deriv/live-consent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          account_id: activeAccount.account_id,
-          enabled: true,
-          acknowledgement: "REAL_MONEY_RISK_ACKNOWLEDGEMENT_V1",
-          max_stake: stakeLimit,
-          max_daily_loss: dailyLossLimit,
-        }),
-        cache: "no-store",
-      });
-      const data = await response.json() as LiveConsentResponse;
-      if (!response.ok) {
-        setLiveConsentMessage(data.error === "live_consent_schema_missing"
-          ? "The required consent table is unavailable. Apply all TradeBridge Supabase migrations, including the consent hardening migration, then reload."
-          : data.error === "risk_acknowledgement_required"
-            ? "Tick the risk acknowledgement before enabling live trading."
-            : data.error === "real_account_required"
-              ? "Only a verified Real account can enable live trading."
-              : "Could not save live-trading consent. No new live trading session was opened.");
-        return;
-      }
-      setMaxRealStake(Number(data.max_stake ?? stakeLimit));
-      setMaxDailyLoss(Number(data.max_daily_loss ?? dailyLossLimit));
-      setLiveConsentLoadedAccountId(activeAccount.account_id);
-      setLiveTradingEnabled(true);
-      setLiveConsentMessage("Risk acknowledgement recorded. TradeBridge is requesting a real-account session; no order has been placed.");
-    } catch {
-      setLiveConsentMessage("Unable to save live-trading consent. Check your connection and try again.");
-    } finally {
-      setLiveConsentBusy(false);
-    }
-  }
-
-  async function disableLiveTrading() {
-    if (!activeAccountIsReal || !activeAccount) return;
-    const accountId = activeAccount.account_id;
-    // Lock this tab immediately so no new quote/order can be initiated while consent is revoked.
-    setLiveTradingEnabled(false);
-    setLiveConsentLoadedAccountId("");
-    setLiveConsentBusy(true);
-    setLiveConsentMessage("Locking live order entry and revoking consent…");
-    try {
-      const response = await fetch("/api/auth/deriv/live-consent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_id: accountId, enabled: false }),
-        cache: "no-store",
-      });
-      const data = await response.json() as LiveConsentResponse;
-      if (!response.ok) {
-        setLiveConsentMessage(data.error === "live_consent_schema_missing"
-          ? "Live trading is locked in this tab, but the consent record could not be updated. Apply the migration and retry."
-          : "Live trading is locked in this tab, but server-side consent could not be revoked. Retry before using a new session.");
-        return;
-      }
-      setLiveConsentMessage("Live trading disabled. The current trading socket has been closed.");
-      setLiveConsentLoadedAccountId(accountId);
-    } catch {
-      setLiveConsentMessage("Live trading is locked in this tab, but server-side consent could not be revoked. Retry before using a new session.");
-    } finally {
-      setLiveConsentBusy(false);
-    }
-  }
-
-  const accountSessionReady = connected && sessionConnected;
   const accountState = !connected
     ? "Not connected"
     : activeAccountIsDemo
@@ -601,257 +522,301 @@ export default function TradingWorkspace() {
           ? "Unsupported account type · trading disabled"
           : "Account required";
 
-  return <main className={styles.workspace} data-theme={theme}>
-    <section className={styles.main}>
-      <header className={styles.topbar}>
-        <Link href="/dashboard" className={styles.topbarIdentity} aria-label="TradeBridge dashboard">
-          <span className={styles.brandMark}>T</span>
-          <span className={styles.brandWord}>tradebridge<span>.</span></span>
-          <span className={styles.workspaceContext}>
-            <strong>{PAGE_TITLES[page]}</strong>
-            <small>{activeAccountIsReal ? "Real account · read-only by default" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>
-          </span>
-        </Link>
-        <div className={styles.topActions}>
-          <button className={styles.secondaryButton} type="button" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-          </button>
-          {accounts.length > 0 && <label className={styles.activeAccountWrap}>
-            <span className={styles.accountLabel}>ACCOUNT</span>
-            <select className={styles.accountSelect} aria-label="Select trading account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
-              {accounts.map((item) => <option value={item.account_id} key={item.account_id}>{item.account_id} · {item.currency ?? "Currency"} · {accountTypeLabel(item)}</option>)}
-            </select>
-          </label>}
-          {connected
-            ? <form action="/api/auth/deriv/disconnect" method="post"><button className={styles.secondaryButton} type="submit">Disconnect</button></form>
-            : <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Broker ↗</button>}
+  return (
+    <main className={styles.workspace} data-theme={theme}>
+      <section className={styles.main}>
+        <header className={styles.topbar}>
+          <Link href="/dashboard" className={styles.topbarIdentity} aria-label="TradeBridge dashboard">
+            <span className={styles.brandMark}>T</span>
+            <span className={styles.brandWord}>tradebridge<span>.</span></span>
+            <span className={styles.workspaceContext}>
+              <strong>{PAGE_TITLES[page]}</strong>
+              <small>{activeAccountIsReal ? "Real account · read-only by default" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>
+            </span>
+          </Link>
+          <div className={styles.topActions}>
+            <button className={styles.secondaryButton} type="button" onClick={toggleTheme} aria-label="Toggle theme">
+              {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+            </button>
+            {accounts.length > 0 && (
+              <label className={styles.activeAccountWrap}>
+                <span className={styles.accountLabel}>ACCOUNT</span>
+                <select className={styles.accountSelect} aria-label="Select trading account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
+                  {accounts.map((item) => (
+                    <option value={item.account_id} key={item.account_id}>
+                      {item.account_id} · {item.currency ?? "Currency"} · {accountTypeLabel(item)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {connected ? (
+              <form action="/api/auth/deriv/disconnect" method="post">
+                <button className={styles.secondaryButton} type="submit">Disconnect</button>
+              </form>
+            ) : (
+              <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Broker ↗</button>
+            )}
+          </div>
+        </header>
+
+        <div className={styles.tabNavWrap}>
+          <nav className={styles.workspaceTabs} aria-label="Primary navigation">
+            {PRIMARY_NAV.map((item) => (
+              <Link
+                className={page === item.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
+                href={"/" + item.id}
+                aria-current={page === item.id ? "page" : undefined}
+                key={item.id}
+              >
+                <span className={styles.workspaceTabIcon} aria-hidden="true">{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            ))}
+          </nav>
         </div>
-      </header>
 
-      <div className={styles.tabNavWrap}>
-        <nav className={styles.workspaceTabs} aria-label="Primary navigation">
-          {PRIMARY_NAV.map((item) => (
-            <Link
-              className={page === item.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
-              href={"/" + item.id}
-              aria-current={page === item.id ? "page" : undefined}
-              key={item.id}
-            >
-              <span className={styles.workspaceTabIcon} aria-hidden="true">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      <div className={styles.content}>
-        {connected && accounts.length === 0 && <section className={styles.accountEmpty}>
-          <div><strong>No linked trading account was returned</strong><p>Create or activate a supported account with your broker, then reconnect. TradeBridge only displays accounts returned and verified as linked to your signed-in user.</p></div>
-          <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Reconnect Broker ↗</button>
-        </section>}
-
-        <div className={styles.workspaceTabPanel}>
-          {page === "dashboard" && (
-            <section className={styles.overviewPage} aria-label="Workspace overview">
-              <div className={styles.intro}>
-                <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Account overview</p>
-                </div>
-                <div className={styles.introActions}>
-                  {connected
-                    ? <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>
-                    : <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Broker ↗</button>}
-                </div>
+        <div className={styles.content}>
+          {connected && accounts.length === 0 && (
+            <section className={styles.accountEmpty}>
+              <div>
+                <strong>No linked trading account was returned</strong>
+                <p>Create or activate a supported account with your broker, then reconnect. TradeBridge only displays accounts returned and verified as linked to your signed-in user.</p>
               </div>
+              <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Reconnect Broker ↗</button>
+            </section>
+          )}
 
-              {authMessage && !connected && <div className={styles.notice}>
-                <span className={styles.noticeIcon}>i</span>
-                <div><strong>{authMessage}</strong><p>Connect your Deriv account to load balances, market sessions, and trade activity.</p></div>
-              </div>}
+          <div className={styles.workspaceTabPanel}>
+            {page === "dashboard" && (
+              <section className={styles.overviewPage} aria-label="Workspace overview">
+                <div className={styles.intro}>
+                  <div className={styles.introMain}>
+                    <p className={styles.eyebrow}>Account overview</p>
+                  </div>
+                  <div className={styles.introActions}>
+                    {connected ? (
+                      <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>
+                    ) : (
+                      <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Broker ↗</button>
+                    )}
+                  </div>
+                </div>
 
-              <section className={styles.statsGrid} aria-label="Selected account summary">
-                <article className={styles.statCard}>
-                  <div className={styles.statLabel}><span className={styles.metricAccent}>◉</span> {activeAccountIsDemo ? "Demo balance" : activeAccountIsReal ? "Real balance" : "Account balance"}</div>
-                  <strong className={styles.statValue}>{connected && activeAccount ? formatMoney(liveBalance, currency) : "—"}</strong>
-                  <p className={styles.statSub}>{activeAccount ? activeAccount.account_id + (activeAccountIsReal ? " · real money" : activeAccountIsDemo ? " · virtual funds" : " · trading disabled") : "Connect and select a linked account"}</p>
-                </article>
-                <article className={styles.statCard}>
-                  <div className={styles.statLabel}><span className={styles.metricAccent}>▤</span> Open positions</div>
-                  <strong className={styles.statValue}>{accountSessionReady ? trading.positions.length : "—"}</strong>
-                  <p className={styles.statSub}>{accountSessionReady ? "Active contracts" : trading.sessionState}</p>
-                </article>
-                <article className={styles.statCard}>
-                  <div className={styles.statLabel}><span className={styles.metricAccent}>↗</span> Realized P/L today</div>
-                  <strong className={styles.statValue}>{accountSessionReady && trading.realizedProfit !== null ? formatMoney(trading.realizedProfit, currency) : "—"}</strong>
-                  <p className={styles.statSub}>{accountSessionReady ? "Read from account ledger" : "Available after the selected account session connects"}</p>
-                </article>
+                {authMessage && !connected && (
+                  <div className={styles.notice}>
+                    <span className={styles.noticeIcon}>i</span>
+                    <div>
+                      <strong>{authMessage}</strong>
+                      <p>Connect your Deriv account to load balances, market sessions, and trade activity.</p>
+                    </div>
+                  </div>
+                )}
+
+                <section className={styles.statsGrid} aria-label="Selected account summary">
+                  <article className={styles.statCard}>
+                    <div className={styles.statLabel}><span className={styles.metricAccent}>◉</span> {activeAccountIsDemo ? "Demo balance" : activeAccountIsReal ? "Real balance" : "Account balance"}</div>
+                    <strong className={styles.statValue}>{connected && activeAccount ? formatMoney(liveBalance, currency) : "—"}</strong>
+                    <p className={styles.statSub}>{activeAccount ? activeAccount.account_id + (activeAccountIsReal ? " · real money" : activeAccountIsDemo ? " · virtual funds" : " · trading disabled") : "Connect and select a linked account"}</p>
+                  </article>
+                  <article className={styles.statCard}>
+                    <div className={styles.statLabel}><span className={styles.metricAccent}>▤</span> Open positions</div>
+                    <strong className={styles.statValue}>{accountSessionReady ? trading.positions.length : "—"}</strong>
+                    <p className={styles.statSub}>{accountSessionReady ? "Active contracts" : trading.sessionState}</p>
+                  </article>
+                  <article className={styles.statCard}>
+                    <div className={styles.statLabel}><span className={styles.metricAccent}>↗</span> Realized P/L today</div>
+                    <strong className={styles.statValue}>{accountSessionReady && trading.realizedProfit !== null ? formatMoney(trading.realizedProfit, currency) : "—"}</strong>
+                    <p className={styles.statSub}>{accountSessionReady ? "Read from account ledger" : "Available after the selected account session connects"}</p>
+                  </article>
+                </section>
+
+                <MostTradedMarkets
+                  markets={markets}
+                  snapshots={snapshots}
+                  onSelect={openMarket}
+                />
               </section>
+            )}
 
-              <MostTradedMarkets
-                markets={markets}
-                snapshots={snapshots}
-                onSelect={openMarket}
+            {page === "markets" && (
+              <section className={styles.workspaceSection} aria-label="Available markets">
+                <div className={styles.intro}>
+                  <div className={styles.introMain}>
+                    <p className={styles.eyebrow}>Explore instruments</p>
+                    <h1 className={styles.title}>Markets</h1>
+                    <p className={styles.subtitle}>Browse instruments eligible for digit contracts, then select one to open its live digit analysis and trade controls.</p>
+                  </div>
+                  <div className={styles.introActions}>
+                    <span className={connection === "Live prices" ? styles.liveStatus : styles.connectionStatus}><i />{connection}</span>
+                  </div>
+                </div>
+
+                <MarketWatch
+                  listOnly
+                  markets={markets}
+                  snapshots={snapshots}
+                  selectedMarket={selectedMarket}
+                  selectedSymbol={selectedSymbol}
+                  connection={connection}
+                  onSelect={openMarket}
+                  candlesByKey={candlesByKey}
+                  onLoadCandles={requestCandles}
+                />
+              </section>
+            )}
+
+            {page === "trade" && (
+              <section className={styles.workspaceSection} aria-label="Trading workspace">
+                <div className={styles.marketGrid}>
+                  <div className={styles.marketColumn}>
+                    <DigitAnalysis
+                      market={selectedMarket}
+                      snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+                      mode={digitMode}
+                      onModeChange={setDigitMode}
+                      prediction={digitPrediction}
+                      onPredictionChange={setPredictionAndValidateTarget}
+                      target={digitTarget}
+                      onTargetChange={setDigitTarget}
+                    />
+                    <div className={styles.marketSelectionFooter}>
+                      <span>
+                        <strong>{selectedMarket?.name ?? "No market selected"}</strong>
+                        <small>{selectedMarket?.symbol ?? "Choose an available instrument to begin"}</small>
+                      </span>
+                      <Link href="/markets" className={styles.secondaryButton}>Change market</Link>
+                    </div>
+                  </div>
+                </div>
+
+                <TradingActivity
+                  positionsOnly
+                  positions={trading.positions}
+                  activity={trading.activity}
+                  currency={currency}
+                  accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                  accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                  busy={trading.busy}
+                  activityLoading={trading.activityLoading}
+                  activityHasMore={trading.activityHasMore}
+                  onSell={trading.sellPosition}
+                  onRefresh={trading.refreshAccount}
+                  onLoadMore={trading.loadMoreActivity}
+                />
+              </section>
+            )}
+
+            {page === "portfolio" && (
+              <section className={styles.workspaceSection} aria-label="Positions and history">
+                <div className={styles.intro}>
+                  <div className={styles.introMain}>
+                    <p className={styles.eyebrow}>Account activity</p>
+                    <h1 className={styles.title}>Portfolio &amp; History</h1>
+                    <p className={styles.subtitle}>Review open contracts, monitor profit and loss, and load your Deriv statement activity.</p>
+                  </div>
+                  <div className={styles.introActions}>
+                    <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh activity</button>
+                  </div>
+                </div>
+                <TradingActivity
+                  positions={trading.positions}
+                  activity={trading.activity}
+                  currency={currency}
+                  accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                  accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                  busy={trading.busy}
+                  activityLoading={trading.activityLoading}
+                  activityHasMore={trading.activityHasMore}
+                  onSell={trading.sellPosition}
+                  onRefresh={trading.refreshAccount}
+                  onLoadMore={trading.loadMoreActivity}
+                />
+              </section>
+            )}
+
+            {page === "bots" && (
+              <BotsWorkspace
+                connected={connected}
+                account={activeAccount}
+                sharedSocketRef={trading.sharedSocketRef}
+                nextSharedSeqId={trading.nextSharedSeqId}
+                sessionState={trading.sessionState}
               />
+            )}
 
-            </section>
-          )}
-
-          {page === "markets" && (
-            <section className={styles.workspaceSection} aria-label="Available markets">
-              <div className={styles.intro}>
-                <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Explore instruments</p>
-                  <h1 className={styles.title}>Markets</h1>
-                  <p className={styles.subtitle}>Browse instruments eligible for digit contracts, then select one to open its live digit analysis and trade controls.</p>
-                </div>
-                <div className={styles.introActions}>
-                  <span className={connection === "Live prices" ? styles.liveStatus : styles.connectionStatus}><i />{connection}</span>
-                </div>
-              </div>
-
-              <MarketWatch
-                listOnly
-                markets={markets}
-                snapshots={snapshots}
-                selectedMarket={selectedMarket}
-                selectedSymbol={selectedSymbol}
-                connection={connection}
-                onSelect={openMarket}
-                candlesByKey={candlesByKey}
-                onLoadCandles={requestCandles}
-              />
-            </section>
-          )}
-
-          {page === "trade" && (
-            <section className={styles.workspaceSection} aria-label="Trading workspace">
-              <div className={styles.marketGrid}>
-
-                <div className={styles.marketColumn}>
-                  <DigitAnalysis
-                    market={selectedMarket}
-                    snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
-                    mode={digitMode}
-                    onModeChange={setDigitMode}
-                    prediction={digitPrediction}
-                    onPredictionChange={setPredictionAndValidateTarget}
-                    target={digitTarget}
-                    onTargetChange={setDigitTarget}
-                  />
-                  <div className={styles.marketSelectionFooter}>
-                    <span><strong>{selectedMarket?.name ?? "No market selected"}</strong><small>{selectedMarket?.symbol ?? "Choose an available instrument to begin"}</small></span>
-                    <Link href="/markets" className={styles.secondaryButton}>Change market</Link>
+            {page === "settings" && (
+              <section className={styles.workspaceSection} aria-label="Settings">
+                <div className={styles.intro}>
+                  <div className={styles.introMain}>
+                    <p className={styles.eyebrow}>Workspace preferences</p>
+                    <h1 className={styles.title}>Settings</h1>
+                    <p className={styles.subtitle}>Manage the appearance of TradeBridge and review the status and safety boundaries of your broker connection.</p>
                   </div>
                 </div>
 
-              </div>
+                <div className={styles.settingsGrid}>
+                  <section className={styles.settingsPanel}>
+                    <div className={styles.panelHeading}>
+                      <div>
+                        <p className={styles.eyebrow}>APPEARANCE</p>
+                        <h2>Theme</h2>
+                        <p className={styles.panelSubtext}>Your choice is saved in this browser and used across workspace pages.</p>
+                      </div>
+                    </div>
+                    <div className={styles.settingValue}>
+                      <div>
+                        <strong>{theme === "dark" ? "Dark theme" : "Light theme"}</strong>
+                        <small>Current workspace appearance</small>
+                      </div>
+                      <button className={styles.secondaryButton} type="button" onClick={toggleTheme}>{theme === "dark" ? "Switch to light" : "Switch to dark"}</button>
+                    </div>
+                  </section>
 
-              <TradingActivity
-                positionsOnly
-                positions={trading.positions}
-                activity={trading.activity}
-                currency={currency}
-                accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
-                accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
-                busy={trading.busy}
-                activityLoading={trading.activityLoading}
-                activityHasMore={trading.activityHasMore}
-                onSell={trading.sellPosition}
-                onRefresh={trading.refreshAccount}
-                onLoadMore={trading.loadMoreActivity}
-              />
-            </section>
-          )}
+                  <section className={styles.settingsPanel}>
+                    <div className={styles.panelHeading}>
+                      <div>
+                        <p className={styles.eyebrow}>BROKER CONNECTION</p>
+                        <h2>Deriv account</h2>
+                        <p className={styles.panelSubtext}>Account details and live connection status are verified by the server.</p>
+                      </div>
+                    </div>
+                    <p className={styles.settingStatus}>{authMessage}</p>
+                    <p className={styles.panelSubtext}>{connected ? accountState : "No verified trading connection is currently active."}</p>
+                    <div className={styles.settingActions}>
+                      {connected ? (
+                        <form action="/api/auth/deriv/disconnect" method="post"><button className={styles.secondaryButton} type="submit">Disconnect broker</button></form>
+                      ) : (
+                        <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>
+                      )}
+                      {connected && <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>}
+                    </div>
+                  </section>
 
-          {page === "portfolio" && (
-            <section className={styles.workspaceSection} aria-label="Positions and history">
-              <div className={styles.intro}>
-                <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Account activity</p>
-                  <h1 className={styles.title}>Portfolio &amp; History</h1>
-                  <p className={styles.subtitle}>Review open contracts, monitor profit and loss, and load your Deriv statement activity.</p>
+                  <section className={styles.settingsPanel}>
+                    <div className={styles.panelHeading}>
+                      <div>
+                        <p className={styles.eyebrow}>TRADING SAFETY</p>
+                        <h2>Execution controls</h2>
+                        <p className={styles.panelSubtext}>Connecting an account does not bypass the execution restrictions.</p>
+                      </div>
+                    </div>
+                    <ul className={styles.safetyList}>
+                      <li>Demo accounts are the default trading practice environment.</li>
+                      <li>Real-account execution remains locked unless a trusted execution gateway is available and the required consent is verified.</li>
+                    </ul>
+                  </section>
                 </div>
-                <div className={styles.introActions}>
-                  <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh activity</button>
-                </div>
-              </div>
-              <TradingActivity
-                positions={trading.positions}
-                activity={trading.activity}
-                currency={currency}
-                accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
-                accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
-                busy={trading.busy}
-                activityLoading={trading.activityLoading}
-                activityHasMore={trading.activityHasMore}
-                onSell={trading.sellPosition}
-                onRefresh={trading.refreshAccount}
-                onLoadMore={trading.loadMoreActivity}
-              />
-            </section>
-          )}
+              </section>
+            )}
+          </div>
 
-          {page === "bots" && (
-            <BotsWorkspace
-              connected={connected}
-              account={activeAccount}
-              sharedSocketRef={trading.sharedSocketRef}
-              nextSharedSeqId={trading.nextSharedSeqId}
-              sessionState={trading.sessionState}
-            />
-          )}
-
-          {page === "settings" && (
-            <section className={styles.workspaceSection} aria-label="Settings">
-              <div className={styles.intro}>
-                <div className={styles.introMain}>
-                  <p className={styles.eyebrow}>Workspace preferences</p>
-                  <h1 className={styles.title}>Settings</h1>
-                  <p className={styles.subtitle}>Manage the appearance of TradeBridge and review the status and safety boundaries of your broker connection.</p>
-                </div>
-              </div>
-
-              <div className={styles.settingsGrid}>
-                <section className={styles.settingsPanel}>
-                  <div className={styles.panelHeading}>
-                    <div><p className={styles.eyebrow}>APPEARANCE</p><h2>Theme</h2><p className={styles.panelSubtext}>Your choice is saved in this browser and used across workspace pages.</p></div>
-                  </div>
-                  <div className={styles.settingValue}>
-                    <div><strong>{theme === "dark" ? "Dark theme" : "Light theme"}</strong><small>Current workspace appearance</small></div>
-                    <button className={styles.secondaryButton} type="button" onClick={toggleTheme}>{theme === "dark" ? "Switch to light" : "Switch to dark"}</button>
-                  </div>
-                </section>
-
-                <section className={styles.settingsPanel}>
-                  <div className={styles.panelHeading}>
-                    <div><p className={styles.eyebrow}>BROKER CONNECTION</p><h2>Deriv account</h2><p className={styles.panelSubtext}>Account details and live connection status are verified by the server.</p></div>
-                  </div>
-                  <p className={styles.settingStatus}>{authMessage}</p>
-                  <p className={styles.panelSubtext}>{connected ? accountState : "No verified trading connection is currently active."}</p>
-                  <div className={styles.settingActions}>
-                    {connected
-                      ? <form action="/api/auth/deriv/disconnect" method="post"><button className={styles.secondaryButton} type="submit">Disconnect broker</button></form>
-                      : <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>}
-                    {connected && <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>}
-                  </div>
-                </section>
-
-                <section className={styles.settingsPanel}>
-                  <div className={styles.panelHeading}>
-                    <div><p className={styles.eyebrow}>TRADING SAFETY</p><h2>Execution controls</h2><p className={styles.panelSubtext}>Connecting an account does not bypass the execution restrictions.</p></div>
-                  </div>
-                  <ul className={styles.safetyList}>
-                    <li>Demo accounts are the default trading practice environment.</li>
-                    <li>Real-account execution remains locked unless a trusted execution gateway is available and the required consent is verified.</li>
-                  </ul>
-                </section>
-              </div>
-            </section>
-          )}
+          <footer className={styles.footer}>
+            <span>TradeBridge · Professional Trading Terminal</span>
+            <span>{activeAccountIsDemo ? "Demo account selected" : activeAccountIsReal ? "Real accounts read-only for order entry" : "Connect a broker to unlock account data"}</span>
+          </footer>
         </div>
-
-        <footer className={styles.footer}><span>TradeBridge · Professional Trading Terminal</span><span>{activeAccountIsDemo ? "Demo account selected" : activeAccountIsReal ? "Real accounts read-only for order entry" : "Connect a broker to unlock account data"}</span></footer>
-      </div>
-    </section>
-  </main>;
+      </section>
+    </main>
+  );
 }
