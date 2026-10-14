@@ -355,6 +355,8 @@ export default function TradingWorkspace() {
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [marketPanelOpen, setMarketPanelOpen] = useState(false);
+  const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
   const [digitTarget, setDigitTarget] = useState(5);
@@ -660,6 +662,105 @@ export default function TradingWorkspace() {
 
             {page === "trade" && (
               <section className={styles.workspaceSection} aria-label="Trading workspace">
+                {/* ── Market switcher header ── */}
+                <div className={styles.tradeTabHeader}>
+                  <div className={styles.tradeTabMarketInfo}>
+                    <span className={styles.tradeTabMarketBadge}>↗</span>
+                    <div className={styles.tradeTabMarketName}>
+                      <strong>{selectedMarket?.name ?? "No market selected"}</strong>
+                      <small>{selectedMarket?.symbol ?? "Choose a market to begin"}</small>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.switchMarketButton}
+                    onClick={() => setMarketPanelOpen(true)}
+                    aria-label="Switch market"
+                  >
+                    ⌁ Switch market
+                  </button>
+                </div>
+
+                {/* ── Market switcher slide-in panel ── */}
+                {marketPanelOpen && <>
+                  <div
+                    className={styles.marketPanelOverlay}
+                    onClick={() => setMarketPanelOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div
+                    className={styles.marketSwitcherPanel}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Select market"
+                  >
+                    <div className={styles.marketSwitcherHead}>
+                      <h2>Select market</h2>
+                      <button
+                        type="button"
+                        className={styles.panelCloseButton}
+                        onClick={() => setMarketPanelOpen(false)}
+                        aria-label="Close market panel"
+                      >✕</button>
+                    </div>
+                    <div className={styles.marketSwitcherSearch}>
+                      <label className={styles.marketSearchWrap}>
+                        <span aria-hidden="true">⌕</span>
+                        <input
+                          className={styles.marketSearch}
+                          type="search"
+                          value={marketPanelSearch}
+                          onChange={(e) => setMarketPanelSearch(e.target.value)}
+                          placeholder="Search by name or symbol…"
+                          aria-label="Search markets"
+                          autoFocus
+                        />
+                      </label>
+                    </div>
+                    <div className={styles.marketSwitcherList}>
+                      {markets
+                        .filter((m) => {
+                          const q = marketPanelSearch.trim().toLowerCase();
+                          return !q || m.name.toLowerCase().includes(q) || m.symbol.toLowerCase().includes(q);
+                        })
+                        .map((m) => {
+                          const snap = snapshots[m.symbol];
+                          const quote = snap?.quote;
+                          const pts = snap?.points ?? [];
+                          const first = pts[0]?.price;
+                          const change = first && quote && first !== 0 ? ((quote - first) / first) * 100 : null;
+                          const isActive = m.symbol === selectedMarket?.symbol;
+                          const fmt = (v: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: v >= 100 ? 2 : 4 }).format(v);
+                          return (
+                            <button
+                              key={m.symbol}
+                              type="button"
+                              className={[styles.marketSwitcherItem, isActive ? styles.marketSwitcherItemActive : ""].join(" ")}
+                              onClick={() => { openMarket(m.symbol); setMarketPanelOpen(false); setMarketPanelSearch(""); }}
+                              aria-pressed={isActive}
+                            >
+                              <span className={styles.marketSwitcherIcon}>
+                                {m.market === "forex" ? "FX" : m.market === "commodities" ? "Au" : "↗"}
+                              </span>
+                              <span className={styles.marketSwitcherInfo}>
+                                <strong>{m.name}</strong>
+                                <small>{m.symbol}</small>
+                              </span>
+                              <span className={styles.marketSwitcherPrice}>
+                                <strong>{quote !== undefined ? fmt(quote) : "—"}</strong>
+                                {change !== null && (
+                                  <small className={change >= 0 ? styles.positive : styles.negative}>
+                                    {change >= 0 ? "+" : ""}{change.toFixed(2)}%
+                                  </small>
+                                )}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                </>}
+
                 <div className={styles.marketGrid}>
                   <div className={styles.marketColumn}>
                     <DigitAnalysis
@@ -672,7 +773,6 @@ export default function TradingWorkspace() {
                       target={digitTarget}
                       onTargetChange={setDigitTarget}
                     />
-
                   </div>
                 </div>
 
