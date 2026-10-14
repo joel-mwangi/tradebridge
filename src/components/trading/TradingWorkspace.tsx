@@ -416,6 +416,7 @@ export default function TradingWorkspace() {
     && liveConsentLoadedAccountId === activeAccount?.account_id;
   const trading = useTradingSession(connected, activeAccount, effectiveLiveTradingEnabled, maxRealStake, maxDailyLoss);
   const sessionConnected = trading.sessionState === "Demo trading connected" || trading.sessionState === "Real trading connected";
+  const accountSessionReady = connected && sessionConnected;
   const currency = activeAccountIsDemo || effectiveLiveTradingEnabled
     ? trading.balance.currency || activeAccount?.currency || "USD"
     : activeAccount?.currency || "USD";
