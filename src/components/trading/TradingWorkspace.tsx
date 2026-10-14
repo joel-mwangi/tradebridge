@@ -642,16 +642,7 @@ export default function TradingWorkspace() {
 
             {page === "markets" && (
               <section className={styles.workspaceSection} aria-label="Available markets">
-                <div className={styles.intro}>
-                  <div className={styles.introMain}>
-                    <p className={styles.eyebrow}>Explore instruments</p>
-                    <h1 className={styles.title}>Markets</h1>
-                    <p className={styles.subtitle}>Browse instruments eligible for digit contracts, then select one to open its live digit analysis and trade controls.</p>
-                  </div>
-                  <div className={styles.introActions}>
-                    <span className={connection === "Live prices" ? styles.liveStatus : styles.connectionStatus}><i />{connection}</span>
-                  </div>
-                </div>
+
 
                 <MarketWatch
                   listOnly
