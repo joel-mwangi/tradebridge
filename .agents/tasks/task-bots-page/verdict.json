@@ -1,5 +1,9 @@
 {
   "verdict": "APPROVED",
-  "checkedAt": "2025-01-01T00:00:00.000Z",
-  "summary": "Integration verification passed. npx tsc --noEmit exits 0, npm run build exits 0. No seam errors between FEAT-001, FEAT-002, or FEAT-003. Build output confirms /bots served via /[section] dynamic route. No fixes were required."
+  "summary": "All seven checklist items pass; two non-blocking findings surfaced: the pending marker is written one round trip too early (before proposal, not before buy), and the consecutive-loss boundary counter includes the trigger trade itself.",
+  "findings": [
+    "Stale pending-marker gap: marker is written before the proposal send rather than before the buy send, leaving a wider unsafe window than useDemoTrading on page refresh between the two round trips. Move the localStorage.setItem call to immediately before ws.send({ buy: ... }) in the proposal message handler.",
+    "Consecutive-loss boundary fires at the wrong trade: the guard iterates stateRef.current.transactions after patchState has already prepended the new losing tx, so stopBot fires when the streak length equals maxConsecutiveLosses counting the trigger trade. Add a unit test pinning the exact trade at which each stop condition fires to confirm or correct the intended boundary."
+  ],
+  "reviewDoc": ".agents/tasks/task-bots-page/2026-10-13-124934-review.md"
 }

@@ -31,7 +31,7 @@ type LiveConsentResponse = {
 type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "bots" | "settings";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
-  { id: "dashboard", label: "Dashboard", icon: "▦" },
+  { id: "dashboard", label: "Home", icon: "▦" },
   { id: "markets", label: "Markets", icon: "⌁" },
   { id: "trade", label: "Trade", icon: "↗" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
@@ -408,8 +408,6 @@ export default function TradingWorkspace() {
               <div className={styles.intro}>
                 <div className={styles.introMain}>
                   <p className={styles.eyebrow}>Account overview</p>
-                  <h1 className={styles.title}>Your trading workspace</h1>
-                  <p className={styles.subtitle}>Check your account at a glance, then choose a workspace for your next task.</p>
                 </div>
                 <div className={styles.introActions}>
                   {connected
@@ -441,28 +439,7 @@ export default function TradingWorkspace() {
                 </article>
               </section>
 
-              <section className={styles.overviewLaunchers} aria-label="Quick access">
-                <Link href="/markets" className={styles.overviewLauncher}>
-                  <span className={styles.launcherIcon}>⌁</span>
-                  <span><strong>Browse markets</strong><small>See available instruments, search by symbol and open a dedicated trading workspace.</small></span>
-                  <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </Link>
-                <Link href="/portfolio" className={styles.overviewLauncher}>
-                  <span className={styles.launcherIcon}>◷</span>
-                  <span><strong>Portfolio &amp; History</strong><small>Review open positions and account statement activity.</small></span>
-                  <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </Link>
-                <Link href="/bots" className={styles.overviewLauncher}>
-                  <span className={styles.launcherIcon}>▤</span>
-                  <span><strong>Automated Bots</strong><small>Manage configurations and inspect recorded bot activity.</small></span>
-                  <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </Link>
-                <Link href="/settings" className={styles.overviewLauncher}>
-                  <span className={styles.launcherIcon}>⚙</span>
-                  <span><strong>Settings</strong><small>Manage appearance and review broker connection status.</small></span>
-                  <span className={styles.launcherArrow} aria-hidden="true">→</span>
-                </Link>
-              </section>
+
             </section>
           )}
 

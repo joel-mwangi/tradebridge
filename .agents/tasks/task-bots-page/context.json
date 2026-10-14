@@ -1,0 +1,25 @@
+{
+  "project_type": "Next.js 15 / React 19 / TypeScript monorepo, App Router, Supabase auth",
+  "language": "TypeScript (strict), TSX for components",
+  "build_system": "Next.js 15 with `next build`; standalone output mode; no custom webpack config; uses `--legacy-peer-deps` for any new deps due to React 19 peer constraints",
+  "test_framework": "Node.js built-in test runner via `node --test tests/trading-safety.test.cjs`; no Jest/Vitest",
+  "build_command": "npm run build",
+  "test_command": "node --test tests/trading-safety.test.cjs",
+  "verification_instructions": "1. Run `npx tsc --noEmit` from d:\\tradebridge — must exit 0. 2. Run `npm run build` from d:\\tradebridge — must exit 0 and show /bots in route list.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "Windows PowerShell shell. Use `;` not `&&` for command chaining in PowerShell. npm commands must be run from d:\\tradebridge. Blockly MUST be loaded with `next/dynamic` + `{ ssr: false }` — it calls `document` at import time. All new component files must include `\"use client\"` directive.",
+  "contribution_requirements": "No AGENTS.md found. Follow patterns in existing components. Use CSS Modules only (no Tailwind). No forms (use controlled React state + buttons). Mirror WebSocket pattern from useDemoTrading.ts.",
+  "key_patterns": "1. CSS Modules with variables from TradingWorkspace.module.css (--page, --panel, --surface, --ink, --muted, --line, --border, --teal, --teal-soft, --red, --amber). 2. WorkspacePage type and PRIMARY_NAV in TradingWorkspace.tsx. 3. WebSocket hook pattern: socketRef + sequenceRef + nextId() + cancelled flag + localStorage pending-marker. 4. useEffect cleanup returns. 5. `\"use client\"` on all interactive components. 6. No SSR for browser-only deps: use next/dynamic with ssr:false.",
+  "relevant_files": [
+    "src/components/trading/TradingWorkspace.tsx",
+    "src/components/trading/TradingWorkspace.module.css",
+    "src/components/trading/types.ts",
+    "src/components/trading/useDemoTrading.ts",
+    "src/lib/bots/strategy-engine.d.mts",
+    "src/app/(workspace)/layout.tsx",
+    "src/app/(workspace)/[section]/page.tsx"
+  ],
+  "directory_structure": "src/app/(workspace)/[section]/page.tsx — route validation (SECTIONS array already includes 'bots'); src/components/trading/ — all existing trading components; src/lib/bots/ — strategy engine (strategy-engine.mjs + .d.mts); src/components/bots/ — NEW directory for all bot components",
+  "artifact_root": "d:\\tradebridge\\.agents\\tasks\\task-bots-page",
+  "worktree_root": "d:\\tradebridge"
+}
