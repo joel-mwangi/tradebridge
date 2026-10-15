@@ -44,7 +44,13 @@ export function BotsWorkspace({
     connected, account, activeConfig, sharedSocketRef, nextSharedSeqId, sessionState,
   );
 
+  const isRunActive = ['running', 'cooldown', 'connecting', 'stopping'].includes(runState.status);
+
   function handleSaveConfig(config: BotConfig) {
+    if (isRunActive && config.id === activeConfigId) {
+      window.alert('Stop the active bot before editing its configuration.');
+      return;
+    }
     upsertBotConfig(config);
     setConfigs((prev) => {
       const idx = prev.findIndex((c) => c.id === config.id);
@@ -55,16 +61,24 @@ export function BotsWorkspace({
       }
       return [...prev, config];
     });
-    setActiveConfigId(config.id);
+    if (!isRunActive) setActiveConfigId(config.id);
   }
 
   function handleDeleteConfig(id: string) {
+    if (isRunActive && id === activeConfigId) {
+      window.alert('Stop the active bot before deleting its configuration.');
+      return;
+    }
     deleteBotConfig(id);
     setConfigs((prev) => prev.filter((c) => c.id !== id));
     if (activeConfigId === id) setActiveConfigId(null);
   }
 
   function handleImportConfig(config: BotConfig) {
+    if (isRunActive && config.id === activeConfigId) {
+      window.alert('Stop the active bot before replacing its configuration.');
+      return;
+    }
     upsertBotConfig(config);
     setConfigs((prev) => {
       const idx = prev.findIndex((c) => c.id === config.id);
@@ -78,6 +92,10 @@ export function BotsWorkspace({
   }
 
   function handleSelectConfig(id: string) {
+    if (isRunActive && id !== activeConfigId) {
+      window.alert('Stop the active bot before switching to another bot.');
+      return;
+    }
     setActiveConfigId(id);
   }
 

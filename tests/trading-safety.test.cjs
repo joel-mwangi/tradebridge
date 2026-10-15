@@ -112,3 +112,94 @@ test("ambiguous bot orders require an explicit Deriv reconciliation acknowledgem
   assert.match(runPanel, /orderRecoveryRequired/);
   assert.match(runPanel, /I checked Deriv — clear recovery lock/);
 });
+
+
+test("bot runner persists a UTC-day trade count and blocks starting after the configured cap", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /tradebridge:bot-daily-trades/);
+  assert.match(botRunner, /dailyTrades >= config\.maxTradesPerDay/);
+  assert.match(botRunner, /writeDailyTradeCount\(acc\.account_id, cfg\.id, dailyTradeDate, nextDailyTrades\)/);
+  assert.match(botRunner, /Daily trade cap reached/);
+});
+
+test("bot runner distinguishes break-even contracts from losses", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /const isLoss = poc\.status === 'lost' \|\| profit < 0/);
+  assert.match(botRunner, /losses: prior\.losses \+ \(isLoss \? 1 : 0\)/);
+  assert.match(botRunner, /'break-even'/);
+});
+
+test("bot runner does not detach response timeouts on ordinary connection-state renders", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /detach the listener and clear timers only when this hook is unmounted/);
+  assert.match(botRunner, /Deriv session disconnected while the bot was active/);
+});
+
+
+test("disconnect after purchase submission cannot clear the unresolved-order lock", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /purchaseAttemptedRef\.current = true/);
+  assert.match(botRunner, /!purchaseAttemptedRef\.current && !inFlightContractIdRef\.current/);
+  assert.match(botRunner, /purchaseAttemptedRef\.current = false/);
+});
+
+
+test("settlement parsing rejects null and blank profit values instead of recording zero profit", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /function parseFiniteNumber\(value: unknown\): number \| null/);
+  assert.match(botRunner, /if \(typeof value !== 'string' \|\| value\.trim\(\) === ''\) return null/);
+  assert.match(botRunner, /const profit = parseFiniteNumber\(poc\.profit\)/);
+  assert.match(botRunner, /if \(profit === null\)/);
+});
+
+test("bot validates legacy or malformed configuration and recalculated stake before sending another order", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /!Array\.isArray\(config\.stopConditions\)/);
+  assert.match(botRunner, /Invalid bot configuration/);
+  assert.match(botRunner, /Invalid next stake calculated by the selected staking strategy/);
+});
+
+
+test("bot configuration cannot be switched, edited, or deleted while a run is active", () => {
+  const workspace = read("src/components/bots/BotsWorkspace.tsx");
+  assert.match(workspace, /Stop the active bot before editing its configuration/);
+  assert.match(workspace, /Stop the active bot before deleting its configuration/);
+  assert.match(workspace, /Stop the active bot before switching to another bot/);
+});
+
+test("bot run is stopped if the selected Deriv account changes", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /runAccountIdRef\.current = account\.account_id/);
+  assert.match(botRunner, /Selected Deriv account changed while the bot was active/);
+});
+
+
+test("unresolved order lock remains attached to its original account and bot when selections change", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /const recoveryKeyRef = useRef<string \| null>\(null\)/);
+  assert.match(botRunner, /Another account or bot has an unresolved order/);
+  assert.match(botRunner, /const key = recoveryKeyRef\.current/);
+  assert.match(botRunner, /const cfg = runConfigRef\.current \?\? configRef\.current/);
+});
+
+test("settlement status watchdog is refreshed by every matching contract update", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /Every matching update refreshes the inactivity watchdog/);
+  assert.match(botRunner, /contractStatusSeenRef\.current = true/);
+});
+
+
+test("stopping one bot run is idempotent and cannot persist duplicate run summaries", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /const stopHandledRef = useRef\(false\)/);
+  assert.match(botRunner, /if \(stopHandledRef\.current\) return/);
+  assert.match(botRunner, /stopHandledRef\.current = false/);
+});
+
+
+test("bot releases its own Deriv contract-status subscription on settlement, stop, and unmount", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /contractSubscriptionIdRef/);
+  assert.match(botRunner, /forget: subscriptionId/);
+  assert.match(botRunner, /forgetContractSubscription\(\)/);
+});

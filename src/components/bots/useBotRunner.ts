@@ -12,6 +12,41 @@ import type {
 } from './bot-types';
 import { saveNewRun } from './bot-storage';
 
+function utcDayKey(now = Date.now()): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+function dailyTradeStorageKey(accountId: string, configId: string, day: string): string {
+  return `tradebridge:bot-daily-trades:${accountId}:${configId}:${day}`;
+}
+
+function readDailyTradeCount(accountId: string, configId: string, day: string): number | null {
+  try {
+    const raw = localStorage.getItem(dailyTradeStorageKey(accountId, configId, day));
+    if (raw === null) return 0;
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDailyTradeCount(accountId: string, configId: string, day: string, count: number): boolean {
+  try {
+    localStorage.setItem(dailyTradeStorageKey(accountId, configId, day), String(count));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function makeInitialState(currency: string): BotRunState {
   return {
     status: 'idle',
@@ -79,15 +114,22 @@ export function useBotRunner(
   const stateRef = useRef<BotRunState>(runState);
   const configRef = useRef<BotConfig | null>(config);
   const accountRef = useRef<DerivAccount | null>(account);
+  const runAccountRef = useRef<DerivAccount | null>(null);
+  const runConfigRef = useRef<BotConfig | null>(null);
+  const recoveryKeyRef = useRef<string | null>(null);
   const sessionStateRef = useRef(sessionState);
   const startTimeRef = useRef<number | null>(null);
+  const runAccountIdRef = useRef<string | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const responseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightContractIdRef = useRef<string | null>(null);
   const activeRequestRef = useRef<number | null>(null);
   const handlerRef = useRef<EventListener | null>(null);
   const contractStatusSeenRef = useRef(false);
+  const contractSubscriptionIdRef = useRef<string | null>(null);
   const orderOutcomeUnknownRef = useRef(false);
+  const purchaseAttemptedRef = useRef(false);
+  const stopHandledRef = useRef(false);
 
   // Keep refs in sync with latest state/props
   useEffect(() => { stateRef.current = runState; }, [runState]);
@@ -126,11 +168,17 @@ export function useBotRunner(
     const acc = accountRef.current;
     const cfg = configRef.current;
     if (!acc || !cfg) {
-      setOrderRecoveryRequired(false);
+      setOrderRecoveryRequired(recoveryKeyRef.current !== null);
       return;
     }
+    const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
     try {
-      setOrderRecoveryRequired(localStorage.getItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`) !== null);
+      if (localStorage.getItem(key) !== null) {
+        recoveryKeyRef.current = key;
+        setOrderRecoveryRequired(true);
+      } else if (recoveryKeyRef.current === null) {
+        setOrderRecoveryRequired(false);
+      }
     } catch {
       setOrderRecoveryRequired(true);
     }
@@ -146,6 +194,8 @@ export function useBotRunner(
     const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
     try {
       if (localStorage.getItem(key) !== null) {
+        recoveryKeyRef.current = key;
+        setOrderRecoveryRequired(true);
         const entry: JournalEntry = {
           timestamp: Date.now(),
           level: 'warn',
@@ -163,44 +213,69 @@ export function useBotRunner(
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tear down bot loop when key dependencies change — do NOT close the shared socket
+  // A render caused by a connection/config change must not silently clear
+  // the active run's only response timeout. Stop on disconnect separately;
+  // detach the listener and clear timers only when this hook is unmounted.
   useEffect(() => {
     return () => {
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
       if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
-      // Bot handlers are registered as independent listeners; never replace the
-      // shared trading session's onmessage callback.
       const ws = sharedSocketRef.current;
+      const subscriptionId = contractSubscriptionIdRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN && subscriptionId) {
+        try { ws.send(JSON.stringify({ forget: subscriptionId, req_id: nextSharedSeqId() })); } catch { /* socket may be closing */ }
+      }
+      contractSubscriptionIdRef.current = null;
       const handler = handlerRef.current;
       if (ws && handler) ws.removeEventListener('message', handler);
       handlerRef.current = null;
-      if (ws) delete (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler;
     };
-  }, [connected, account?.account_id, account?.currency, config?.id, sharedSocketRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  const forgetContractSubscription = useCallback(() => {
+    const ws = sharedSocketRef.current;
+    const subscriptionId = contractSubscriptionIdRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN && subscriptionId) {
+      try {
+        ws.send(JSON.stringify({ forget: subscriptionId, req_id: nextSharedSeqId() }));
+      } catch {
+        // The socket may be closing. The account's contract remains authoritative
+        // and the next session will rebuild subscriptions from current state.
+      }
+    }
+    contractSubscriptionIdRef.current = null;
+  }, [sharedSocketRef, nextSharedSeqId]);
 
   const stopBot = useCallback(
     (reason?: string) => {
+      if (stopHandledRef.current) return;
+      stopHandledRef.current = true;
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
 
-      const cfg = configRef.current;
-      const acc = accountRef.current;
+      const cfg = runConfigRef.current ?? configRef.current;
+      const acc = runAccountRef.current ?? accountRef.current;
       const s = stateRef.current;
 
       // Do not clear an unresolved order marker after a purchase may have been
       // accepted. A timeout/disconnect can lose the acknowledgement while Deriv
       // still owns an open contract; require reconciliation before another order.
-      if (acc && cfg && !orderOutcomeUnknownRef.current && !inFlightContractIdRef.current) {
+      if (acc && cfg && !orderOutcomeUnknownRef.current && !purchaseAttemptedRef.current && !inFlightContractIdRef.current) {
         const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
-        try { localStorage.removeItem(key); setOrderRecoveryRequired(false); } catch { /* storage is best-effort */ }
+        try {
+          localStorage.removeItem(key);
+          if (recoveryKeyRef.current === key) recoveryKeyRef.current = null;
+          setOrderRecoveryRequired(recoveryKeyRef.current !== null);
+        } catch { /* storage is best-effort */ }
       }
       if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
       responseTimerRef.current = null;
+      forgetContractSubscription();
       const currentSocket = sharedSocketRef.current;
       if (currentSocket && handlerRef.current) currentSocket.removeEventListener('message', handlerRef.current);
       handlerRef.current = null;
-      if (currentSocket) delete (currentSocket as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler;
 
       // We do not own the shared socket — do not close it.
       // Just cancel the bot loop; the trading session manages the socket lifetime.
@@ -229,14 +304,30 @@ export function useBotRunner(
           currency: s.currency,
         });
       }
+      runAccountRef.current = null;
+      runConfigRef.current = null;
     },
-    [patchState, appendJournal, sharedSocketRef]
+    [patchState, appendJournal, sharedSocketRef, forgetContractSubscription]
   );
+
+
+  useEffect(() => {
+    if (!connected && ['running', 'cooldown', 'connecting'].includes(stateRef.current.status)) {
+      stopBot('Deriv session disconnected while the bot was active. Check open contracts and account history before restarting.');
+    }
+  }, [connected, stopBot]);
+
+  useEffect(() => {
+    const active = ['running', 'cooldown', 'connecting'].includes(stateRef.current.status);
+    if (active && runAccountIdRef.current !== null && account?.account_id !== runAccountIdRef.current) {
+      stopBot('Selected Deriv account changed while the bot was active. The run was stopped; reconcile any open contract before restarting.');
+    }
+  }, [account?.account_id, stopBot]);
 
   const sendProposal = useCallback(
     (reqId: number, stake: number) => {
-      const cfg = configRef.current;
-      const acc = accountRef.current;
+      const cfg = runConfigRef.current ?? configRef.current;
+      const acc = runAccountRef.current ?? accountRef.current;
       const ws = sharedSocketRef.current;
       if (!cfg || !acc || cancelledRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
         stopBot('Cannot send proposal: bot configuration, account, or authenticated WebSocket is unavailable.');
@@ -299,8 +390,16 @@ export function useBotRunner(
       return;
     }
     const pendingKey = `tradebridge:bot-order-pending:${account.account_id}:${config.id}`;
+    if (recoveryKeyRef.current !== null && recoveryKeyRef.current !== pendingKey) {
+      appendJournal('error', 'Another account or bot has an unresolved order. Reconcile that order in Deriv before starting a different bot.');
+      return;
+    }
+    let dailyTradeDate = utcDayKey();
+    let dailyTrades = readDailyTradeCount(account.account_id, config.id, dailyTradeDate);
     try {
       if (localStorage.getItem(pendingKey) !== null) {
+        recoveryKeyRef.current = pendingKey;
+        setOrderRecoveryRequired(true);
         appendJournal('error', 'An unresolved order marker exists for this bot. Reconcile open contracts and account history in Deriv before restarting.');
         return;
       }
@@ -308,16 +407,46 @@ export function useBotRunner(
       appendJournal('error', 'Browser storage is unavailable; cannot safely confirm there is no unresolved order.');
       return;
     }
+    if (config.maxTradesPerDay > 0 && dailyTrades === null) {
+      appendJournal('error', 'Cannot read the daily trade counter safely. Trading is blocked until browser storage is available.');
+      return;
+    }
+    if (config.maxTradesPerDay > 0 && dailyTrades !== null && dailyTrades >= config.maxTradesPerDay) {
+      appendJournal('warn', `Daily trade cap already reached (${dailyTrades}/${config.maxTradesPerDay} UTC-day trades).`);
+      return;
+    }
     if (stateRef.current.status === 'running' || stateRef.current.status === 'cooldown' || stateRef.current.status === 'connecting') {
       appendJournal('warn', 'This bot is already active. Stop it before starting another run.');
       return;
     }
     cancelledRef.current = false;
+    stopHandledRef.current = false;
     orderOutcomeUnknownRef.current = false;
-    startTimeRef.current = Date.now();
+    purchaseAttemptedRef.current = false;
     inFlightContractIdRef.current = null;
 
+    if (!config.stakeStrategy || !['fixed', 'martingale', 'dalembert'].includes(config.stakeStrategy.type)
+      || !Array.isArray(config.stopConditions)
+      || !Number.isFinite(config.cooldownSeconds) || config.cooldownSeconds < 0
+      || !Number.isFinite(config.maxTradesPerDay) || config.maxTradesPerDay < 0
+      || !Number.isFinite(config.maxConsecutiveLosses) || config.maxConsecutiveLosses < 0) {
+      appendJournal('error', 'Invalid bot configuration: stake strategy, stop conditions, cooldown, and risk limits must be valid.');
+      return;
+    }
+    if (!Number.isFinite(config.duration) || config.duration <= 0 || !['t', 's'].includes(config.durationUnit) || !config.symbol || !config.contractType) {
+      appendJournal('error', 'Invalid bot configuration: symbol, contract type, duration unit, and positive duration are required.');
+      return;
+    }
     const initialStake = nextStakeAmount(config.stakeStrategy, null, 0);
+    if (!Number.isFinite(initialStake) || initialStake <= 0) {
+      appendJournal('error', 'Invalid initial stake. Set a finite stake greater than zero before starting.');
+      return;
+    }
+
+    runAccountRef.current = account;
+    runConfigRef.current = config;
+    startTimeRef.current = Date.now();
+    runAccountIdRef.current = account.account_id;
 
     const initialState: BotRunState = {
       status: 'running',
@@ -359,8 +488,8 @@ export function useBotRunner(
       const msgType = msg.msg_type as string | undefined;
       const reqId = typeof msg.req_id === 'number' ? msg.req_id : null;
 
-      const cfg = configRef.current;
-      const acc = accountRef.current;
+      const cfg = runConfigRef.current ?? configRef.current;
+      const acc = runAccountRef.current ?? accountRef.current;
       if (!cfg || !acc) return;
 
       if (msgType === 'ping' || (msg as { ping?: unknown }).ping) return;
@@ -375,7 +504,14 @@ export function useBotRunner(
         // A rejected buy is an explicit broker response, so it is safe to clear
         // the marker. A lost acknowledgement is not and is handled by timeout.
         if (stage === 'buy') {
-          try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); setOrderRecoveryRequired(false); } catch { /* ignore */ }
+          // A correlated broker rejection confirms that this purchase was not accepted.
+          purchaseAttemptedRef.current = false;
+          try {
+            const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
+            localStorage.removeItem(key);
+            if (recoveryKeyRef.current === key) recoveryKeyRef.current = null;
+            setOrderRecoveryRequired(recoveryKeyRef.current !== null);
+          } catch { /* ignore */ }
         }
         appendJournal('error', `Deriv error (${stage ?? 'request'}): ${err.message ?? JSON.stringify(msg.error)}`);
         stopBot(err.message ?? 'Deriv error');
@@ -388,11 +524,15 @@ export function useBotRunner(
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = null;
         activeRequestRef.current = null;
+        botReqIds.delete(reqId);
+        requestStage.delete(reqId);
         const proposal = msg.proposal as { id?: string } | undefined;
         if (!proposal?.id) { stopBot('Invalid proposal response'); return; }
         appendJournal('info', `Quote received (id=${proposal.id}). Buying…`);
         try {
-          localStorage.setItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`, 'pending');
+          const pendingKey = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
+          localStorage.setItem(pendingKey, 'pending');
+          recoveryKeyRef.current = pendingKey;
           setOrderRecoveryRequired(true);
         } catch {
           orderOutcomeUnknownRef.current = true;
@@ -403,6 +543,7 @@ export function useBotRunner(
         botReqIds.add(buyReqId);
         requestStage.set(buyReqId, 'buy');
         activeRequestRef.current = buyReqId;
+        purchaseAttemptedRef.current = true;
         try {
           ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake, req_id: buyReqId }));
           if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
@@ -424,6 +565,8 @@ export function useBotRunner(
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = null;
         activeRequestRef.current = null;
+        botReqIds.delete(reqId);
+        requestStage.delete(reqId);
         const buyResp = msg.buy as { contract_id?: number | string } | undefined;
         if (buyResp?.contract_id === undefined || buyResp?.contract_id === null || String(buyResp.contract_id) === '') {
           orderOutcomeUnknownRef.current = true;
@@ -458,23 +601,30 @@ export function useBotRunner(
           contract_id?: number; is_sold?: number | boolean; is_expired?: number | boolean;
           profit?: number; payout?: number; contract_type?: string;
           underlying?: string; date_start?: number; status?: string;
+          subscription?: { id?: string };
         } | undefined;
         if (!poc) return;
 
         // Only handle our in-flight contract
         if (!inFlightContractIdRef.current || poc.contract_id === undefined || poc.contract_id === null) return;
         if (String(poc.contract_id) !== inFlightContractIdRef.current) return;
-        // The first matching status message proves the subscription is alive.
-        // Do not use the short subscription-ack timeout as a settlement timeout.
-        if (!contractStatusSeenRef.current) {
-          contractStatusSeenRef.current = true;
-          if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
-          responseTimerRef.current = setTimeout(() => {
-            if (!inFlightContractIdRef.current || cancelledRef.current) return;
-            orderOutcomeUnknownRef.current = true;
-            stopBot('Contract status stopped updating before settlement. Reconcile the open contract and account history in Deriv before restarting.');
-          }, Math.max(60000, cfg.durationUnit === 's' ? (cfg.duration + 60) * 1000 : 120000));
+        // Every matching update refreshes the inactivity watchdog. The bot must
+        // not time out a healthy long-running contract just because its duration
+        // exceeded the time of the first status message.
+        contractStatusSeenRef.current = true;
+        if (typeof poc.subscription?.id === 'string' && poc.subscription.id.length > 0) {
+          contractSubscriptionIdRef.current = poc.subscription.id;
         }
+        if (reqId !== null && requestStage.get(reqId) === 'monitor') {
+          botReqIds.delete(reqId);
+          requestStage.delete(reqId);
+        }
+        if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = setTimeout(() => {
+          if (!inFlightContractIdRef.current || cancelledRef.current) return;
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Contract status stopped updating before settlement. Reconcile the open contract and account history in Deriv before restarting.');
+        }, Math.max(60000, cfg.durationUnit === 's' ? (cfg.duration + 60) * 1000 : 120000));
 
         const isClosed = poc.is_sold === 1 || poc.is_sold === true
           || poc.is_expired === 1 || poc.is_expired === true
@@ -482,8 +632,8 @@ export function useBotRunner(
           || poc.status === 'sold' || poc.status === 'expired';
         if (!isClosed) return;
 
-        const profit = typeof poc.profit === 'number' ? poc.profit : Number.isFinite(Number(poc.profit)) ? Number(poc.profit) : null;
-        const payout = typeof poc.payout === 'number' ? poc.payout : Number.isFinite(Number(poc.payout)) ? Number(poc.payout) : null;
+        const profit = parseFiniteNumber(poc.profit);
+        const payout = parseFiniteNumber(poc.payout);
         if (profit === null) {
           orderOutcomeUnknownRef.current = true;
           stopBot('Deriv closed the contract without a usable realized profit value. Reconcile account history before restarting.');
@@ -494,11 +644,6 @@ export function useBotRunner(
         activeRequestRef.current = null;
         const stake = stateRef.current.currentStake;
 
-        try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); setOrderRecoveryRequired(false); } catch { /* ignore */ }
-        orderOutcomeUnknownRef.current = false;
-        inFlightContractIdRef.current = null;
-        contractStatusSeenRef.current = false;
-
         const tx: BotTransaction = {
           id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           contractId: poc.contract_id ? String(poc.contract_id) : '',
@@ -508,17 +653,56 @@ export function useBotRunner(
           currency: acc.currency ?? 'USD',
           startedAt: poc.date_start ? poc.date_start * 1000 : Date.now(),
           settledAt: Date.now(),
-          status: poc.status ?? 'sold',
+          status: poc.status === 'won' || profit > 0 ? 'won' : poc.status === 'lost' || profit < 0 ? 'lost' : 'break-even',
         };
 
-        const isWin = poc.status === 'won' || (poc.status !== 'lost' && (profit ?? 0) > 0);
+        const isWin = poc.status === 'won' || (poc.status !== 'lost' && profit > 0);
+        const isLoss = poc.status === 'lost' || profit < 0;
+        // Count only authoritative settled contracts; persist the UTC-day cap
+        // before allowing the next proposal. Browser storage is a client-side
+        // guard, not a substitute for a server-enforced account risk limit.
+        const settlementDay = utcDayKey();
+        if (settlementDay !== dailyTradeDate) {
+          dailyTradeDate = settlementDay;
+          const refreshedCount = readDailyTradeCount(acc.account_id, cfg.id, dailyTradeDate);
+          if (refreshedCount === null) {
+            orderOutcomeUnknownRef.current = true;
+            stopBot('Could not read the daily trade counter after settlement. Trading paused; reconcile this contract and storage before restarting.');
+            return;
+          }
+          dailyTrades = refreshedCount;
+        }
+        const nextDailyTrades = (dailyTrades ?? 0) + 1;
+        if (cfg.maxTradesPerDay > 0 && !writeDailyTradeCount(acc.account_id, cfg.id, dailyTradeDate, nextDailyTrades)) {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Could not persist the daily trade counter after settlement. Trading paused; reconcile account history before restarting.');
+          return;
+        }
+        dailyTrades = nextDailyTrades;
+        // Only release the recovery lock after settlement and its daily risk
+        // counter have both been persisted successfully.
+        try {
+          const key = `tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`;
+          localStorage.removeItem(key);
+          if (recoveryKeyRef.current === key) recoveryKeyRef.current = null;
+          setOrderRecoveryRequired(recoveryKeyRef.current !== null);
+        } catch {
+          orderOutcomeUnknownRef.current = true;
+          stopBot('Could not clear the order recovery marker after settlement. Reconcile account history before restarting.');
+          return;
+        }
+        forgetContractSubscription();
+        orderOutcomeUnknownRef.current = false;
+        purchaseAttemptedRef.current = false;
+        inFlightContractIdRef.current = null;
+        contractStatusSeenRef.current = false;
         const prior = stateRef.current;
         const nextTransactions = [tx, ...prior.transactions];
         const nextRunState: BotRunState = {
           ...prior,
           tradeCount: prior.tradeCount + 1,
           wins: prior.wins + (isWin ? 1 : 0),
-          losses: prior.losses + (isWin ? 0 : 1),
+          losses: prior.losses + (isLoss ? 1 : 0),
           netPnl: prior.netPnl + profit,
           transactions: nextTransactions,
         };
@@ -526,8 +710,8 @@ export function useBotRunner(
         stateRef.current = nextRunState;
         patchState(nextRunState);
 
-        appendJournal(isWin ? 'info' : 'warn',
-          `Trade ${isWin ? 'WON' : 'LOST'} — profit: ${(profit ?? 0) >= 0 ? '+' : ''}${(profit ?? 0).toFixed(2)} ${acc.currency}`);
+        appendJournal(isWin ? 'info' : isLoss ? 'warn' : 'info',
+          `Trade ${isWin ? 'WON' : isLoss ? 'LOST' : 'BREAK-EVEN'} — profit: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)} ${acc.currency}`);
 
         // Check stop conditions
         const s = nextRunState;
@@ -540,13 +724,13 @@ export function useBotRunner(
           if (cond.type === 'tradeCount' && s.tradeCount >= cond.max) { stopReason = `Max trades reached (${s.tradeCount})`; break; }
           if (cond.type === 'time' && elapsed >= cond.seconds) { stopReason = `Time limit reached (${Math.round(elapsed)}s)`; break; }
         }
-        if (!stopReason && cfg.maxTradesPerDay > 0 && s.tradeCount >= cfg.maxTradesPerDay) {
-          stopReason = `Daily trade cap reached (${s.tradeCount})`;
+        if (!stopReason && cfg.maxTradesPerDay > 0 && (dailyTrades ?? 0) >= cfg.maxTradesPerDay) {
+          stopReason = `Daily trade cap reached (${dailyTrades}/${cfg.maxTradesPerDay} UTC-day trades)`;
         }
-        if (!stopReason && !isWin) {
+        if (!stopReason && isLoss) {
           let consec = 0;
           for (const t of s.transactions) { if ((t.profit ?? 0) < 0) consec++; else break; }
-          if (consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
+          if (cfg.maxConsecutiveLosses > 0 && consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
         }
 
         if (stopReason) {
@@ -557,6 +741,11 @@ export function useBotRunner(
 
         // Schedule next trade after cooldown
         const nextStake = nextStakeAmount(cfg.stakeStrategy, profit, stake);
+        if (!Number.isFinite(nextStake) || nextStake <= 0) {
+          appendJournal('error', 'Next stake calculated as invalid. Bot stopped before submitting another order.');
+          stopBot('Invalid next stake calculated by the selected staking strategy.');
+          return;
+        }
         patchState({ currentStake: nextStake, status: 'cooldown' });
         appendJournal('info', `Cooldown ${cfg.cooldownSeconds}s…`);
 
@@ -576,30 +765,31 @@ export function useBotRunner(
     const eventHandler = botMessageHandler as EventListener;
     handlerRef.current = eventHandler;
     ws.addEventListener('message', eventHandler);
-    (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler = eventHandler;
     sendProposal(proposalReqId, initialStake);
 
   }, [connected, account, config, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const acknowledgeOrderReconciled = useCallback(() => {
-    const acc = accountRef.current;
-    const cfg = configRef.current;
-    if (!acc || !cfg || typeof window === 'undefined') return;
+    const key = recoveryKeyRef.current;
+    if (!key || typeof window === 'undefined') return;
     const confirmed = window.confirm(
-      'Only continue if you checked Deriv directly and confirmed there is no unresolved/open contract from this bot. Clear the recovery lock?'
+      'Only continue if you checked the correct Deriv Demo account and confirmed there is no unresolved/open contract associated with this recovery lock. Clear the lock?'
     );
     if (!confirmed) return;
     try {
-      localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`);
+      localStorage.removeItem(key);
+      recoveryKeyRef.current = null;
       orderOutcomeUnknownRef.current = false;
+      purchaseAttemptedRef.current = false;
       inFlightContractIdRef.current = null;
       contractStatusSeenRef.current = false;
+      forgetContractSubscription();
       setOrderRecoveryRequired(false);
       appendJournal('warn', 'Recovery lock cleared after manual Deriv reconciliation.');
     } catch {
       appendJournal('error', 'Could not clear recovery lock because browser storage is unavailable.');
     }
-  }, [appendJournal]);
+  }, [appendJournal, forgetContractSubscription]);
 
   const stop = useCallback(() => {
     setStatus('stopping');
