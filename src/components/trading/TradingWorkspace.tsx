@@ -350,7 +350,7 @@ function TradeRunPanel({
   accountDataUnavailable: boolean;
   accountType: "demo" | "real" | "other";
 }) {
-  const [tab, setTab] = useState<"summary" | "transactions">("summary");
+  const [tab, setTab] = useState<"summary" | "transactions" | "journal">("summary");
 
   const totalStake = positions.reduce((s, p) => s + (p.buyPrice ?? 0), 0);
   const totalPayout = positions.reduce((s, p) => s + (p.payout ?? 0), 0);
@@ -358,10 +358,33 @@ function TradeRunPanel({
   const contractsLost = activity.filter((a) => (a.profit ?? 0) < 0).length;
   const fmt = (v: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + " " + currency;
 
+  // Build journal entries from activity — each entry is a "Bought", "Profit amount", or "Loss amount" line
+  const journalEntries = activity.slice(0, 100).map((a) => {
+    const time = a.time ? new Date(a.time * 1000).toLocaleString(undefined, {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }) + " GMT" : "";
+    const action = (a.action ?? "").toLowerCase();
+    const isBuy = action.includes("buy") || action.includes("purchase");
+    const isProfit = (a.profit ?? 0) > 0;
+    const isLoss = (a.profit ?? 0) < 0 && a.profit !== null;
+    const label = isBuy
+      ? `Bought: Contract purchased${a.contractId ? ` (ID: ${a.contractId})` : ""}`
+      : isProfit
+        ? `Profit amount: ${a.profit != null ? "+" + a.profit.toFixed(2) + " " + a.currency : "—"}`
+        : isLoss
+          ? `Loss amount: ${a.profit != null ? a.profit.toFixed(2) + " " + a.currency : "—"}`
+          : a.description || a.action;
+    const color = isBuy ? "var(--ink)" : isProfit ? "var(--teal)" : isLoss ? "var(--red)" : "var(--muted)";
+    return { id: a.id, label, time, color, isBuy, isProfit, isLoss };
+  });
+
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1, minHeight: "42px", border: "none", borderBottom: active ? "2px solid var(--teal)" : "2px solid transparent",
-    background: "transparent", color: active ? "var(--teal)" : "var(--muted)",
-    fontSize: "12px", fontWeight: 700, cursor: "pointer", transition: "all .15s",
+    flex: 1, minHeight: "42px", border: "none",
+    borderBottom: active ? "2px solid var(--teal)" : "2px solid transparent",
+    background: "transparent",
+    color: active ? "var(--teal)" : "var(--muted)",
+    fontSize: "11px", fontWeight: 700, cursor: "pointer", transition: "all .15s",
   });
 
   return (
@@ -370,67 +393,50 @@ function TradeRunPanel({
       <div style={{ display: "flex", borderBottom: "1px solid var(--line)" }}>
         <button type="button" style={tabStyle(tab === "summary")} onClick={() => setTab("summary")}>Summary</button>
         <button type="button" style={tabStyle(tab === "transactions")} onClick={() => setTab("transactions")}>Transactions</button>
+        <button type="button" style={tabStyle(tab === "journal")} onClick={() => setTab("journal")}>Journal</button>
       </div>
 
+      {/* ── Summary ── */}
       {tab === "summary" && (
         <div style={{ padding: "20px" }}>
-          {positions.length === 0 && activity.length === 0 ? (
+          {positions.length === 0 && activity.length === 0 && (
             <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--muted)" }}>
               <div style={{ fontSize: "28px", marginBottom: "12px" }}>▦</div>
               <p style={{ fontSize: "12px", lineHeight: 1.6, margin: 0 }}>
                 When you're ready to trade, place an order.<br />You'll be able to track performance here.
               </p>
             </div>
-          ) : null}
-
-          {/* Stats grid */}
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "8px" }}>
-            <div>
-              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Total stake</p>
-              <strong style={{ fontSize: "13px", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalStake)}</strong>
-            </div>
-            <div>
-              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Total payout</p>
-              <strong style={{ fontSize: "13px", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalPayout)}</strong>
-            </div>
-            <div>
-              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>No. of runs</p>
-              <strong style={{ fontSize: "13px", color: "var(--ink)" }}>{positions.length}</strong>
-            </div>
-            <div>
-              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Total profit/loss</p>
-              <strong style={{
-                fontSize: "13px", fontVariantNumeric: "tabular-nums",
+            {[
+              { label: "Total stake", value: fmt(totalStake) },
+              { label: "Total payout", value: fmt(totalPayout) },
+              { label: "No. of runs", value: String(positions.length) },
+              {
+                label: "Total profit/loss",
+                value: realizedProfit !== null ? fmt(realizedProfit) : "—",
                 color: realizedProfit === null ? "var(--ink)" : realizedProfit >= 0 ? "var(--teal)" : "var(--red)",
-              }}>
-                {realizedProfit !== null ? fmt(realizedProfit) : "—"}
-              </strong>
-            </div>
-            <div>
-              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Contracts lost</p>
-              <strong style={{ fontSize: "13px", color: contractsLost > 0 ? "var(--red)" : "var(--ink)" }}>{contractsLost}</strong>
-            </div>
-            <div>
-              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Contracts won</p>
-              <strong style={{ fontSize: "13px", color: contractsWon > 0 ? "var(--teal)" : "var(--ink)" }}>{contractsWon}</strong>
-            </div>
+              },
+              { label: "Contracts lost", value: String(contractsLost), color: contractsLost > 0 ? "var(--red)" : "var(--ink)" },
+              { label: "Contracts won", value: String(contractsWon), color: contractsWon > 0 ? "var(--teal)" : "var(--ink)" },
+            ].map(({ label, value, color }) => (
+              <div key={label}>
+                <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>{label}</p>
+                <strong style={{ fontSize: "13px", color: color ?? "var(--ink)", fontVariantNumeric: "tabular-nums" }}>{value}</strong>
+              </div>
+            ))}
           </div>
-
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={busy}
-            style={{
-              display: "block", width: "100%", minHeight: "40px", marginTop: "20px",
-              border: "1px solid var(--border)", borderRadius: "9px", background: "var(--surface)",
-              color: "var(--ink)", fontSize: "12px", fontWeight: 700, cursor: "pointer",
-            }}
-          >
-            {busy ? "Refreshing…" : "Refresh"}
+          <button type="button" onClick={onRefresh} disabled={busy} style={{
+            display: "block", width: "100%", minHeight: "40px", marginTop: "20px",
+            border: "1px solid var(--border)", borderRadius: "9px", background: "var(--surface)",
+            color: "var(--ink)", fontSize: "12px", fontWeight: 700, cursor: "pointer",
+          }}>
+            {busy ? "Refreshing…" : "Reset"}
           </button>
         </div>
       )}
 
+      {/* ── Transactions ── */}
       {tab === "transactions" && (
         <div style={{ padding: "12px 16px", maxHeight: "480px", overflowY: "auto" }}>
           {activity.length === 0 ? (
@@ -441,8 +447,12 @@ function TradeRunPanel({
               gap: "12px", padding: "10px 0", borderBottom: "1px solid var(--line)",
             }}>
               <div style={{ minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.action}</p>
-                <p style={{ margin: "3px 0 0", fontSize: "10px", color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.description}</p>
+                <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {a.action}
+                </p>
+                <p style={{ margin: "3px 0 0", fontSize: "10px", color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {a.description}
+                </p>
               </div>
               <span style={{
                 flexShrink: 0, fontSize: "11px", fontWeight: 800, fontVariantNumeric: "tabular-nums",
@@ -453,11 +463,50 @@ function TradeRunPanel({
             </div>
           ))}
           {activityHasMore && (
-            <button type="button" onClick={onLoadMore} disabled={activityLoading}
-              style={{ display: "block", width: "100%", marginTop: "12px", minHeight: "36px", border: "1px solid var(--border)", borderRadius: "8px", background: "var(--surface)", color: "var(--muted)", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>
+            <button type="button" onClick={onLoadMore} disabled={activityLoading} style={{
+              display: "block", width: "100%", marginTop: "12px", minHeight: "36px",
+              border: "1px solid var(--border)", borderRadius: "8px", background: "var(--surface)",
+              color: "var(--muted)", fontSize: "11px", fontWeight: 700, cursor: "pointer",
+            }}>
               {activityLoading ? "Loading…" : "Load more"}
             </button>
           )}
+        </div>
+      )}
+
+      {/* ── Journal ── */}
+      {tab === "journal" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", padding: "10px 16px", borderBottom: "1px solid var(--line)" }}>
+            <button type="button" onClick={onRefresh} disabled={busy} style={{
+              minHeight: "30px", padding: "0 12px", border: "1px solid var(--border)", borderRadius: "7px",
+              background: "var(--surface)", color: "var(--muted)", fontSize: "10px", fontWeight: 700, cursor: "pointer",
+            }}>
+              {busy ? "…" : "⟳ Refresh"}
+            </button>
+          </div>
+          <div style={{ maxHeight: "480px", overflowY: "auto" }}>
+            {journalEntries.length === 0 ? (
+              <p style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center", padding: "32px 16px" }}>
+                No journal entries yet. Journal updates as contracts are bought and settled.
+              </p>
+            ) : journalEntries.map((entry) => (
+              <div key={entry.id} style={{
+                padding: "12px 16px",
+                borderBottom: "1px solid var(--line)",
+                background: entry.isBuy ? "var(--surface)" : "transparent",
+              }}>
+                <p style={{ margin: 0, fontSize: "12px", fontWeight: 700, color: entry.color }}>
+                  {entry.label}
+                </p>
+                {entry.time && (
+                  <p style={{ margin: "4px 0 0", fontSize: "10px", color: "var(--muted)" }}>
+                    {entry.time}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -975,23 +1024,35 @@ export default function TradingWorkspace() {
                       background: "var(--panel)", boxShadow: "var(--card-shadow)",
                       overflow: "hidden",
                     }}>
-                      {/* Session state bar */}
+                      {/* Contract status bar — mirrors Deriv DBot "Contract bought" bar */}
                       <div style={{
-                        display: "flex", alignItems: "center", gap: "10px",
-                        padding: "14px 18px", borderBottom: "1px solid var(--line)",
-                        background: "var(--surface)",
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
+                        padding: "11px 16px", borderBottom: "1px solid var(--line)",
+                        background: trading.positions.length > 0 ? "var(--teal-soft)" : "var(--surface)",
                       }}>
-                        <span style={{
-                          width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0,
-                          background: trading.sessionState.includes("connected") ? "var(--teal)" : "var(--muted)",
-                          boxShadow: trading.sessionState.includes("connected") ? "0 0 8px var(--teal)" : "none",
-                        }} />
-                        <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink)" }}>
-                          {trading.sessionState}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{
+                            width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0,
+                            background: trading.sessionState.toLowerCase().includes("connected") ? "var(--teal)" : "var(--muted)",
+                            boxShadow: trading.sessionState.toLowerCase().includes("connected") ? "0 0 8px var(--teal)" : "none",
+                          }} />
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: trading.positions.length > 0 ? "var(--teal)" : "var(--ink)" }}>
+                            {trading.positions.length > 0
+                              ? `Contract bought · ${trading.positions.length} open`
+                              : trading.sessionState}
+                          </span>
+                        </div>
+                        {/* Balance chip */}
+                        {trading.balance.balance !== null && (
+                          <span style={{
+                            fontSize: "10px", fontWeight: 800, color: "var(--muted)",
+                            fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
+                          }}>
+                            {new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(trading.balance.balance)} {trading.balance.currency}
+                          </span>
+                        )}
                       </div>
 
-                      {/* Summary / Transactions tabs */}
                       <TradeRunPanel
                         positions={trading.positions}
                         activity={trading.activity}
