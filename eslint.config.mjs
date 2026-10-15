@@ -10,7 +10,7 @@ const compat = new FlatCompat({
 export default defineConfig([
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
-    files: ["tests/**/*.test.cjs"],
+    files: ["**/*.cjs"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },
