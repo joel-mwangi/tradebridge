@@ -53,7 +53,7 @@ export default function LiveTradingControls({
       {consentEnabled && <button type="button" className={styles.secondaryButton} onClick={onDisable} disabled={busy || loading}>{busy ? "Revoking…" : "Revoke saved live consent"}</button>}
     </div> : enabled ? <div className={styles.liveEnabledMessage} role="status">
       <strong>Live order entry is enabled for this account.</strong>
-      <p>Your configured TradeBridge entry cap is {stakeLimit.toLocaleString()} {account.currency ?? ""} per trade; the app also blocks new entries if today's reported realized P/L reaches the {lossLimit.toLocaleString()} {account.currency ?? ""} loss stop. These are app-level guardrails, not broker-enforced account limits.</p>
+      <p>Your configured TradeBridge entry cap is {stakeLimit.toLocaleString()} {account.currency ?? ""} per trade; the app also blocks new entries if today&apos;s reported realized P/L reaches the {lossLimit.toLocaleString()} {account.currency ?? ""} loss stop. These are app-level guardrails, not broker-enforced account limits.</p>
       <button type="button" className={styles.secondaryButton} onClick={onDisable} disabled={busy || loading}>{busy ? "Updating…" : "Disable live trading"}</button>
     </div> : <>
       <div className={styles.riskFields}>
