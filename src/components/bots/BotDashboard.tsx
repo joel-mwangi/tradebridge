@@ -30,7 +30,7 @@ interface ModalFields {
 function defaultFields(): ModalFields {
   return {
     name: 'My Bot',
-    symbol: 'R_100',
+    symbol: '1HZ100V',
     contractType: 'DIGITOVER',
     stake: '1',
     profitTarget: '',
@@ -327,13 +327,27 @@ export function BotDashboard({
               <label className={styles.fieldLabel} htmlFor="bd-symbol">
                 Symbol
               </label>
-              <input
+              <select
                 id="bd-symbol"
-                className={styles.fieldInput}
-                type="text"
+                className={styles.fieldSelect}
                 value={fields.symbol}
                 onChange={(e) => handleFieldChange('symbol', e.target.value)}
-              />
+              >
+                <optgroup label="Volatility (1s)">
+                  <option value="1HZ10V">Volatility 10 (1s)</option>
+                  <option value="1HZ25V">Volatility 25 (1s)</option>
+                  <option value="1HZ50V">Volatility 50 (1s)</option>
+                  <option value="1HZ75V">Volatility 75 (1s)</option>
+                  <option value="1HZ100V">Volatility 100 (1s)</option>
+                </optgroup>
+                <optgroup label="Volatility">
+                  <option value="R_10">Volatility 10</option>
+                  <option value="R_25">Volatility 25</option>
+                  <option value="R_50">Volatility 50</option>
+                  <option value="R_75">Volatility 75</option>
+                  <option value="R_100">Volatility 100</option>
+                </optgroup>
+              </select>
             </div>
 
             <div>

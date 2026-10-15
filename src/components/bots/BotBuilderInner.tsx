@@ -8,7 +8,19 @@ import styles from './BotBuilder.module.css';
 import * as Blockly from 'blockly';
 import { javascriptGenerator } from 'blockly/javascript';
 
-// ─── Custom block definitions ──────────────────────────────────────────────
+// Valid symbols for digit contracts on the authenticated session
+const DIGIT_SYMBOLS: Array<[string, string]> = [
+  ['Volatility 10 (1s)', '1HZ10V'],
+  ['Volatility 25 (1s)', '1HZ25V'],
+  ['Volatility 50 (1s)', '1HZ50V'],
+  ['Volatility 75 (1s)', '1HZ75V'],
+  ['Volatility 100 (1s)', '1HZ100V'],
+  ['Volatility 10', 'R_10'],
+  ['Volatility 25', 'R_25'],
+  ['Volatility 50', 'R_50'],
+  ['Volatility 75', 'R_75'],
+  ['Volatility 100', 'R_100'],
+];
 
 // Cast helper: Blockly's FieldDropdown is Field<string> but appendField expects
 // Field<string | undefined> — a known variance quirk in the Blockly 10.x typings.
@@ -23,7 +35,10 @@ function registerCustomBlocks() {
         this.appendDummyInput()
           .appendField('Trade Parameters')
           .appendField('Symbol:')
-          .appendField(new Blockly.FieldTextInput('R_100') as AnyField, 'symbol')
+          .appendField(
+            new Blockly.FieldDropdown(DIGIT_SYMBOLS) as AnyField,
+            'symbol'
+          )
           .appendField('Contract:')
           .appendField(
             new Blockly.FieldDropdown([
@@ -37,10 +52,10 @@ function registerCustomBlocks() {
             'contractType'
           )
           .appendField('Duration:')
-          .appendField(new Blockly.FieldNumber(5, 1, 3600) as AnyField, 'duration');
+          .appendField(new Blockly.FieldNumber(5, 1, 10) as AnyField, 'duration');
         this.setColour(230);
         this.setOutput(true);
-        this.setTooltip('Set the trade symbol, contract type and duration.');
+        this.setTooltip('Set the trade symbol, contract type and duration (ticks).');
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,7 +276,7 @@ function workspaceToBotConfig(
   const tradeParams = blocks.find((b) => b.type === 'trade_parameters');
   if (!tradeParams) return null;
 
-  const symbol: string = tradeParams.getFieldValue('symbol') ?? 'R_100';
+  const symbol: string = tradeParams.getFieldValue('symbol') ?? '1HZ100V';
   const contractType: string = tradeParams.getFieldValue('contractType') ?? 'DIGITOVER';
   const duration: number = parseFloat(tradeParams.getFieldValue('duration') ?? '5') || 5;
 
