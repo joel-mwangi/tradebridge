@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) return NextResponse.redirect(new URL("/login?error=configuration", request.url));
 
-  let response = NextResponse.redirect(new URL("/login?signed_out=1", request.url), { status: 303 });
+  const response = NextResponse.redirect(new URL("/login?signed_out=1", request.url), { status: 303 });
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll: () => request.cookies.getAll(),
