@@ -26,8 +26,10 @@ jobs:
       - name: Install dependencies from lockfile
         run: npm ci
 
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
+      - name: Audit dependencies (documented upstream exception only)
+        run: |
+          npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
+          node scripts/check-npm-audit.cjs "$RUNNER_TEMP/npm-audit.json"
 
   verify:
     runs-on: ubuntu-latest
