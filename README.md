@@ -32,6 +32,8 @@ The manual Trade workspace focuses on Deriv **digit Options**: Over/Under, Even/
 
 ## Local development
 
+The example environment file includes `APP_URL` and `NODE_ENV`; set `APP_URL` to the exact origin used by your registered Deriv OAuth callback.
+
 ```bash
 npm install
 cp .env.example .env.local
@@ -62,6 +64,10 @@ npx supabase db push
 
 Review the migration list and target project before running database changes. Do not run this against a production database until you have verified the project reference and taken any backup required by your deployment process.
 
+## Operational endpoint
+
+- `GET /api/health` — lightweight process health response for deployment probes. It confirms the Next.js process is responding; it does not claim Supabase or Deriv are reachable.
+
 ## OAuth and trading endpoints
 
 - `GET /api/auth/deriv/start` — creates PKCE/state values and redirects to Deriv.
@@ -89,3 +95,18 @@ The OAuth access token stays in a server-only HttpOnly cookie and is never expos
 ## Verification
 
 GitHub Actions runs `npx tsc --noEmit` and `npm run build` for changes proposed to `main`. Build success does not replace live-provider verification. Test Demo ownership, quotes, order confirmation, order-timeout reconciliation, live P/L updates, early sale, statement refresh, and disconnection. Test Real accounts in read-only mode; do not add a Real order socket until server-side policy enforcement is deployed.
+
+## Verification
+
+Run the same checks used in GitHub Actions before opening a pull request:
+
+```bash
+npm ci
+npm audit --audit-level=high
+npm run lint
+npm test
+npx tsc --noEmit
+npm run build
+```
+
+The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included rather than running only one file. Dependency updates are proposed weekly by Dependabot.
