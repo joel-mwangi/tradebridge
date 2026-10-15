@@ -260,7 +260,7 @@ export function useBotRunner(
         currency: acc.currency ?? 'USD',
         duration: cfg.duration,
         duration_unit: cfg.durationUnit,
-        symbol: cfg.symbol,
+        underlying_symbol: cfg.symbol,
         ...(cfg.barrier ? { barrier: cfg.barrier } : {}),
         req_id: reqId,
       })); } catch {
@@ -388,8 +388,12 @@ export function useBotRunner(
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = null;
         activeRequestRef.current = null;
-        const proposal = msg.proposal as { id?: string } | undefined;
-        if (!proposal?.id) { stopBot('Invalid proposal response'); return; }
+        const proposal = msg.proposal as { id?: string; ask_price?: number | string } | undefined;
+        const askPrice = Number(proposal?.ask_price);
+        if (!proposal?.id || !Number.isFinite(askPrice) || askPrice <= 0) {
+          stopBot('Invalid proposal response');
+          return;
+        }
         appendJournal('info', `Quote received (id=${proposal.id}). Buying…`);
         try {
           localStorage.setItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`, 'pending');
@@ -404,7 +408,7 @@ export function useBotRunner(
         requestStage.set(buyReqId, 'buy');
         activeRequestRef.current = buyReqId;
         try {
-          ws.send(JSON.stringify({ buy: proposal.id, price: stateRef.current.currentStake, req_id: buyReqId }));
+          ws.send(JSON.stringify({ buy: proposal.id, price: askPrice, req_id: buyReqId }));
           if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
           responseTimerRef.current = setTimeout(() => {
             if (activeRequestRef.current !== buyReqId || cancelledRef.current) return;
@@ -460,6 +464,7 @@ export function useBotRunner(
           underlying?: string; date_start?: number; status?: string;
         } | undefined;
         if (!poc) return;
+        const contractStatus = String(poc.status ?? '').toLowerCase();
 
         // Only handle our in-flight contract
         if (!inFlightContractIdRef.current || poc.contract_id === undefined || poc.contract_id === null) return;
@@ -478,8 +483,9 @@ export function useBotRunner(
 
         const isClosed = poc.is_sold === 1 || poc.is_sold === true
           || poc.is_expired === 1 || poc.is_expired === true
-          || poc.status === 'won' || poc.status === 'lost'
-          || poc.status === 'sold' || poc.status === 'expired';
+          || contractStatus === 'won' || contractStatus === 'lost'
+          || contractStatus === 'sold' || contractStatus === 'expired'
+          || contractStatus === 'cancelled';
         if (!isClosed) return;
 
         const profit = typeof poc.profit === 'number' ? poc.profit : Number.isFinite(Number(poc.profit)) ? Number(poc.profit) : null;
@@ -511,14 +517,16 @@ export function useBotRunner(
           status: poc.status ?? 'sold',
         };
 
-        const isWin = poc.status === 'won' || (poc.status !== 'lost' && (profit ?? 0) > 0);
+        const isCancelled = contractStatus === 'cancelled';
+        const isWin = contractStatus === 'won' || (contractStatus !== 'lost' && !isCancelled && (profit ?? 0) > 0);
+        const isLoss = !isWin && !isCancelled;
         const prior = stateRef.current;
         const nextTransactions = [tx, ...prior.transactions];
         const nextRunState: BotRunState = {
           ...prior,
           tradeCount: prior.tradeCount + 1,
           wins: prior.wins + (isWin ? 1 : 0),
-          losses: prior.losses + (isWin ? 0 : 1),
+          losses: prior.losses + (isLoss ? 1 : 0),
           netPnl: prior.netPnl + profit,
           transactions: nextTransactions,
         };
@@ -526,8 +534,8 @@ export function useBotRunner(
         stateRef.current = nextRunState;
         patchState(nextRunState);
 
-        appendJournal(isWin ? 'info' : 'warn',
-          `Trade ${isWin ? 'WON' : 'LOST'} — profit: ${(profit ?? 0) >= 0 ? '+' : ''}${(profit ?? 0).toFixed(2)} ${acc.currency}`);
+        appendJournal(isCancelled || isWin ? 'info' : 'warn',
+          `Trade ${isCancelled ? 'CANCELLED' : isWin ? 'WON' : 'LOST'} — profit: ${(profit ?? 0) >= 0 ? '+' : ''}${(profit ?? 0).toFixed(2)} ${acc.currency}`);
 
         // Check stop conditions
         const s = nextRunState;
@@ -543,9 +551,13 @@ export function useBotRunner(
         if (!stopReason && cfg.maxTradesPerDay > 0 && s.tradeCount >= cfg.maxTradesPerDay) {
           stopReason = `Daily trade cap reached (${s.tradeCount})`;
         }
-        if (!stopReason && !isWin) {
+        if (!stopReason && isLoss) {
           let consec = 0;
-          for (const t of s.transactions) { if ((t.profit ?? 0) < 0) consec++; else break; }
+          for (const t of s.transactions) {
+            if (t.status.toLowerCase() === 'cancelled') break;
+            if ((t.profit ?? 0) < 0) consec++;
+            else break;
+          }
           if (consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
         }
 

@@ -86,6 +86,23 @@ test("automated bot only accepts its own correlated requests and exact contract 
   assert.match(botRunner, /String\(poc\.contract_id\) !== inFlightContractIdRef\.current/);
 });
 
+test("automated bot requests Deriv proposals with the required symbol field and buys at the quoted price", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  const proposalRequest = botRunner.match(/ws\.send\(JSON\.stringify\(\{\s*proposal: 1,[\s\S]*?\}\)\);/)?.[0];
+  assert.ok(proposalRequest, "bot proposal request must exist");
+  assert.match(proposalRequest, /underlying_symbol: cfg\.symbol/);
+  assert.doesNotMatch(proposalRequest, /^\s*symbol:/m);
+  assert.match(botRunner, /ask_price\?: number \| string/);
+  assert.match(botRunner, /price: askPrice/);
+});
+
+test("automated bot treats Deriv-cancelled contracts as settled without counting a loss", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /contractStatus === 'cancelled'/);
+  assert.match(botRunner, /const isLoss = !isWin && !isCancelled/);
+  assert.match(botRunner, /Trade \$\{isCancelled \? 'CANCELLED'/);
+});
+
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
   const botRunner = read("src/components/bots/useBotRunner.ts");
   assert.match(botRunner, /sessionStateRef\.current === 'Demo trading connected'/);
