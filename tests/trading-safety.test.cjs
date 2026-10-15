@@ -103,6 +103,33 @@ test("automated bot treats Deriv-cancelled contracts as settled without counting
   assert.match(botRunner, /Trade \$\{isCancelled \? 'CANCELLED'/);
 });
 
+test("quick bot creation validates and includes digit-contract barriers", () => {
+  const dashboard = read("src/components/bots/BotDashboard.tsx");
+  assert.match(dashboard, /const requiresBarrier = \['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'\]/);
+  assert.match(dashboard, /Digit Over barriers must be from 0 to 8/);
+  assert.match(dashboard, /Digit Under barriers must be from 1 to 9/);
+  assert.match(dashboard, /const stake = Number\(fields\.stake\)/);
+  assert.match(dashboard, /Number\.isFinite\(stake\)/);
+  assert.match(dashboard, /\.\.\.\(requiresBarrier \? \{ barrier \} : \{\}\)/);
+});
+
+test("bot dashboard can search and filter run history and explain saved errors", () => {
+  const dashboard = read("src/components/bots/BotDashboard.tsx");
+  assert.match(dashboard, /runFilter === 'all' \|\| run\.status === runFilter/);
+  assert.match(dashboard, /run\.botName\.toLowerCase\(\)\.includes/);
+  assert.match(dashboard, /run\.error \|\| 'No error details were saved/);
+  assert.match(dashboard, /onClick=\{\(\) => botsListRef\.current\?\.scrollIntoView/);
+});
+
+test("bot run history updates the dashboard immediately and can be cleared", () => {
+  const storage = read("src/components/bots/bot-storage.ts");
+  const workspace = read("src/components/bots/BotsWorkspace.tsx");
+  assert.match(storage, /window\.dispatchEvent\(new Event\(BOT_RUNS_UPDATED_EVENT\)\)/);
+  assert.match(storage, /export function clearBotRuns\(\): boolean/);
+  assert.match(workspace, /window\.addEventListener\(BOT_RUNS_UPDATED_EVENT, syncRuns\)/);
+  assert.match(workspace, /onClearRuns=\{handleClearRuns\}/);
+});
+
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
   const botRunner = read("src/components/bots/useBotRunner.ts");
   assert.match(botRunner, /sessionStateRef\.current === 'Demo trading connected'/);

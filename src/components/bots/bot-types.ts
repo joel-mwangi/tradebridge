@@ -48,6 +48,7 @@ export interface BotRun {
   losses: number;
   netPnl: number;
   currency: string;
+  error?: string | null;
 }
 
 export interface BotTransaction {

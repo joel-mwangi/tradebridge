@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BotConfig, BotRun } from './bot-types';
 import {
+  BOT_RUNS_STORAGE_KEY,
+  BOT_RUNS_UPDATED_EVENT,
+  clearBotRuns,
   loadBotConfigs,
   loadBotRuns,
   upsertBotConfig,
@@ -33,10 +36,20 @@ export function BotsWorkspace({
   const [runs, setRuns] = useState<BotRun[]>([]);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
 
-  // Load from storage on mount
   useEffect(() => {
     setConfigs(loadBotConfigs());
-    setRuns(loadBotRuns());
+    const syncRuns = () => setRuns(loadBotRuns());
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === BOT_RUNS_STORAGE_KEY) syncRuns();
+    };
+
+    syncRuns();
+    window.addEventListener(BOT_RUNS_UPDATED_EVENT, syncRuns);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(BOT_RUNS_UPDATED_EVENT, syncRuns);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   const activeConfig = configs.find((c) => c.id === activeConfigId) ?? null;
@@ -85,6 +98,12 @@ export function BotsWorkspace({
     handleSaveConfig(config);
   }
 
+  function handleClearRuns() {
+    if (!clearBotRuns()) return false;
+    setRuns([]);
+    return true;
+  }
+
   return (
     <section className={styles.botsPage} aria-label="Automated bots">
       {/* Inner tab bar */}
@@ -131,6 +150,7 @@ export function BotsWorkspace({
               onNewConfig={handleNewConfig}
               onDeleteConfig={handleDeleteConfig}
               onImportConfig={handleImportConfig}
+              onClearRuns={handleClearRuns}
             />
           )}
           {innerTab === 'builder' && (

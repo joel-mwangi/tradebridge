@@ -227,6 +227,7 @@ export function useBotRunner(
           losses: s.losses,
           netPnl: s.netPnl,
           currency: s.currency,
+          error: reason ?? s.lastError,
         });
       }
     },
