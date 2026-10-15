@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BotConfig, BotRun } from './bot-types';
 import {
   BOT_RUNS_STORAGE_KEY,
