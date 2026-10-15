@@ -3,7 +3,8 @@
 import type { BotConfig, BotRun } from './bot-types';
 
 const CONFIGS_KEY = 'tradebridge:bots:configs';
-const RUNS_KEY = 'tradebridge:bots:runs';
+export const BOT_RUNS_STORAGE_KEY = 'tradebridge:bots:runs';
+export const BOT_RUNS_UPDATED_EVENT = 'tradebridge:bots:runs-updated';
 
 export function loadBotConfigs(): BotConfig[] {
   try {
@@ -41,7 +42,7 @@ export function deleteBotConfig(id: string): void {
 
 export function loadBotRuns(): BotRun[] {
   try {
-    const raw = localStorage.getItem(RUNS_KEY);
+    const raw = localStorage.getItem(BOT_RUNS_STORAGE_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as BotRun[];
   } catch {
@@ -53,8 +54,19 @@ export function saveNewRun(run: BotRun): void {
   try {
     const runs = loadBotRuns();
     const trimmed = [run, ...runs].slice(0, 50);
-    localStorage.setItem(RUNS_KEY, JSON.stringify(trimmed));
+    localStorage.setItem(BOT_RUNS_STORAGE_KEY, JSON.stringify(trimmed));
+    window.dispatchEvent(new Event(BOT_RUNS_UPDATED_EVENT));
   } catch {
     // Silently ignore storage errors
+  }
+}
+
+export function clearBotRuns(): boolean {
+  try {
+    localStorage.removeItem(BOT_RUNS_STORAGE_KEY);
+    window.dispatchEvent(new Event(BOT_RUNS_UPDATED_EVENT));
+    return true;
+  } catch {
+    return false;
   }
 }
