@@ -10,6 +10,7 @@ import DigitAnalysis from "./DigitAnalysis";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
+import PriceChart from "./PriceChart";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { BotsWorkspace } from "../bots/BotsWorkspace";
 
@@ -328,6 +329,141 @@ function MostTradedMarkets({
   );
 }
 
+// ─── Trade Charts view: run summary panel ─────────────────────────────────────
+
+function TradeRunPanel({
+  positions, activity, currency, balance, realizedProfit, busy,
+  onRefresh, onSell, activityLoading, activityHasMore, onLoadMore,
+  accountDataUnavailable, accountType,
+}: {
+  positions: import("./types").OpenPosition[];
+  activity: import("./types").AccountActivity[];
+  currency: string;
+  balance: number | null;
+  realizedProfit: number | null;
+  busy: boolean;
+  onRefresh: () => void;
+  onSell: (contractId: string) => void;
+  activityLoading: boolean;
+  activityHasMore: boolean;
+  onLoadMore: () => void;
+  accountDataUnavailable: boolean;
+  accountType: "demo" | "real" | "other";
+}) {
+  const [tab, setTab] = useState<"summary" | "transactions">("summary");
+
+  const totalStake = positions.reduce((s, p) => s + (p.buyPrice ?? 0), 0);
+  const totalPayout = positions.reduce((s, p) => s + (p.payout ?? 0), 0);
+  const contractsWon = activity.filter((a) => (a.profit ?? 0) > 0).length;
+  const contractsLost = activity.filter((a) => (a.profit ?? 0) < 0).length;
+  const fmt = (v: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + " " + currency;
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1, minHeight: "42px", border: "none", borderBottom: active ? "2px solid var(--teal)" : "2px solid transparent",
+    background: "transparent", color: active ? "var(--teal)" : "var(--muted)",
+    fontSize: "12px", fontWeight: 700, cursor: "pointer", transition: "all .15s",
+  });
+
+  return (
+    <div>
+      {/* Tabs */}
+      <div style={{ display: "flex", borderBottom: "1px solid var(--line)" }}>
+        <button type="button" style={tabStyle(tab === "summary")} onClick={() => setTab("summary")}>Summary</button>
+        <button type="button" style={tabStyle(tab === "transactions")} onClick={() => setTab("transactions")}>Transactions</button>
+      </div>
+
+      {tab === "summary" && (
+        <div style={{ padding: "20px" }}>
+          {positions.length === 0 && activity.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--muted)" }}>
+              <div style={{ fontSize: "28px", marginBottom: "12px" }}>▦</div>
+              <p style={{ fontSize: "12px", lineHeight: 1.6, margin: 0 }}>
+                When you're ready to trade, place an order.<br />You'll be able to track performance here.
+              </p>
+            </div>
+          ) : null}
+
+          {/* Stats grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "8px" }}>
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Total stake</p>
+              <strong style={{ fontSize: "13px", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalStake)}</strong>
+            </div>
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Total payout</p>
+              <strong style={{ fontSize: "13px", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalPayout)}</strong>
+            </div>
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>No. of runs</p>
+              <strong style={{ fontSize: "13px", color: "var(--ink)" }}>{positions.length}</strong>
+            </div>
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Total profit/loss</p>
+              <strong style={{
+                fontSize: "13px", fontVariantNumeric: "tabular-nums",
+                color: realizedProfit === null ? "var(--ink)" : realizedProfit >= 0 ? "var(--teal)" : "var(--red)",
+              }}>
+                {realizedProfit !== null ? fmt(realizedProfit) : "—"}
+              </strong>
+            </div>
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Contracts lost</p>
+              <strong style={{ fontSize: "13px", color: contractsLost > 0 ? "var(--red)" : "var(--ink)" }}>{contractsLost}</strong>
+            </div>
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: "10px", color: "var(--muted)", fontWeight: 700 }}>Contracts won</p>
+              <strong style={{ fontSize: "13px", color: contractsWon > 0 ? "var(--teal)" : "var(--ink)" }}>{contractsWon}</strong>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={busy}
+            style={{
+              display: "block", width: "100%", minHeight: "40px", marginTop: "20px",
+              border: "1px solid var(--border)", borderRadius: "9px", background: "var(--surface)",
+              color: "var(--ink)", fontSize: "12px", fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            {busy ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+      )}
+
+      {tab === "transactions" && (
+        <div style={{ padding: "12px 16px", maxHeight: "480px", overflowY: "auto" }}>
+          {activity.length === 0 ? (
+            <p style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center", padding: "24px 0" }}>No transactions yet.</p>
+          ) : activity.slice(0, 50).map((a) => (
+            <div key={a.id} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+              gap: "12px", padding: "10px 0", borderBottom: "1px solid var(--line)",
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.action}</p>
+                <p style={{ margin: "3px 0 0", fontSize: "10px", color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.description}</p>
+              </div>
+              <span style={{
+                flexShrink: 0, fontSize: "11px", fontWeight: 800, fontVariantNumeric: "tabular-nums",
+                color: (a.amount ?? 0) >= 0 ? "var(--teal)" : "var(--red)",
+              }}>
+                {a.amount !== null ? ((a.amount >= 0 ? "+" : "") + a.amount.toFixed(2) + " " + a.currency) : "—"}
+              </span>
+            </div>
+          ))}
+          {activityHasMore && (
+            <button type="button" onClick={onLoadMore} disabled={activityLoading}
+              style={{ display: "block", width: "100%", marginTop: "12px", minHeight: "36px", border: "1px solid var(--border)", borderRadius: "8px", background: "var(--surface)", color: "var(--muted)", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>
+              {activityLoading ? "Loading…" : "Load more"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TradingWorkspace() {
   const pathname = usePathname();
   const router = useRouter();
@@ -357,6 +493,7 @@ export default function TradingWorkspace() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [marketPanelOpen, setMarketPanelOpen] = useState(false);
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
+  const [tradeView, setTradeView] = useState<"analyse" | "charts">("analyse");
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
   const [digitTarget, setDigitTarget] = useState(5);
@@ -671,14 +808,42 @@ export default function TradingWorkspace() {
                       <small>{selectedMarket?.symbol ?? "Choose a market to begin"}</small>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={styles.switchMarketButton}
-                    onClick={() => setMarketPanelOpen(true)}
-                    aria-label="Switch market"
-                  >
-                    ⌁ Switch market
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {/* View toggle */}
+                    <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
+                      <button
+                        type="button"
+                        onClick={() => setTradeView("analyse")}
+                        style={{
+                          minHeight: "34px", padding: "0 14px", border: "none",
+                          background: tradeView === "analyse" ? "var(--teal)" : "var(--surface)",
+                          color: tradeView === "analyse" ? "#0b1320" : "var(--muted)",
+                          fontSize: "11px", fontWeight: 700, cursor: "pointer", transition: "all .15s",
+                        }}
+                        aria-pressed={tradeView === "analyse"}
+                      >⌁ Analyse</button>
+                      <button
+                        type="button"
+                        onClick={() => setTradeView("charts")}
+                        style={{
+                          minHeight: "34px", padding: "0 14px", border: "none",
+                          borderLeft: "1px solid var(--border)",
+                          background: tradeView === "charts" ? "var(--teal)" : "var(--surface)",
+                          color: tradeView === "charts" ? "#0b1320" : "var(--muted)",
+                          fontSize: "11px", fontWeight: 700, cursor: "pointer", transition: "all .15s",
+                        }}
+                        aria-pressed={tradeView === "charts"}
+                      >↗ Charts</button>
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.switchMarketButton}
+                      onClick={() => setMarketPanelOpen(true)}
+                      aria-label="Switch market"
+                    >
+                      ⌁ Switch market
+                    </button>
+                  </div>
                 </div>
 
                 {/* ── Market switcher slide-in panel ── */}
@@ -761,35 +926,90 @@ export default function TradingWorkspace() {
                   </div>
                 </>}
 
-                <div className={styles.marketGrid}>
-                  <div className={styles.marketColumn}>
-                    <DigitAnalysis
+                {tradeView === "analyse" && (
+                  <>
+                    <div className={styles.marketGrid}>
+                      <div className={styles.marketColumn}>
+                        <DigitAnalysis
+                          market={selectedMarket}
+                          snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+                          mode={digitMode}
+                          onModeChange={setDigitMode}
+                          prediction={digitPrediction}
+                          onPredictionChange={setPredictionAndValidateTarget}
+                          target={digitTarget}
+                          onTargetChange={setDigitTarget}
+                        />
+                      </div>
+                    </div>
+                    <TradingActivity
+                      positionsOnly
+                      positions={trading.positions}
+                      activity={trading.activity}
+                      currency={currency}
+                      accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                      accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                      busy={trading.busy}
+                      activityLoading={trading.activityLoading}
+                      activityHasMore={trading.activityHasMore}
+                      onSell={trading.sellPosition}
+                      onRefresh={trading.refreshAccount}
+                      onLoadMore={trading.loadMoreActivity}
+                    />
+                  </>
+                )}
+
+                {tradeView === "charts" && (
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: "20px", alignItems: "start" }}>
+                    {/* Left: full price chart */}
+                    <PriceChart
                       market={selectedMarket}
                       snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
-                      mode={digitMode}
-                      onModeChange={setDigitMode}
-                      prediction={digitPrediction}
-                      onPredictionChange={setPredictionAndValidateTarget}
-                      target={digitTarget}
-                      onTargetChange={setDigitTarget}
+                      candlesByKey={candlesByKey}
+                      onLoadCandles={requestCandles}
                     />
-                  </div>
-                </div>
 
-                <TradingActivity
-                  positionsOnly
-                  positions={trading.positions}
-                  activity={trading.activity}
-                  currency={currency}
-                  accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
-                  accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
-                  busy={trading.busy}
-                  activityLoading={trading.activityLoading}
-                  activityHasMore={trading.activityHasMore}
-                  onSell={trading.sellPosition}
-                  onRefresh={trading.refreshAccount}
-                  onLoadMore={trading.loadMoreActivity}
-                />
+                    {/* Right: run summary panel */}
+                    <div style={{
+                      border: "1px solid var(--line)", borderRadius: "14px",
+                      background: "var(--panel)", boxShadow: "var(--card-shadow)",
+                      overflow: "hidden",
+                    }}>
+                      {/* Session state bar */}
+                      <div style={{
+                        display: "flex", alignItems: "center", gap: "10px",
+                        padding: "14px 18px", borderBottom: "1px solid var(--line)",
+                        background: "var(--surface)",
+                      }}>
+                        <span style={{
+                          width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0,
+                          background: trading.sessionState.includes("connected") ? "var(--teal)" : "var(--muted)",
+                          boxShadow: trading.sessionState.includes("connected") ? "0 0 8px var(--teal)" : "none",
+                        }} />
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink)" }}>
+                          {trading.sessionState}
+                        </span>
+                      </div>
+
+                      {/* Summary / Transactions tabs */}
+                      <TradeRunPanel
+                        positions={trading.positions}
+                        activity={trading.activity}
+                        currency={currency}
+                        balance={trading.balance.balance}
+                        realizedProfit={trading.realizedProfit}
+                        busy={trading.busy}
+                        onRefresh={trading.refreshAccount}
+                        onSell={trading.sellPosition}
+                        activityLoading={trading.activityLoading}
+                        activityHasMore={trading.activityHasMore}
+                        onLoadMore={trading.loadMoreActivity}
+                        accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                        accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                      />
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 
