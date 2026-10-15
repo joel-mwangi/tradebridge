@@ -165,19 +165,20 @@ export function useBotRunner(
 
   // Tear down bot loop when key dependencies change — do NOT close the shared socket
   useEffect(() => {
+    const socketAtEffectStart = sharedSocketRef.current;
     return () => {
       cancelledRef.current = true;
       if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
       if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
       // Bot handlers are registered as independent listeners; never replace the
       // shared trading session's onmessage callback.
-      const ws = sharedSocketRef.current;
+      const ws = socketAtEffectStart;
       const handler = handlerRef.current;
       if (ws && handler) ws.removeEventListener('message', handler);
       handlerRef.current = null;
       if (ws) delete (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler;
     };
-  }, [connected, account?.account_id, account?.currency, config?.id, sharedSocketRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connected, account?.account_id, account?.currency, config?.id, sharedSocketRef]);
 
   const stopBot = useCallback(
     (reason?: string) => {
@@ -592,7 +593,7 @@ export function useBotRunner(
     (ws as WebSocket & { __tradeBridgeBotHandler?: EventListener }).__tradeBridgeBotHandler = eventHandler;
     sendProposal(proposalReqId, initialStake);
 
-  }, [connected, account, config, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connected, account, config, sharedSocketRef, nextSharedSeqId, appendJournal, sendProposal, stopBot, patchState]);
 
   const acknowledgeOrderReconciled = useCallback(() => {
     const acc = accountRef.current;
