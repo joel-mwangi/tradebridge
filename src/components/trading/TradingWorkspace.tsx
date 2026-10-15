@@ -13,6 +13,10 @@ import { useMarketData } from "./useMarketData";
 import PriceChart from "./PriceChart";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { BotsWorkspace } from "../bots/BotsWorkspace";
+import { useBotRunner } from "../bots/useBotRunner";
+import { RunPanel } from "../bots/RunPanel";
+import { loadBotConfigs } from "../bots/bot-storage";
+import type { BotConfig } from "../bots/bot-types";
 
 type AccountsResponse = {
   connected?: boolean;
@@ -543,6 +547,15 @@ export default function TradingWorkspace() {
   const [marketPanelOpen, setMarketPanelOpen] = useState(false);
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [tradeView, setTradeView] = useState<"analyse" | "charts">("analyse");
+
+  // Bot configs for Charts view — loaded from localStorage
+  const [botConfigs, setBotConfigs] = useState<BotConfig[]>([]);
+  const [activeChartBotId, setActiveChartBotId] = useState<string | null>(null);
+  useEffect(() => {
+    const configs = loadBotConfigs();
+    setBotConfigs(configs);
+    if (configs.length > 0) setActiveChartBotId(configs[0].id);
+  }, []);
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
   const [digitTarget, setDigitTarget] = useState(5);
@@ -611,6 +624,16 @@ export default function TradingWorkspace() {
   const liveBalance = activeAccountIsDemo || effectiveLiveTradingEnabled
     ? trading.balance.balance ?? activeAccount?.balance ?? null
     : activeAccount?.balance ?? null;
+
+  // Bot runner for Charts view — shares the authenticated trading session socket
+  const activeChartBot = botConfigs.find((c) => c.id === activeChartBotId) ?? null;
+  const {
+    runState: botRunState,
+    start: startBot,
+    stop: stopBot,
+    orderRecoveryRequired: botOrderRecovery,
+    acknowledgeOrderReconciled: botAcknowledge,
+  } = useBotRunner(connected, activeAccount, activeChartBot, trading.sharedSocketRef, trading.nextSharedSeqId, trading.sessionState);
 
   useEffect(() => {
     let active = true;
@@ -1018,55 +1041,102 @@ export default function TradingWorkspace() {
                       onLoadCandles={requestCandles}
                     />
 
-                    {/* Right: run summary panel */}
+                    {/* Right: bot run panel */}
                     <div style={{
                       border: "1px solid var(--line)", borderRadius: "14px",
                       background: "var(--panel)", boxShadow: "var(--card-shadow)",
                       overflow: "hidden",
                     }}>
-                      {/* Contract status bar — mirrors Deriv DBot "Contract bought" bar */}
+                      {/* Run / Stop bar */}
                       <div style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
-                        padding: "11px 16px", borderBottom: "1px solid var(--line)",
-                        background: trading.positions.length > 0 ? "var(--teal-soft)" : "var(--surface)",
+                        display: "flex", alignItems: "center", gap: "10px",
+                        padding: "10px 14px", borderBottom: "1px solid var(--line)",
+                        background: botRunState.status === "running" || botRunState.status === "cooldown"
+                          ? "var(--teal-soft)" : "var(--surface)",
                       }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{
-                            width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0,
-                            background: trading.sessionState.toLowerCase().includes("connected") ? "var(--teal)" : "var(--muted)",
-                            boxShadow: trading.sessionState.toLowerCase().includes("connected") ? "0 0 8px var(--teal)" : "none",
-                          }} />
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: trading.positions.length > 0 ? "var(--teal)" : "var(--ink)" }}>
-                            {trading.positions.length > 0
-                              ? `Contract bought · ${trading.positions.length} open`
-                              : trading.sessionState}
-                          </span>
-                        </div>
-                        {/* Balance chip */}
-                        {trading.balance.balance !== null && (
-                          <span style={{
-                            fontSize: "10px", fontWeight: 800, color: "var(--muted)",
-                            fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
-                          }}>
-                            {new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(trading.balance.balance)} {trading.balance.currency}
-                          </span>
+                        {(botRunState.status === "idle" || botRunState.status === "stopped" || botRunState.status === "error") && (
+                          <button
+                            type="button"
+                            onClick={startBot}
+                            disabled={!activeChartBot || !connected}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: "6px",
+                              minHeight: "34px", padding: "0 16px",
+                              border: "none", borderRadius: "8px",
+                              background: "var(--teal)", color: "#0b1320",
+                              fontSize: "12px", fontWeight: 800, cursor: "pointer",
+                              opacity: !activeChartBot || !connected ? 0.5 : 1,
+                            }}
+                          >▶ Run</button>
                         )}
+                        {(botRunState.status === "running" || botRunState.status === "cooldown" || botRunState.status === "connecting" || botRunState.status === "stopping") && (
+                          <button
+                            type="button"
+                            onClick={stopBot}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: "6px",
+                              minHeight: "34px", padding: "0 16px",
+                              border: "none", borderRadius: "8px",
+                              background: "var(--red)", color: "#fff",
+                              fontSize: "12px", fontWeight: 800, cursor: "pointer",
+                            }}
+                          >⏹ Stop</button>
+                        )}
+                        <span style={{
+                          flex: 1, fontSize: "11px", fontWeight: 700,
+                          color: botRunState.status === "running" ? "var(--teal)"
+                            : botRunState.status === "error" ? "var(--red)" : "var(--muted)",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {botRunState.status === "running" || botRunState.status === "cooldown"
+                            ? "Contract bought"
+                            : botRunState.status === "error"
+                              ? botRunState.lastError ?? "Error"
+                              : botRunState.status === "stopping"
+                                ? "Stopping…"
+                                : "Bot is not running"}
+                        </span>
                       </div>
 
-                      <TradeRunPanel
-                        positions={trading.positions}
-                        activity={trading.activity}
-                        currency={currency}
-                        balance={trading.balance.balance}
-                        realizedProfit={trading.realizedProfit}
-                        busy={trading.busy}
-                        onRefresh={trading.refreshAccount}
-                        onSell={trading.sellPosition}
-                        activityLoading={trading.activityLoading}
-                        activityHasMore={trading.activityHasMore}
-                        onLoadMore={trading.loadMoreActivity}
-                        accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
-                        accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                      {/* Bot selector */}
+                      {botConfigs.length > 0 && (
+                        <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", background: "var(--surface)" }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>BOT</span>
+                            <select
+                              value={activeChartBotId ?? ""}
+                              onChange={(e) => setActiveChartBotId(e.target.value || null)}
+                              disabled={botRunState.status === "running" || botRunState.status === "cooldown"}
+                              style={{
+                                flex: 1, minHeight: "32px", padding: "0 8px",
+                                border: "1px solid var(--border)", borderRadius: "7px",
+                                background: "var(--panel)", color: "var(--ink)",
+                                fontSize: "11px", fontWeight: 600,
+                              }}
+                            >
+                              {botConfigs.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name} · {c.symbol}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      )}
+                      {botConfigs.length === 0 && (
+                        <div style={{ padding: "14px", background: "var(--surface)", borderBottom: "1px solid var(--line)" }}>
+                          <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)", lineHeight: 1.5 }}>
+                            No bots configured. Go to the <strong>Bots</strong> tab to create one first.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Run panel: Summary / Transactions / Journal */}
+                      <RunPanel
+                        runState={botRunState}
+                        onStart={startBot}
+                        onStop={stopBot}
+                        orderRecoveryRequired={botOrderRecovery}
+                        onAcknowledgeOrderReconciled={botAcknowledge}
+                        config={activeChartBot}
                       />
                     </div>
                   </div>
