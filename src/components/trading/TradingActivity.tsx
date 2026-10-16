@@ -118,7 +118,7 @@ export default function TradingActivity({
         </button>
       </div>}
       {activityLoading && activity.length === 0 && <p className={styles.statementFootnote}>Loading statement from Deriv…</p>}
-      <p className={styles.statementFootnote}>Export includes the transactions currently loaded from Deriv, not the account's full lifetime archive.</p>
+      <p className={styles.statementFootnote}>Export includes the transactions currently loaded from Deriv, not the account&apos;s full lifetime archive.</p>
     </section>
     )}
   </div>;

@@ -1,18 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { DerivAccount, DigitContractMode, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
+import type { DigitContractMode, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
 import styles from "./DigitAnalysis.module.css";
 
 const DIGITS = Array.from({ length: 10 }, (_, i) => i);
 
 export default function DigitAnalysis({
-  market,
   snapshot,
   mode,
   onModeChange,
   prediction,
-  onPredictionChange,
   target,
   onTargetChange,
 }: {
@@ -29,8 +27,7 @@ export default function DigitAnalysis({
   const validTargets = mode === "over-under"
     ? DIGITS.filter((digit) => prediction === "UNDER" ? digit >= 1 : digit <= 8)
     : DIGITS;
-  const allPoints = snapshot?.points ?? [];
-  const points = useMemo(() => allPoints.slice(-windowSize), [allPoints, windowSize]);
+  const points = useMemo(() => (snapshot?.points ?? []).slice(-windowSize), [snapshot?.points, windowSize]);
   const digits = useMemo(() => points.flatMap((p) =>
     Number.isInteger(p.lastDigit) && p.lastDigit! >= 0 && p.lastDigit! <= 9
       ? [{ digit: p.lastDigit!, time: p.time }] : []
@@ -47,7 +44,6 @@ export default function DigitAnalysis({
   const below = digits.filter((p) => p.digit < target).length;
   const matches = counts[target];
   const differs = total - matches;
-  const recent = [...digits].slice(-30).reverse();
   const percent = (n: number) => total ? (n / total * 100).toFixed(1) + "%" : "—";
 
   return <section className={styles.root} aria-label="Digit analysis">

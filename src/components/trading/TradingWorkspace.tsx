@@ -297,7 +297,7 @@ function MostTradedMarkets({
           );
         })}
 
-        <a
+        <Link
           href="/markets"
           style={{
             display: "flex",
@@ -327,7 +327,7 @@ function MostTradedMarkets({
         >
           <span style={{ fontSize: "24px", color: "var(--ink)" }}>→</span>
           <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink)" }}>View all</span>
-        </a>
+        </Link>
       </div>
     </section>
   );
@@ -407,7 +407,7 @@ function TradeRunPanel({
             <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--muted)" }}>
               <div style={{ fontSize: "28px", marginBottom: "12px" }}>▦</div>
               <p style={{ fontSize: "12px", lineHeight: 1.6, margin: 0 }}>
-                When you're ready to trade, place an order.<br />You'll be able to track performance here.
+                When you&apos;re ready to trade, place an order.<br />You&apos;ll be able to track performance here.
               </p>
             </div>
           )}

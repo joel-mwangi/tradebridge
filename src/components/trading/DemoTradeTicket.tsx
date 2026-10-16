@@ -125,7 +125,7 @@ export default function DemoTradeTicket({
     </div>}
     {dailyLossReached && <div className={styles.riskStopNotice} role="alert">
       <strong>Daily loss stop reached</strong>
-      <span>Today's reported realized P/L is {realizedProfit} {account?.currency ?? ""}. TradeBridge is blocking new live entries at your configured stop of {maxDailyLoss} {account?.currency ?? ""}.</span>
+      <span>Today&apos;s reported realized P/L is {realizedProfit} {account?.currency ?? ""}. TradeBridge is blocking new live entries at your configured stop of {maxDailyLoss} {account?.currency ?? ""}.</span>
     </div>}
 
     <div className={styles.tradeMarket}>
@@ -222,6 +222,6 @@ export default function DemoTradeTicket({
     {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an account before requesting a quote.</p>}
     {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Real account order entry is read-only and disabled until server-side risk controls are available. Select a Demo account to place trades.</p>}
-    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Live entry waits until Deriv's daily realized P/L has loaded.</p>}
+    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Live entry waits until Deriv&apos;s daily realized P/L has loaded.</p>}
   </section>;
 }

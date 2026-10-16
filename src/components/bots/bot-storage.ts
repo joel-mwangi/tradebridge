@@ -1,6 +1,6 @@
 'use client';
 
-import type { BotConfig, BotRun } from './bot-types';
+import { isBotConfig, type BotConfig, type BotRun } from './bot-types';
 
 const CONFIGS_KEY = 'tradebridge:bots:configs';
 export const BOT_RUNS_STORAGE_KEY = 'tradebridge:bots:runs';
@@ -10,7 +10,8 @@ export function loadBotConfigs(): BotConfig[] {
   try {
     const raw = localStorage.getItem(CONFIGS_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as BotConfig[];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isBotConfig) : [];
   } catch {
     return [];
   }
