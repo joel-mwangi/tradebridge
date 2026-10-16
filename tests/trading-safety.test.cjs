@@ -163,6 +163,8 @@ test("imported and persisted bot configs are validated before execution", () => 
   const dashboard = read("src/components/bots/BotDashboard.tsx");
   assert.match(types, /export function isBotConfig\(value: unknown\): value is BotConfig/);
   assert.match(types, /BOT_CONTRACT_TYPES/);
+  assert.match(types, /config\.durationUnit !== 't'/);
+  assert.match(types, /config\.duration > 10/);
   assert.match(types, /config\.contractType === 'DIGITOVER' && barrier > 8/);
   assert.match(types, /config\.contractType === 'DIGITUNDER' && barrier < 1/);
   assert.match(types, /!isPositiveFinite\(stake\.amount\)/);
