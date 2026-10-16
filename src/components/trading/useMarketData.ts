@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MarketCandle, MarketInstrument, MarketSnapshot, PricePoint } from "./types";
 
-const PUBLIC_SOCKET = "wss://api.derivws.com/trading/v1/options/ws/public";
+const USE_BACKEND_MARKET_STREAM = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_ENABLED === "true";
+const PUBLIC_SOCKET = USE_BACKEND_MARKET_STREAM ? (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL ?? "") : "wss://api.derivws.com/trading/v1/options/ws/public";
 const PREFERRED_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "R_100", "R_50", "frxEURUSD", "frxGBPUSD", "frxXAUUSD"];
 const MAX_POINTS = 1000;
 
@@ -196,13 +197,20 @@ export function useMarketData() {
 
       // Subscribe all markets with a 50ms throttle between each so Deriv
       // doesn't drop the connection under a burst of simultaneous requests.
-      chosen.forEach((market, index) => {
+      // Warm only the preferred instruments; subscribe other instruments on selection.
+      // This keeps the backend's per-connection subscription limit meaningful.
+      chosen.slice(0, PREFERRED_SYMBOLS.length).forEach((market, index) => {
         setTimeout(() => {
           if (alive) requestMarket(market.symbol);
         }, index * 50);
       });
       setConnection("Live market stream connected");
     };
+
+    if (USE_BACKEND_MARKET_STREAM && !PUBLIC_SOCKET.trim()) {
+      setConnection("Backend market feed is not configured");
+      return;
+    }
 
     try {
       socket = new WebSocket(PUBLIC_SOCKET);
