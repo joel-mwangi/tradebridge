@@ -228,7 +228,8 @@ export default function TradingWorkspace() {
 
     const accountsRequest = (async () => {
       if (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true") {
-        const backendUrl = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL?.trim().replace(/\\/$/, "");
+        const backendUrlRaw = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL?.trim();
+        const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
         if (!backendUrl) throw new Error("Backend session URL is not configured.");
         const supabase = createSupabaseBrowserClient();
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
