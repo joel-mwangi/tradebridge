@@ -170,3 +170,12 @@ test("imported and persisted bot configs are validated before execution", () => 
   assert.match(dashboard, /if \(!isBotConfig\(parsed\)\)/);
   assert.doesNotMatch(dashboard, /const config = parsed as BotConfig/);
 });
+
+test("manual stop cannot clear the bot recovery lock while a buy acknowledgement is pending", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
+  assert.match(botRunner, /const buyRequestPendingRef = useRef\(false\)/);
+  assert.match(botRunner, /!buyRequestPendingRef\.current && !inFlightContractIdRef\.current/);
+  assert.match(botRunner, /buyRequestPendingRef\.current = true;[\s\S]{0,200}ws\.send\(JSON\.stringify\(\{ buy:/);
+  assert.match(botRunner, /if \(stage === 'buy'\) \{\s*buyRequestPendingRef\.current = false;/);
+  assert.match(botRunner, /buyRequestPendingRef\.current = false;\s*const buyResp/);
+});
