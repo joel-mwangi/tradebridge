@@ -373,6 +373,8 @@ export default function TradingWorkspace() {
                 <div className={styles.intro}>
                   <div className={styles.introMain}>
                     <p className={styles.eyebrow}>Account overview</p>
+                    <h1 className={styles.title}>Dashboard</h1>
+                    <p className={styles.subtitle}>Track your account balance, open positions, and market activity at a glance.</p>
                   </div>
                   <div className={styles.introActions}>
                     {connected ? (
