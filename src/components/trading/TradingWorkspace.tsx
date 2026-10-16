@@ -227,21 +227,18 @@ export default function TradingWorkspace() {
     }
 
     const accountsRequest = (async () => {
-      if (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true") {
-        const backendUrlRaw = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL?.trim();
-        const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
-        if (!backendUrl) throw new Error("Backend session URL is not configured.");
-        const supabase = createSupabaseBrowserClient();
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        const accessToken = sessionData.session?.access_token;
-        if (sessionError || !accessToken) throw new Error("App session is unavailable.");
-        return fetch(`${backendUrl}/deriv/accounts`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}` },
-          cache: "no-store",
-        });
-      }
-      return fetch("/api/auth/deriv/accounts", { cache: "no-store" });
+      const backendUrlRaw = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL?.trim();
+      const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
+      if (!backendUrl) throw new Error("FastAPI backend is required but NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL is not configured.");
+      const supabase = createSupabaseBrowserClient();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) throw new Error("App session is unavailable. Sign in again.");
+      return fetch(`${backendUrl}/deriv/accounts`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
     })();
 
     accountsRequest
