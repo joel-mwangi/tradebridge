@@ -235,10 +235,30 @@ export function useTradingSession(
             setStatus("Sign in again before connecting the backend trading gateway.");
             return;
           }
-          const base = backendWsUrl.endsWith("/") ? backendWsUrl.slice(0, -1) : backendWsUrl;
-          socketUrl = `${base}?account_id=${encodeURIComponent(activeAccount.account_id)}`;
-          // The Supabase token is sent as a WebSocket subprotocol, never in the URL.
-          socketProtocols = ["tradebridge", accessToken];
+          const apiUrl = new URL(backendWsUrl);
+          apiUrl.protocol = apiUrl.protocol === "wss:" ? "https:" : "http:";
+          apiUrl.pathname = "/deriv/ws-ticket";
+          apiUrl.search = "";
+          const ticketResponse = await fetch(apiUrl.toString(), {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          });
+          if (cancelled) return;
+          if (!ticketResponse.ok) {
+            setSessionState("Backend trading gateway unavailable");
+            setStatus("The backend could not authorize a trading session. Reconnect Deriv or try again.");
+            return;
+          }
+          const ticketData = await ticketResponse.json() as { ticket?: string };
+          if (!ticketData.ticket) {
+            setSessionState("Backend trading gateway unavailable");
+            setStatus("The backend did not issue a secure session ticket.");
+            return;
+          }
+          socketUrl = `${backendWsUrl.endsWith("/") ? backendWsUrl.slice(0, -1) : backendWsUrl}?account_id=${encodeURIComponent(activeAccount.account_id)}`;
+          // Only a short-lived, single-use ticket is sent as a WebSocket subprotocol.
+          socketProtocols = ["tradebridge", ticketData.ticket];
         } else {
           // Temporary compatibility path while the FastAPI gateway is being rolled out.
           const response = await fetch("/api/auth/deriv/trade-session", {
