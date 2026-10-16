@@ -12,7 +12,7 @@ Real accounts can be linked and inspected, but **real-money order entry is delib
 - **Real accounts:** Display linked Real account details in read-only mode. Real order sessions are blocked until enforceable server-side risk controls are implemented.
 - **Positions:** Stream open-contract updates, including current profit/loss and contract status, and request an early market sale after a second confirmation.
 - **Account activity:** Load and page through Deriv statement transactions, view the daily profit table, refresh account panels, and export the currently loaded statement rows to CSV.
-- **Session safety:** Server-side account ownership/type checks, Demo-only trading WebSocket issuance, server-only writes to risk-consent records, consent revocation, and token cookies that are HttpOnly in production.
+- **Session safety:** Server-side account ownership/type checks, Demo-only trading WebSocket issuance, server-only writes to risk-consent records, consent revocation, and server-only encrypted OAuth credentials managed by FastAPI.
 
 
 The manual Trade workspace focuses on Deriv **digit Options**: Over/Under, Even/Odd, and Matches/Differs. Its digit-analysis selector is shared with the quote-and-confirm ticket; the trade workflow does not present Higher/Lower price-direction entry or a price-history chart. It is not a general CFD, forex margin, copy-trading, or multi-asset terminal.
@@ -74,7 +74,7 @@ The analysis is descriptive only. Digit frequency and chi-square statistics do n
 ## Configure Deriv OAuth
 
 1. Register an OAuth 2.0 application in Deriv.
-2. Configure the Deriv OAuth client ID on the FastAPI service, not in the browser.
+2. Configure `DERIV_OAUTH_CLIENT_ID` in Vercel's server-side environment for the authorization redirect and configure the same client ID on FastAPI for the token exchange.
 3. Configure `TRADEBRIDGE_BACKEND_URL`, `TRADEBRIDGE_SESSION_BRIDGE_TOKEN`, `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL`, `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL`, and `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL`. These are mandatory; missing values disable Deriv functionality. Do not configure a direct-Deriv fallback.
 4. Set `APP_URL=http://localhost:3000` for local development.
 5. Register the exact callback URL `http://localhost:3000/api/auth/deriv/callback` in the Deriv app.
@@ -174,8 +174,8 @@ No enable/disable flags are used. Missing configuration must fail closed; do not
 ### Important operating limits
 
 - Real-account execution stays disabled. The backend permits Demo accounts only.
-- OAuth credentials are encrypted at rest in `public.deriv_backend_credentials`; active WebSocket connections still close on process restart and clients must reconnect. The migration must be applied before enabling the feature flags.
+- OAuth credentials are encrypted at rest in `public.deriv_backend_credentials`; active WebSocket connections still close on process restart and clients must reconnect. The migration must be applied before deploying the backend-only integration.
 - Live ticks/history are forwarded ephemerally and are not persisted. The legacy `POST /api/internal/market-ticks` endpoint returns HTTP 410. Disable any old external collector that targets it.
 - The WebSocket ticket is short-lived and single-use. Do not log it or put it in a URL.
-- Do not switch flags on in production until end-to-end testing verifies OAuth callback, linked-account listing, live tick/history streaming, proposals, explicit buy confirmation, early sell, settlement/statement reconciliation, reconnect behavior, and sign-out/disconnect revocation.
-- Keep the legacy routes available only as a temporary rollback path during validation; remove them after a verified cutover, not before.
+- Do not deploy the frontend integration to production until end-to-end testing verifies OAuth callback, linked-account listing, live tick/history streaming, proposals, explicit buy confirmation, early sell, settlement/statement reconciliation, reconnect behavior, and sign-out/disconnect revocation.
+- Legacy Next.js Deriv account/session routes are not supported as fallbacks. They must not be called by the frontend and should be retired after verifying no external consumer depends on them.
