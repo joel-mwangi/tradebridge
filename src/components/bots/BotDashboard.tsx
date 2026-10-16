@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import type { BotConfig, BotRun } from './bot-types';
+import { isBotConfig, type BotConfig, type BotRun } from './bot-types';
 import { upsertBotConfig, deleteBotConfig } from './bot-storage';
 import styles from './BotDashboard.module.css';
 
@@ -182,17 +182,11 @@ export function BotDashboard({
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result as string) as unknown;
-        if (
-          typeof parsed !== 'object' ||
-          parsed === null ||
-          typeof (parsed as Record<string, unknown>).id !== 'string' ||
-          typeof (parsed as Record<string, unknown>).name !== 'string' ||
-          typeof (parsed as Record<string, unknown>).symbol !== 'string'
-        ) {
-          setImportError('Invalid bot file: must have id, name, and symbol fields.');
+        if (!isBotConfig(parsed)) {
+          setImportError('Invalid bot file: check the contract, symbol, barrier, duration, stake strategy, and stop-condition values.');
           return;
         }
-        const config = parsed as BotConfig;
+        const config = parsed;
         upsertBotConfig(config);
         onImportConfig(config);
       } catch {
