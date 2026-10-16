@@ -215,7 +215,7 @@ export default function TradingWorkspace() {
     stop: stopBot,
     orderRecoveryRequired: botOrderRecovery,
     acknowledgeOrderReconciled: botAcknowledge,
-  } = useBotRunner(connected, activeAccount, activeChartBot, trading.sharedSocketRef, trading.nextSharedSeqId, trading.sessionState);
+  } = useBotRunner(false, null, null, trading.sharedSocketRef, trading.nextSharedSeqId, "Automated execution disabled; manual trading only.");
 
   useEffect(() => {
     let active = true;
@@ -227,21 +227,18 @@ export default function TradingWorkspace() {
     }
 
     const accountsRequest = (async () => {
-      if (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true") {
-        const backendUrlRaw = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL?.trim();
-        const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
-        if (!backendUrl) throw new Error("Backend session URL is not configured.");
-        const supabase = createSupabaseBrowserClient();
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        const accessToken = sessionData.session?.access_token;
-        if (sessionError || !accessToken) throw new Error("App session is unavailable.");
-        return fetch(`${backendUrl}/deriv/accounts`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}` },
-          cache: "no-store",
-        });
-      }
-      return fetch("/api/auth/deriv/accounts", { cache: "no-store" });
+      const backendUrlRaw = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL?.trim();
+      const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
+      if (!backendUrl) throw new Error("FastAPI backend is required but NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL is not configured.");
+      const supabase = createSupabaseBrowserClient();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) throw new Error("App session is unavailable. Sign in again.");
+      return fetch(`${backendUrl}/deriv/accounts`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
     })();
 
     accountsRequest
@@ -265,9 +262,7 @@ export default function TradingWorkspace() {
         if (active) {
           setConnected(false);
           setAccounts([]);
-          setAuthMessage(process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true"
-            ? "Could not verify the backend trading session. Confirm the FastAPI URL, allowed origin, and Deriv connection."
-            : "Could not verify the trading connection. Check your network and reconnect.");
+          setAuthMessage("Could not verify the FastAPI trading session. Confirm the backend URL, allowed origin, and Deriv connection.");
         }
       });
 

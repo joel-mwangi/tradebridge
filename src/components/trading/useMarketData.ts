@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MarketCandle, MarketInstrument, MarketSnapshot, PricePoint } from "./types";
 
-const USE_BACKEND_MARKET_STREAM = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_ENABLED === "true";
-const PUBLIC_SOCKET = USE_BACKEND_MARKET_STREAM ? (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL ?? "") : "wss://api.derivws.com/trading/v1/options/ws/public";
+const PUBLIC_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const PREFERRED_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "R_100", "R_50", "frxEURUSD", "frxGBPUSD", "frxXAUUSD"];
 const MAX_POINTS = 1000;
 
@@ -207,7 +206,7 @@ export function useMarketData() {
       setConnection("Live market stream connected");
     };
 
-    if (USE_BACKEND_MARKET_STREAM && !PUBLIC_SOCKET.trim()) {
+    if (!PUBLIC_SOCKET.trim()) {
       setConnection("Backend market feed is not configured");
       return;
     }

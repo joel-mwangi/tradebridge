@@ -1,8 +1,8 @@
 # TradeBridge
 
-TradeBridge is a Next.js workspace for Deriv Options. In the FastAPI-owned session mode, Next.js handles the browser redirect and app-account linking while FastAPI exchanges the Deriv OAuth code, owns Deriv credentials, retrieves linked accounts, proxies market data, and executes explicitly confirmed Demo orders.
+TradeBridge is a Next.js workspace for Deriv Options. Vercel hosts the UI; FastAPI is the mandatory gateway for every Deriv operation. Next.js handles the OAuth redirect and app-account linking, while FastAPI exchanges the authorization code, owns Deriv credentials, retrieves linked accounts, proxies market data and executes explicitly confirmed Demo orders. There are no direct browser-to-Deriv connections and no legacy fallback paths.
 
-Real accounts can be linked and inspected, but **real-money order entry is deliberately disabled**. TradeBridge currently opens Deriv trading WebSockets directly in the browser; browser-only stake caps and loss stops can be bypassed. Real trading must stay disabled until a server-side execution gateway validates every order and can enforce limits and revocation. The app does not promise profit or prevent an account owner from trading independently on Deriv.
+Real accounts can be linked and inspected, but **real-money order entry is deliberately disabled**. TradeBridge only opens its trading WebSocket through FastAPI. Real trading remains disabled until server-side execution policy and order reconciliation are verified. The app does not promise profit or prevent an account owner from trading independently on Deriv.
 
 ## Supported workflow
 
@@ -12,7 +12,7 @@ Real accounts can be linked and inspected, but **real-money order entry is delib
 - **Real accounts:** Display linked Real account details in read-only mode. Real order sessions are blocked until enforceable server-side risk controls are implemented.
 - **Positions:** Stream open-contract updates, including current profit/loss and contract status, and request an early market sale after a second confirmation.
 - **Account activity:** Load and page through Deriv statement transactions, view the daily profit table, refresh account panels, and export the currently loaded statement rows to CSV.
-- **Session safety:** Server-side account ownership/type checks, Demo-only trading WebSocket issuance, server-only writes to risk-consent records, consent revocation, and token cookies that are HttpOnly in production.
+- **Session safety:** Server-side account ownership/type checks, Demo-only trading WebSocket issuance, server-only writes to risk-consent records, consent revocation, and server-only encrypted OAuth credentials managed by FastAPI.
 
 
 The manual Trade workspace focuses on Deriv **digit Options**: Over/Under, Even/Odd, and Matches/Differs. Its digit-analysis selector is shared with the quote-and-confirm ticket; the trade workflow does not present Higher/Lower price-direction entry or a price-history chart. It is not a general CFD, forex margin, copy-trading, or multi-asset terminal.
@@ -21,7 +21,7 @@ The manual Trade workspace focuses on Deriv **digit Options**: Over/Under, Even/
 
 - Next.js App Router, React, TypeScript
 - Deriv OAuth 2.0 Authorization Code flow with PKCE
-- Deriv Options REST and WebSocket APIs
+- Deriv OAuth 2.0 plus FastAPI-proxied Deriv REST and WebSocket APIs
 - Supabase Auth and PostgreSQL for user profiles, account ownership, and live-trading consent
 
 ## Requirements
@@ -74,9 +74,10 @@ The analysis is descriptive only. Digit frequency and chi-square statistics do n
 ## Configure Deriv OAuth
 
 1. Register an OAuth 2.0 application in Deriv.
-2. Set `DERIV_OAUTH_CLIENT_ID` in `.env.local` to the registered OAuth client ID.
-3. Set `APP_URL=http://localhost:3000` for local development.
-4. Register the exact callback URL `http://localhost:3000/api/auth/deriv/callback` in the Deriv app.
+2. Configure `DERIV_OAUTH_CLIENT_ID` in Vercel's server-side environment for the authorization redirect and configure the same client ID on FastAPI for the token exchange.
+3. Configure `TRADEBRIDGE_BACKEND_URL`, `TRADEBRIDGE_SESSION_BRIDGE_TOKEN`, `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL`, `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL`, and `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL`. These are mandatory; missing values disable Deriv functionality. Do not configure a direct-Deriv fallback.
+4. Set `APP_URL=http://localhost:3000` for local development.
+5. Register the exact callback URL `http://localhost:3000/api/auth/deriv/callback` in the Deriv app.
 5. Configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` with values from your Supabase project.
 6. Set `SUPABASE_SERVICE_ROLE_KEY` in the server-only environment. It is required for consent revocation after authenticated client write access is removed. Never expose it using a `NEXT_PUBLIC_*` variable, and never commit its value.
 7. Apply all committed Supabase migrations to the verified TradeBridge project.
@@ -101,14 +102,12 @@ Review the migration list and target project before running database changes. Do
 
 - `GET /api/auth/deriv/start` — creates PKCE/state values and redirects to Deriv.
 - `GET /api/auth/deriv/callback` — validates state, exchanges the code server-side, verifies returned accounts, and links account IDs to the authenticated user.
-- `GET /api/auth/deriv/accounts` — returns Deriv account details only after server-side ownership checks.
 - `GET /api/auth/deriv/status` — verifies the saved authorization against Deriv.
 - `GET /api/auth/deriv/live-consent?account_id=...` — reads the signed-in user's consent and configured app limits for a linked account.
 - `POST /api/auth/deriv/live-consent` — revokes consent for an owned Real account. Enabling new live consent is denied while server-side order enforcement is unavailable.
-- `POST /api/auth/deriv/trade-session` — issues a short-lived account-scoped WebSocket URL for verified Demo accounts only. Real accounts receive `503 real_execution_gateway_unavailable` until live orders are mediated by server-side enforcement.
 - `POST /api/auth/deriv/disconnect` — clears local Deriv cookies and attempts to revoke persisted live-trading consent.
 
-The OAuth access token stays in a server-only HttpOnly cookie and is never exposed to client-side JavaScript. The WebSocket one-time URL is opened directly by the browser to use Deriv's streaming Options trading API.
+The Deriv OAuth access token is held by FastAPI and is never stored in a browser cookie. The browser requests a short-lived single-use FastAPI WebSocket ticket; all upstream Deriv connections are owned by FastAPI.
 
 ## Risk controls — important limitations
 
@@ -146,19 +145,19 @@ Build success does not replace live-provider verification. Test Demo ownership, 
 - Recheck the exception by 2026-11-16 and remove it immediately when upstream publishes a fix. Do not suppress unrelated `braces` advisories or new high/critical vulnerabilities.
 
 
-## FastAPI-owned Deriv session migration
+## FastAPI-only Deriv integration
 
-The migration is feature-flagged for a controlled rollout. Do not enable it until the FastAPI service is deployed on an always-on ASGI host, the same bridge secret is configured on both services, and the backend checks pass.
+The backend-only architecture is mandatory. Do not deploy the UI until FastAPI is deployed on an always-on ASGI host, the bridge secret is configured on both services, and backend checks pass.
 
-### Next.js environment
+### Required environment
 
-- `TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED=true` — route the OAuth code exchange to FastAPI and stop setting the legacy Deriv token cookies.
 - `TRADEBRIDGE_BACKEND_URL=https://<backend-host>` — server-only FastAPI base URL.
 - `TRADEBRIDGE_SESSION_BRIDGE_TOKEN=<long-random-secret>` — shared server-only secret for the internal OAuth exchange/revocation endpoint.
-- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED=true` — load account state from FastAPI.
 - `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL=https://<backend-host>` — FastAPI HTTP origin.
-- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_ENABLED=true` and `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL=wss://<backend-host>/deriv/ws` — route Demo trading WebSocket messages through FastAPI.
-- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_ENABLED=true` and `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL=wss://<backend-host>/deriv/live/market` — route public market-data subscriptions through FastAPI.
+- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL=wss://<backend-host>/deriv/ws` — required Demo trading WebSocket.
+- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL=wss://<backend-host>/deriv/live/market` — required market-data WebSocket.
+
+No enable/disable flags are used. Missing configuration must fail closed; do not add a direct Deriv fallback.
 
 ### FastAPI environment
 
@@ -175,8 +174,8 @@ The migration is feature-flagged for a controlled rollout. Do not enable it unti
 ### Important operating limits
 
 - Real-account execution stays disabled. The backend permits Demo accounts only.
-- OAuth credentials are encrypted at rest in `public.deriv_backend_credentials`; active WebSocket connections still close on process restart and clients must reconnect. The migration must be applied before enabling the feature flags.
+- OAuth credentials are encrypted at rest in `public.deriv_backend_credentials`; active WebSocket connections still close on process restart and clients must reconnect. The migration must be applied before deploying the backend-only integration.
 - Live ticks/history are forwarded ephemerally and are not persisted. The legacy `POST /api/internal/market-ticks` endpoint returns HTTP 410. Disable any old external collector that targets it.
 - The WebSocket ticket is short-lived and single-use. Do not log it or put it in a URL.
-- Do not switch flags on in production until end-to-end testing verifies OAuth callback, linked-account listing, live tick/history streaming, proposals, explicit buy confirmation, early sell, settlement/statement reconciliation, reconnect behavior, and sign-out/disconnect revocation.
-- Keep the legacy routes available only as a temporary rollback path during validation; remove them after a verified cutover, not before.
+- Do not deploy the frontend integration to production until end-to-end testing verifies OAuth callback, linked-account listing, live tick/history streaming, proposals, explicit buy confirmation, early sell, settlement/statement reconciliation, reconnect behavior, and sign-out/disconnect revocation.
+- Legacy Next.js Deriv account/session routes are not supported as fallbacks. They must not be called by the frontend and should be retired after verifying no external consumer depends on them.
