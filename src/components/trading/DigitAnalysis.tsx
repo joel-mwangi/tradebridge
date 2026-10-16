@@ -14,10 +14,12 @@ export default function DigitAnalysis({
   target,
   onTargetChange,
 }: {
+  market: MarketInstrument | null;
   snapshot?: MarketSnapshot;
   mode: DigitContractMode;
   onModeChange: (mode: DigitContractMode) => void;
   prediction: DigitPrediction;
+  onPredictionChange?: (prediction: DigitPrediction) => void;
   target: number;
   onTargetChange: (target: number) => void;
 }) {
