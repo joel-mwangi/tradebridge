@@ -16,6 +16,20 @@ export async function POST(request: NextRequest) {
       },
     },
   });
+  if (process.env.TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED === "true") {
+    const { data: { user } } = await supabase.auth.getUser();
+    const backendUrlRaw = process.env.TRADEBRIDGE_BACKEND_URL?.trim();
+    const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
+    const bridgeToken = process.env.TRADEBRIDGE_SESSION_BRIDGE_TOKEN?.trim();
+    if (user && backendUrl && bridgeToken) {
+      await fetch(`${backendUrl}/deriv/internal/credentials/${encodeURIComponent(user.id)}`, {
+        method: "DELETE",
+        headers: { "X-Tradebridge-Bridge-Token": bridgeToken },
+        cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
+      }).catch(() => undefined);
+    }
+  }
   await supabase.auth.signOut();
   // Clear this browser’s Deriv authorization when the platform identity signs out.
   response.cookies.delete("tradebridge_deriv_access_token");
