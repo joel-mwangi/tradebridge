@@ -262,9 +262,7 @@ export default function TradingWorkspace() {
         if (active) {
           setConnected(false);
           setAccounts([]);
-          setAuthMessage(process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true"
-            ? "Could not verify the backend trading session. Confirm the FastAPI URL, allowed origin, and Deriv connection."
-            : "Could not verify the trading connection. Check your network and reconnect.");
+          setAuthMessage("Could not verify the FastAPI trading session. Confirm the backend URL, allowed origin, and Deriv connection.");
         }
       });
 
