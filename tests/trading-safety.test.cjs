@@ -10,6 +10,7 @@ const consentMigration = read("supabase/migrations/20261009140000_add_real_tradi
 const consentRoute = read("src/app/api/auth/deriv/live-consent/route.ts");
 const tradeSessionRoute = read("src/app/api/auth/deriv/trade-session/route.ts");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
+const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const orderResolution = read("src/components/trading/order-resolution.mjs");
 const activityHelpers = read("src/components/trading/activity-helpers.mjs");
 
@@ -196,10 +197,27 @@ const marketHook = read("src/components/trading/useMarketData.ts");
 
 test("backend migration exchanges OAuth code server-to-server and does not set legacy token cookies", () => {
   assert.match(derivCallbackRoute, /\/deriv\/internal\/oauth\/exchange/);
-  assert.match(derivCallbackRoute, /if\s*\(!backendSessionsEnabled\s*&&\s*data\)/);
+  assert.doesNotMatch(derivCallbackRoute, /TOKEN_ENDPOINT|backendSessionsEnabled|DERIV_OAUTH_CLIENT_ID/);
   assert.match(derivCallbackRoute, /response\.cookies\.delete\("tradebridge_deriv_access_token"\)/);
 });
 
+test("all Deriv frontend connections require FastAPI; no direct or legacy fallback is present", () => {
+  assert.doesNotMatch(tradingHook, /\/api\/auth\/deriv\/trade-session/);
+  assert.doesNotMatch(workspace, /\/api\/auth\/deriv\/accounts/);
+  assert.doesNotMatch(marketHook, /wss:\/\/api\.derivws\.com/);
+  assert.match(tradingHook, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL/);
+  assert.match(workspace, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL/);
+  assert.match(marketHook, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL/);
+  assert.match(marketHook, /if \(!PUBLIC_SOCKET\.trim\(\)\)/);
+});
+
+test("OAuth callback requires server-to-server FastAPI exchange and never stores Deriv tokens in cookies", () => {
+  assert.match(derivCallbackRoute, /TRADEBRIDGE_BACKEND_URL/);
+  assert.match(derivCallbackRoute, /TRADEBRIDGE_SESSION_BRIDGE_TOKEN/);
+  assert.match(derivCallbackRoute, /\/deriv\/internal\/oauth\/exchange/);
+  assert.doesNotMatch(derivCallbackRoute, /auth\.deriv\.com\/oauth2\/token|response\.cookies\.set\("tradebridge_deriv_access_token"/);
+  assert.match(derivCallbackRoute, /response\.cookies\.delete\("tradebridge_deriv_access_token"\)/);
+});
 test("live market feed can be switched to FastAPI without storing ticks", () => {
   assert.match(marketHook, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL/);
   assert.match(tickIngestionRoute, /status:\s*410/);
