@@ -242,6 +242,11 @@ export function useBotRunner(
   );
 
   const start = useCallback(() => {
+    if (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true") {
+      appendJournal('warn', 'Automated bot execution is disabled in the FastAPI-owned manual-trading rollout.');
+      patchState({ status: 'error', lastError: 'Automated execution is disabled; use the manual Trade ticket.' });
+      return;
+    }
     if (!connected || !account || !config) {
       appendJournal('warn', 'Cannot start: not connected or missing account/config.');
       return;
