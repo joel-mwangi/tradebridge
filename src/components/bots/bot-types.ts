@@ -112,9 +112,9 @@ export function isBotConfig(value: unknown): value is BotConfig {
     typeof config.name !== 'string' || !config.name.trim() || config.name.length > 80 ||
     typeof config.symbol !== 'string' || !/^[A-Za-z0-9_]{1,32}$/.test(config.symbol) ||
     typeof config.contractType !== 'string' || !BOT_CONTRACT_TYPES.has(config.contractType) ||
-    (config.durationUnit !== 't' && config.durationUnit !== 's') ||
+    config.durationUnit !== 't' ||
     typeof config.duration !== 'number' || !Number.isInteger(config.duration) ||
-    config.duration < 1 || config.duration > (config.durationUnit === 't' ? 10 : 3600) ||
+    config.duration < 1 || config.duration > 10 ||
     !Array.isArray(config.stopConditions) ||
     typeof config.cooldownSeconds !== 'number' || !Number.isFinite(config.cooldownSeconds) ||
     config.cooldownSeconds < 0 || config.cooldownSeconds > 3600 ||
