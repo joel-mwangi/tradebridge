@@ -21,6 +21,24 @@ import styles from '../trading/TradingWorkspace.module.css';
 type InnerTab = 'dashboard' | 'builder' | 'ai';
 type AILabSection = 'market' | 'testing' | 'risk';
 
+
+interface MarketAnalysisResponse {
+  symbol: string;
+  source: "supabase.market_ticks";
+  requested_limit: number;
+  returned_ticks: number;
+  analysis: {
+    sample_size: number;
+    counts: Record<string, number>;
+    frequencies: Record<string, number>;
+    most_observed_digits: number[];
+    least_observed_digits: number[];
+    chi_square_statistic: number;
+    interpretation: string;
+  };
+  warning: string;
+}
+
 interface BotsWorkspaceProps {
   connected: boolean;
   account: DerivAccount | null;
@@ -51,6 +69,12 @@ export function BotsWorkspace({
 }: BotsWorkspaceProps) {
   const [innerTab, setInnerTab] = useState<InnerTab>('dashboard');
   const [aiSection, setAiSection] = useState<AILabSection>('market');
+  const [marketSymbol, setMarketSymbol] = useState('1HZ100V');
+  const [marketLimit, setMarketLimit] = useState('1000');
+  const [marketRefreshNonce, setMarketRefreshNonce] = useState(0);
+  const [marketAnalysis, setMarketAnalysis] = useState<MarketAnalysisResponse | null>(null);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [marketError, setMarketError] = useState<string | null>(null);
   const [configs, setConfigs] = useState<BotConfig[]>([]);
   const [runs, setRuns] = useState<BotRun[]>([]);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
@@ -70,6 +94,49 @@ export function BotsWorkspace({
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
+
+
+  useEffect(() => {
+    if (innerTab !== 'ai' || aiSection !== 'market') return;
+
+    const controller = new AbortController();
+    async function loadMarketAnalysis() {
+      setMarketLoading(true);
+      setMarketError(null);
+      try {
+        const params = new URLSearchParams({ symbol: marketSymbol, limit: marketLimit });
+        const response = await fetch(`/api/ai-lab/market-analysis?${params.toString()}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(typeof payload?.error === 'string' ? payload.error : `Market analysis failed (${response.status})`);
+        }
+        if (
+          !payload || payload.symbol !== marketSymbol ||
+          payload.source !== 'supabase.market_ticks' ||
+          !payload.analysis || !Number.isInteger(payload.analysis.sample_size) ||
+          !payload.analysis.counts || !payload.analysis.frequencies
+        ) {
+          throw new Error('The research API returned an invalid response.');
+        }
+        setMarketAnalysis(payload as MarketAnalysisResponse);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        setMarketAnalysis(null);
+        setMarketError(error instanceof Error ? error.message : 'Could not load market analysis.');
+      } finally {
+        if (!controller.signal.aborted) setMarketLoading(false);
+      }
+    }
+
+    void loadMarketAnalysis();
+    return () => controller.abort();
+  }, [innerTab, aiSection, marketSymbol, marketLimit, marketRefreshNonce]);
 
   const activeConfig = configs.find((c) => c.id === activeConfigId) ?? null;
   const { runState, start, stop, orderRecoveryRequired, acknowledgeOrderReconciled } = useBotRunner(
@@ -213,12 +280,73 @@ export function BotsWorkspace({
                     <h3 style={aiHeadingStyle}>Market Analysis</h3>
                     <p style={aiDescriptionStyle}>Digit distributions, tick statistics, and sample sizes from validated market history.</p>
                   </div>
-                  <div style={aiGridStyle}>
-                    <div style={aiCardStyle}><strong>Digit distributions</strong><p style={aiDescriptionStyle}>Measure observed frequency for digits 0–9 and compare it with an appropriate baseline.</p><span style={aiStatusStyle}>Awaiting connected tick data</span></div>
-                    <div style={aiCardStyle}><strong>Tick statistics</strong><p style={aiDescriptionStyle}>Review sample window, missing or invalid ticks, and distribution summaries.</p><span style={aiStatusStyle}>Data source not connected</span></div>
-                    <div style={aiCardStyle}><strong>Sample quality</strong><p style={aiDescriptionStyle}>Show the number of observations and data-quality warnings before drawing conclusions.</p><span style={aiStatusStyle}>No live results shown</span></div>
+                  <div style={{ display: 'flex', alignItems: 'end', gap: 12, flexWrap: 'wrap', padding: 14, border: '1px solid var(--border)', borderRadius: 12 }}>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                      Market symbol
+                      <select value={marketSymbol} onChange={(event) => setMarketSymbol(event.target.value)} style={{ minWidth: 170, padding: '9px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card, transparent)', color: 'var(--foreground, inherit)' }}>
+                        <option value="1HZ100V">Volatility 100 (1s)</option>
+                        <option value="1HZ75V">Volatility 75 (1s)</option>
+                        <option value="1HZ50V">Volatility 50 (1s)</option>
+                        <option value="1HZ25V">Volatility 25 (1s)</option>
+                        <option value="1HZ10V">Volatility 10 (1s)</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                      Requested sample
+                      <select value={marketLimit} onChange={(event) => setMarketLimit(event.target.value)} style={{ minWidth: 130, padding: '9px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card, transparent)', color: 'var(--foreground, inherit)' }}>
+                        <option value="100">100 ticks</option>
+                        <option value="500">500 ticks</option>
+                        <option value="1000">1,000 ticks</option>
+                        <option value="2500">2,500 ticks</option>
+                        <option value="5000">5,000 ticks</option>
+                        <option value="10000">10,000 ticks</option>
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => setMarketRefreshNonce((value) => value + 1)} disabled={marketLoading} style={{ ...aiTabActiveStyle, opacity: marketLoading ? 0.65 : 1 }}>
+                      {marketLoading ? 'Loading…' : 'Refresh analysis'}
+                    </button>
                   </div>
-                  <p style={aiNoticeStyle}>Analysis service integration is not wired into this screen yet. No market statistics or predictions are being fabricated.</p>
+
+                  {marketError && (
+                    <div role="alert" style={{ ...aiNoticeStyle, borderColor: 'var(--danger, #b45353)' }}>
+                      <strong>Market data unavailable</strong>
+                      <p style={{ margin: '6px 0 0' }}>{marketError}</p>
+                      <p style={{ margin: '6px 0 0' }}>Check that the AI service is deployed, server environment variables are configured, and Supabase has stored ticks for this symbol.</p>
+                    </div>
+                  )}
+
+                  {marketLoading && !marketAnalysis && <p role="status" style={aiNoticeStyle}>Loading validated tick history from the research API…</p>}
+
+                  {marketAnalysis && (
+                    <>
+                      <div style={aiGridStyle}>
+                        <div style={aiCardStyle}><span style={aiDescriptionStyle}>Validated observations</span><strong style={{ fontSize: 26 }}>{marketAnalysis.analysis.sample_size.toLocaleString()}</strong><span style={aiStatusStyle}>Returned from {marketAnalysis.source}</span></div>
+                        <div style={aiCardStyle}><span style={aiDescriptionStyle}>Requested sample</span><strong style={{ fontSize: 26 }}>{marketAnalysis.requested_limit.toLocaleString()}</strong><span style={aiStatusStyle}>{marketAnalysis.returned_ticks < marketAnalysis.requested_limit ? 'Fewer rows available than requested' : 'Sample limit reached'}</span></div>
+                        <div style={aiCardStyle}><span style={aiDescriptionStyle}>Chi-square statistic</span><strong style={{ fontSize: 26 }}>{marketAnalysis.analysis.chi_square_statistic.toLocaleString(undefined, { maximumFractionDigits: 4 })}</strong><span style={aiStatusStyle}>Descriptive uniformity diagnostic only</span></div>
+                      </div>
+                      <div style={{ ...aiCardStyle, minHeight: 0 }}>
+                        <strong>Observed last-digit distribution</strong>
+                        <p style={aiDescriptionStyle}>Frequency of each last digit in the returned historical sample. Percentages describe this sample only.</p>
+                        <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                          {Array.from({ length: 10 }, (_, digit) => {
+                            const key = String(digit);
+                            const count = marketAnalysis.analysis.counts[key] ?? 0;
+                            const frequency = marketAnalysis.analysis.frequencies[key] ?? 0;
+                            return (
+                              <div key={key} style={{ display: 'grid', gridTemplateColumns: '22px minmax(50px, 1fr) 78px', gap: 10, alignItems: 'center', fontSize: 12 }}>
+                                <strong>{digit}</strong>
+                                <div style={{ height: 10, borderRadius: 999, overflow: 'hidden', background: 'var(--border)' }}>
+                                  <div style={{ width: `${Math.max(0, Math.min(100, frequency * 100))}%`, height: '100%', background: 'var(--accent, #16a085)' }} />
+                                </div>
+                                <span style={{ textAlign: 'right', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{count.toLocaleString()} · {(frequency * 100).toFixed(2)}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <p style={aiNoticeStyle}>Source: Supabase market_ticks via the authenticated Python research API. {marketAnalysis.warning} {marketAnalysis.analysis.interpretation}</p>
+                    </>
+                  )}
                 </div>
               )}
 
