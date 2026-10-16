@@ -186,3 +186,28 @@ test("manual stop cannot clear the bot recovery lock while a buy acknowledgement
   assert.match(botRunner, /if \(stage === 'buy'\) \{\s*buyRequestPendingRef\.current = false;/);
   assert.match(botRunner, /buyRequestPendingRef\.current = false;\s*const buyResp/);
 });
+
+
+const derivCallbackRoute = read("src/app/api/auth/deriv/callback/route.ts");
+const tickIngestionRoute = read("src/app/api/internal/market-ticks/route.ts");
+const botRunner = read("src/components/bots/useBotRunner.ts");
+const marketHook = read("src/components/trading/useMarketData.ts");
+
+
+test("backend migration exchanges OAuth code server-to-server and does not set legacy token cookies", () => {
+  assert.match(derivCallbackRoute, /\/deriv\/internal\/oauth\/exchange/);
+  assert.match(derivCallbackRoute, /if\s*\(!backendSessionsEnabled\s*&&\s*data\)/);
+  assert.match(derivCallbackRoute, /response\.cookies\.delete\("tradebridge_deriv_access_token"\)/);
+});
+
+test("live market feed can be switched to FastAPI without storing ticks", () => {
+  assert.match(marketHook, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL/);
+  assert.match(tickIngestionRoute, /status:\s*410/);
+  assert.match(tickIngestionRoute, /tick_persistence_disabled/);
+  assert.doesNotMatch(tickIngestionRoute, /createAdminClient|\.from\("market_ticks"\)/);
+});
+
+test("automated bot runner is disabled in backend-owned manual trading mode", () => {
+  assert.match(botRunner, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED\s*===\s*"true"/);
+  assert.match(botRunner, /Automated bot execution is disabled in the FastAPI-owned manual-trading rollout/);
+});
