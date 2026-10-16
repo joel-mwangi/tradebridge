@@ -211,9 +211,7 @@ export function useTradingSession(
       try {
         let socketUrl = "";
         let socketProtocols: string[] | undefined;
-        const useBackendGateway = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_ENABLED === "true";
-
-        if (useBackendGateway) {
+        {
           // The FastAPI gateway currently supports demo accounts only.
           if (isRealAccount) {
             setSessionState("Real account is read-only in TradeBridge");
@@ -259,35 +257,6 @@ export function useTradingSession(
           socketUrl = `${backendWsUrl.endsWith("/") ? backendWsUrl.slice(0, -1) : backendWsUrl}?account_id=${encodeURIComponent(activeAccount.account_id)}`;
           // Only a short-lived, single-use ticket is sent as a WebSocket subprotocol.
           socketProtocols = ["tradebridge", ticketData.ticket];
-        } else {
-          // Temporary compatibility path while the FastAPI gateway is being rolled out.
-          const response = await fetch("/api/auth/deriv/trade-session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ account_id: activeAccount.account_id }),
-            cache: "no-store",
-          });
-          const data = await response.json() as { url?: string; error?: string };
-          if (cancelled) return;
-          if (!response.ok || !data.url) {
-            const message = data.error === "token_expired"
-              ? "Your Deriv authorization expired. Reconnect Deriv to continue."
-              : data.error === "account_linking_unavailable"
-                ? "Secure account linking is unavailable. Apply the required database migrations, then retry."
-                : data.error === "live_consent_schema_missing"
-                  ? "Apply the live-trading consent migration in Supabase before enabling real trades."
-                  : data.error === "live_consent_required"
-                    ? "Explicitly acknowledge the live-trading risk disclosure to enable this real account."
-                    : data.error === "account_not_linked" || data.error === "account_mismatch"
-                      ? "This account is not linked to the signed-in TradeBridge user."
-                      : data.error === "unsupported_account_type"
-                        ? "This account type is not supported for Options trading."
-                        : "Could not open the authenticated trading session. Check Deriv permissions and retry.";
-            setSessionState(isRealAccount ? "Live trading session unavailable" : "Demo session unavailable");
-            setStatus(message);
-            return;
-          }
-          socketUrl = data.url;
         }
 
         localSocket = socketProtocols
