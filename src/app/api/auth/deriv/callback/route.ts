@@ -119,7 +119,8 @@ export async function GET(request: NextRequest) {
     // endpoints are deployed and the frontend has migrated off Next.js cookies.
     // The OAuth token is sent server-to-server only; it is never put in a URL.
     if (process.env.TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED === "true") {
-      const backendUrl = process.env.TRADEBRIDGE_BACKEND_URL?.trim().replace(/\\/$/, "");
+      const backendUrlRaw = process.env.TRADEBRIDGE_BACKEND_URL?.trim();
+      const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
       const bridgeToken = process.env.TRADEBRIDGE_SESSION_BRIDGE_TOKEN?.trim();
       if (!backendUrl || !bridgeToken) return fail("backend_session_unavailable");
       try {
