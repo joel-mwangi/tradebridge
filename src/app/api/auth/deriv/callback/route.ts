@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
       ? Math.min(Math.floor(data!.expires_in as number), 24 * 60 * 60)
       : 3600;
 
-    const response NextResponse.redirect(new URL("/?connection=connected", appUrl));
+    const response = NextResponse.redirect(new URL("/?connection=connected", appUrl));
     const secure = process.env.NODE_ENV === "production";
 
     // Once the backend session migration is enabled, FastAPI becomes the
