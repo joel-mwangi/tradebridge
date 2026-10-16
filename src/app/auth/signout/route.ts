@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       },
     },
   });
-  if (process.env.TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED === "true") {
+  {
     const { data: { user } } = await supabase.auth.getUser();
     const backendUrlRaw = process.env.TRADEBRIDGE_BACKEND_URL?.trim();
     const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
