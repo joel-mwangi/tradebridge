@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (user && process.env.TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED === "true") {
+    if (user) {
       const backendUrlRaw = process.env.TRADEBRIDGE_BACKEND_URL?.trim();
       const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
       const bridgeToken = process.env.TRADEBRIDGE_SESSION_BRIDGE_TOKEN?.trim();
