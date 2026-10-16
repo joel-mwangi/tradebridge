@@ -156,3 +156,17 @@ test("ambiguous bot orders require an explicit Deriv reconciliation acknowledgem
   assert.match(runPanel, /orderRecoveryRequired/);
   assert.match(runPanel, /I checked Deriv — clear recovery lock/);
 });
+
+test("imported and persisted bot configs are validated before execution", () => {
+  const types = read("src/components/bots/bot-types.ts");
+  const storage = read("src/components/bots/bot-storage.ts");
+  const dashboard = read("src/components/bots/BotDashboard.tsx");
+  assert.match(types, /export function isBotConfig\(value: unknown\): value is BotConfig/);
+  assert.match(types, /BOT_CONTRACT_TYPES/);
+  assert.match(types, /config\.contractType === 'DIGITOVER' && barrier > 8/);
+  assert.match(types, /config\.contractType === 'DIGITUNDER' && barrier < 1/);
+  assert.match(types, /!isPositiveFinite\(stake\.amount\)/);
+  assert.match(storage, /Array\.isArray\(parsed\) \? parsed\.filter\(isBotConfig\) : \[\]/);
+  assert.match(dashboard, /if \(!isBotConfig\(parsed\)\)/);
+  assert.doesNotMatch(dashboard, /const config = parsed as BotConfig/);
+});
