@@ -128,7 +128,7 @@ export function isBotConfig(value: unknown): value is BotConfig {
 
   const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(config.contractType);
   if (needsBarrier) {
-    if (typeof config.barrier !== 'string' || !/^\\d$/.test(config.barrier)) return false;
+    if (typeof config.barrier !== 'string' || !/^\d$/.test(config.barrier)) return false;
     const barrier = Number(config.barrier);
     if (config.contractType === 'DIGITOVER' && barrier > 8) return false;
     if (config.contractType === 'DIGITUNDER' && barrier < 1) return false;
