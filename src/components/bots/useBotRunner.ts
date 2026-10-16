@@ -242,11 +242,9 @@ export function useBotRunner(
   );
 
   const start = useCallback(() => {
-    appendJournal('warn', 'Automated execution is disabled; TradeBridge supports manual trading only.');
-    patchState({ status: 'error', lastError: 'Automated execution is disabled. Use the manual Trade ticket.' });
-    return;
     if (!connected || !account || !config) {
-      appendJournal('warn', 'Cannot start: not connected or missing account/config.');
+      appendJournal('warn', 'Automated execution is disabled; TradeBridge supports manual trading only.');
+      patchState({ status: 'error', lastError: 'Automated execution is disabled. Use the manual Trade ticket.' });
       return;
     }
 
