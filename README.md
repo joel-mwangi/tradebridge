@@ -167,13 +167,15 @@ The migration is feature-flagged for a controlled rollout. Do not enable it unti
 - `TRADEBRIDGE_SESSION_BRIDGE_TOKEN` — same server-only shared secret as Next.js.
 - `TRADEBRIDGE_ALLOWED_ORIGINS` — comma-separated exact origins, for example `https://swigtrade.vercel.app,http://localhost:3000`.
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY` — validate the signed-in app session.
-- `SUPABASE_SERVICE_ROLE_KEY` — server-only account-link ownership checks; never expose this key to the browser.
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only account-link ownership checks and encrypted credential storage; never expose this key to the browser.
+- `TRADEBRIDGE_CREDENTIAL_ENCRYPTION_KEY` — a locally generated Fernet key stored only in FastAPI's secret environment, separate from Supabase. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+- Apply `supabase/migrations/20261017010000_deriv_backend_credentials.sql` to the TradeBridge Supabase project before enabling the migration. This table stores only encrypted OAuth credentials, not market ticks.
 - `TRADEBRIDGE_DEMO_MAX_STAKE=1000` — server-side Demo stake ceiling; choose a lower value if appropriate.
 
 ### Important operating limits
 
 - Real-account execution stays disabled. The backend permits Demo accounts only.
-- OAuth credentials currently live in process memory and are lost on restart; reconnect after a restart. Run a single always-on ASGI process until shared encrypted credential storage and cross-process coordination are implemented.
+- OAuth credentials are encrypted at rest in `public.deriv_backend_credentials`; active WebSocket connections still close on process restart and clients must reconnect. The migration must be applied before enabling the feature flags.
 - Live ticks/history are forwarded ephemerally and are not persisted. The legacy `POST /api/internal/market-ticks` endpoint returns HTTP 410. Disable any old external collector that targets it.
 - The WebSocket ticket is short-lived and single-use. Do not log it or put it in a URL.
 - Do not switch flags on in production until end-to-end testing verifies OAuth callback, linked-account listing, live tick/history streaming, proposals, explicit buy confirmation, early sell, settlement/statement reconciliation, reconnect behavior, and sign-out/disconnect revocation.
