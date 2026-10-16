@@ -226,6 +226,6 @@ test("live market feed can be switched to FastAPI without storing ticks", () => 
 });
 
 test("automated bot runner is disabled in backend-owned manual trading mode", () => {
-  assert.match(botRunner, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED\s*===\s*"true"/);
+  assert.match(botRunner, /Automated execution is disabled; TradeBridge supports manual trading only/);
   assert.match(botRunner, /Automated bot execution is disabled in the FastAPI-owned manual-trading rollout/);
 });
