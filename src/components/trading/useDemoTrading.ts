@@ -235,7 +235,7 @@ export function useTradingSession(
             setStatus("Sign in again before connecting the backend trading gateway.");
             return;
           }
-          const base = backendWsUrl.replace(/\\/$/, "");
+          const base = backendWsUrl.endsWith("/") ? backendWsUrl.slice(0, -1) : backendWsUrl;
           socketUrl = `${base}?account_id=${encodeURIComponent(activeAccount.account_id)}`;
           // The Supabase token is sent as a WebSocket subprotocol, never in the URL.
           socketProtocols = ["tradebridge", accessToken];
