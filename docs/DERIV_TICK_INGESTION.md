@@ -1,38 +1,21 @@
-# Deriv tick ingestion
+# Live market data: ephemeral only
 
-TradeBridge stores durable Deriv tick history in its existing Supabase/Postgres database. The Cloudflare collector must send batches to `POST /api/internal/market-ticks`; it must not expose database credentials in the browser.
+TradeBridge's active market feed now uses the FastAPI WebSocket proxy and keeps live tick/history messages in memory only. **Do not configure or run a Cloudflare tick collector for database persistence.** The legacy `POST /api/internal/market-ticks` endpoint returns HTTP 410 (`tick_persistence_disabled`) and does not write to Supabase.
 
-## Required server environment variables
+The existing `public.market_ticks` table and research endpoints are not deleted by this migration, so any historical rows already stored remain until an explicit data-retention decision is made. No new live tick rows should be written through TradeBridge.
 
-- `NEXT_PUBLIC_SUPABASE_URL`: the TradeBridge Supabase project URL (already used by the app).
-- `SUPABASE_SERVICE_ROLE_KEY`: existing server-only key used by `src/lib/supabase/admin.ts`.
-- `DERIV_TICK_INGEST_TOKEN`: a new high-entropy shared secret, configured on the TradeBridge server and the Cloudflare Worker as a secret. Never commit it or place it in a `NEXT_PUBLIC_*` variable.
+## Live feed
 
-## Endpoint contract
+- Browser connects to the configured FastAPI WebSocket URL (typically `/deriv/live/market`).
+- FastAPI opens the public Deriv WebSocket upstream and forwards requests/responses.
+- Market history and tick updates are ephemeral; the frontend retains only its bounded in-memory view for display.
+- This proxy is not an archive and cannot recover a continuous history after disconnect. Deriv history requests can refill the chart/analysis window on reconnect.
 
-Send an authenticated JSON request:
+## Rollout
 
-```http
-POST /api/internal/market-ticks
-Authorization: Bearer <DERIV_TICK_INGEST_TOKEN>
-Content-Type: application/json
-```
+1. Deploy `ai-tradingbridge` to an always-on ASGI host.
+2. Configure `TRADEBRIDGE_ALLOWED_ORIGINS` with exact frontend origins.
+3. Set `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_ENABLED=true` and `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL=wss://<backend-host>/deriv/live/market` only after the backend endpoint has been smoke-tested.
+4. Disable any external Cloudflare Worker or scheduled collector that writes ticks to `/api/internal/market-ticks`.
 
-```json
-{
-  "ticks": [
-    { "symbol": "1HZ100V", "quote": 1407.35, "epoch": 1792149592, "pip_size": 2 }
-  ]
-}
-```
-
-Send batches of at most 500 ticks. The endpoint validates each tick, calculates the final digit server-side, and uses the unique key `(symbol, epoch, quote)` to make retried batches idempotent. It returns HTTP 202 with received/inserted/duplicate counts.
-
-## Migration and rollout
-
-1. Apply `supabase/migrations/20261016100000_market_ticks.sql` to the actual TradeBridge Supabase project.
-2. Configure `DERIV_TICK_INGEST_TOKEN` on the deployed TradeBridge server and Cloudflare Worker.
-3. Update the collector to batch POST ticks to `/api/internal/market-ticks` and retry failed batches with bounded backoff.
-4. Verify inserts and restart recovery before relying on the history for research.
-
-The route is server-to-server only. The migration revokes table access from browser roles and grants it only to `service_role`. This endpoint is for market-data research, not automated order execution or a claim of predictive edge.
+Do not delete the existing table or migration as part of this change; historical data removal requires a separate explicit decision.
