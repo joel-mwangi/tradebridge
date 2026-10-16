@@ -17,6 +17,7 @@ import {
   toPosition,
 } from "./activity-helpers.mjs";
 import { logger } from "../../lib/logger.mjs";
+import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/client";
 
 const EMPTY_BALANCE = { balance: null as number | null, currency: "" };
 
@@ -208,34 +209,70 @@ export function useTradingSession(
 
     async function connect() {
       try {
-        const response = await fetch("/api/auth/deriv/trade-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ account_id: activeAccount.account_id }),
-          cache: "no-store",
-        });
-        const data = await response.json() as { url?: string; error?: string };
-        if (cancelled) return;
-        if (!response.ok || !data.url) {
-          const message = data.error === "token_expired"
-            ? "Your Deriv authorization expired. Reconnect Deriv to continue."
-            : data.error === "account_linking_unavailable"
-              ? "Secure account linking is unavailable. Apply the required database migrations, then retry."
-              : data.error === "live_consent_schema_missing"
-                ? "Apply the live-trading consent migration in Supabase before enabling real trades."
-                : data.error === "live_consent_required"
-                  ? "Explicitly acknowledge the live-trading risk disclosure to enable this real account."
-                  : data.error === "account_not_linked" || data.error === "account_mismatch"
-                    ? "This account is not linked to the signed-in TradeBridge user."
-                    : data.error === "unsupported_account_type"
-                      ? "This account type is not supported for Options trading."
-                      : "Could not open the authenticated trading session. Check Deriv permissions and retry.";
-          setSessionState(isRealAccount ? "Live trading session unavailable" : "Demo session unavailable");
-          setStatus(message);
-          return;
+        let socketUrl = "";
+        let socketProtocols: string[] | undefined;
+        const useBackendGateway = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_ENABLED === "true";
+
+        if (useBackendGateway) {
+          // The FastAPI gateway currently supports demo accounts only.
+          if (isRealAccount) {
+            setSessionState("Real account is read-only in TradeBridge");
+            setStatus("Real-account execution remains disabled until backend risk controls and order reconciliation are verified.");
+            return;
+          }
+          const backendWsUrl = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL?.trim();
+          if (!backendWsUrl) {
+            setSessionState("Backend trading gateway unavailable");
+            setStatus("Configure NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL before enabling the backend gateway.");
+            return;
+          }
+          const supabase = createSupabaseBrowserClient();
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (cancelled) return;
+          const accessToken = sessionData.session?.access_token;
+          if (sessionError || !accessToken) {
+            setSessionState("App session unavailable");
+            setStatus("Sign in again before connecting the backend trading gateway.");
+            return;
+          }
+          const base = backendWsUrl.replace(/\\/$/, "");
+          socketUrl = `${base}?account_id=${encodeURIComponent(activeAccount.account_id)}`;
+          // The Supabase token is sent as a WebSocket subprotocol, never in the URL.
+          socketProtocols = ["tradebridge", accessToken];
+        } else {
+          // Temporary compatibility path while the FastAPI gateway is being rolled out.
+          const response = await fetch("/api/auth/deriv/trade-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ account_id: activeAccount.account_id }),
+            cache: "no-store",
+          });
+          const data = await response.json() as { url?: string; error?: string };
+          if (cancelled) return;
+          if (!response.ok || !data.url) {
+            const message = data.error === "token_expired"
+              ? "Your Deriv authorization expired. Reconnect Deriv to continue."
+              : data.error === "account_linking_unavailable"
+                ? "Secure account linking is unavailable. Apply the required database migrations, then retry."
+                : data.error === "live_consent_schema_missing"
+                  ? "Apply the live-trading consent migration in Supabase before enabling real trades."
+                  : data.error === "live_consent_required"
+                    ? "Explicitly acknowledge the live-trading risk disclosure to enable this real account."
+                    : data.error === "account_not_linked" || data.error === "account_mismatch"
+                      ? "This account is not linked to the signed-in TradeBridge user."
+                      : data.error === "unsupported_account_type"
+                        ? "This account type is not supported for Options trading."
+                        : "Could not open the authenticated trading session. Check Deriv permissions and retry.";
+            setSessionState(isRealAccount ? "Live trading session unavailable" : "Demo session unavailable");
+            setStatus(message);
+            return;
+          }
+          socketUrl = data.url;
         }
 
-        localSocket = new WebSocket(data.url);
+        localSocket = socketProtocols
+          ? new WebSocket(socketUrl, socketProtocols)
+          : new WebSocket(socketUrl);
         socketRef.current = localSocket;
 
         localSocket.onopen = () => {
