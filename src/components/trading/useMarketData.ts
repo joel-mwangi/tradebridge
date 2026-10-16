@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MarketCandle, MarketInstrument, MarketSnapshot, PricePoint } from "./types";
 
-const PUBLIC_SOCKET = "wss://api.derivws.com/trading/v1/options/ws/public";
+const USE_BACKEND_MARKET_STREAM = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_ENABLED === "true";
+const PUBLIC_SOCKET = USE_BACKEND_MARKET_STREAM ? (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL ?? "") : "wss://api.derivws.com/trading/v1/options/ws/public";
 const PREFERRED_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "R_100", "R_50", "frxEURUSD", "frxGBPUSD", "frxXAUUSD"];
 const MAX_POINTS = 1000;
 
