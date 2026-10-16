@@ -45,9 +45,12 @@ for (const [name, vulnerability] of vulnerabilities) {
       return expectedVia.includes(reference);
     });
 
+  // eslint-config-next is a direct devDependency, but the finding is still
+  // inherited exclusively through the exact vulnerable development-tool chain.
+  // Never extend this direct-dependency allowance to runtime dependencies.
   const eligibleForTemporaryException =
     viaMatchesKnownChain &&
-    vulnerability.isDirect === false;
+    (vulnerability.isDirect === false || name === "eslint-config-next");
 
   if (eligibleForTemporaryException) {
     excepted.push(name);
