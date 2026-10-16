@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import MarketWatch from "./MarketWatch";
 import DigitAnalysis from "./DigitAnalysis";
+import DemoTradeTicket from "./DemoTradeTicket";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
@@ -597,6 +598,29 @@ export default function TradingWorkspace() {
                           onPredictionChange={setPredictionAndValidateTarget}
                           target={digitTarget}
                           onTargetChange={setDigitTarget}
+                        />
+                      </div>
+                      <div className={styles.marketColumn}>
+                        <DemoTradeTicket
+                          connected={connected}
+                          account={activeAccount}
+                          realTradingEnabled={effectiveLiveTradingEnabled}
+                          maxRealStake={maxRealStake}
+                          maxDailyLoss={maxDailyLoss}
+                          realizedProfit={trading.realizedProfit}
+                          orderResolutionRequired={trading.orderResolutionRequired}
+                          acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
+                          market={selectedMarket}
+                          mode={digitMode}
+                          prediction={digitPrediction}
+                          onPredictionChange={setPredictionAndValidateTarget}
+                          target={digitTarget}
+                          sessionState={trading.sessionState}
+                          status={trading.status}
+                          busy={trading.busy}
+                          quote={trading.quote}
+                          requestQuote={trading.requestQuote}
+                          confirmQuote={trading.confirmQuote}
                         />
                       </div>
                     </div>
