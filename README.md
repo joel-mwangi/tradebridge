@@ -110,3 +110,10 @@ npm run build
 ```
 
 The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included rather than running only one file. Dependency updates are proposed weekly by Dependabot.
+
+
+## Dependency security policy
+
+- The lockfile overrides the vulnerable Next.js transitive PostCSS dependency with PostCSS 8.5.23.
+- CI fails for unresolved high/critical npm advisories, except the narrowly identified upstream `braces` advisory GHSA-vfj7-8cjw-p6xm. As of October 2026, the advisory has no published patched `braces` release; the check allows only that exact non-direct advisory and keeps it visible in the audit output.
+- Recheck the exception by 2026-11-16 and remove it immediately when upstream publishes a fix. Do not suppress unrelated `braces` advisories or new high/critical vulnerabilities.
