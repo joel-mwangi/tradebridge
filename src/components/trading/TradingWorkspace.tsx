@@ -215,7 +215,7 @@ export default function TradingWorkspace() {
     stop: stopBot,
     orderRecoveryRequired: botOrderRecovery,
     acknowledgeOrderReconciled: botAcknowledge,
-  } = useBotRunner(connected, activeAccount, activeChartBot, trading.sharedSocketRef, trading.nextSharedSeqId, trading.sessionState);
+  } = useBotRunner(false, null, null, trading.sharedSocketRef, trading.nextSharedSeqId, "Automated execution disabled; manual trading only.");
 
   useEffect(() => {
     let active = true;
