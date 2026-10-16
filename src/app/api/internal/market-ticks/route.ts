@@ -12,6 +12,8 @@ type IncomingTick = {
   pip_size: number;
 };
 
+type ParsedTick = IncomingTick & { last_digit: number };
+
 const MAX_TICKS_PER_REQUEST = 500;
 const MAX_BODY_BYTES = 1_000_000;
 
@@ -26,7 +28,7 @@ function constantTimeTokenMatch(provided: string, expected: string): boolean {
     timingSafeEqual(providedBytes, expectedBytes);
 }
 
-function parseTick(value: unknown): (IncomingTick & { last_digit: number }) | null {
+function parseTick(value: unknown): ParsedTick | null {
   if (!value || typeof value !== "object") return null;
   const tick = value as Record<string, unknown>;
   if (typeof tick.symbol !== "string" || !/^[A-Za-z0-9_]{2,32}$/.test(tick.symbol)) return null;
@@ -63,9 +65,19 @@ export async function POST(request: Request) {
     return jsonError("Request body too large", 413);
   }
 
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch {
+    return jsonError("Could not read request body", 400);
+  }
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+    return jsonError("Request body too large", 413);
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody);
   } catch {
     return jsonError("Expected a valid JSON body", 400);
   }
@@ -79,12 +91,13 @@ export async function POST(request: Request) {
   if (parsedTicks.some((tick) => tick === null)) {
     return jsonError("One or more ticks have invalid fields", 400);
   }
+  const validTicks = parsedTicks.filter((tick): tick is ParsedTick => tick !== null);
 
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("market_ticks")
-      .upsert(parsedTicks, {
+      .upsert(validTicks, {
         onConflict: "symbol,epoch,quote",
         ignoreDuplicates: true,
       })
@@ -97,9 +110,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      received: parsedTicks.length,
+      received: validTicks.length,
       inserted: data?.length ?? 0,
-      duplicatesIgnored: parsedTicks.length - (data?.length ?? 0),
+      duplicatesIgnored: validTicks.length - (data?.length ?? 0),
     }, { status: 202 });
   } catch (error) {
     console.error("Deriv tick ingestion failed:", error instanceof Error ? error.message : "unknown error");
