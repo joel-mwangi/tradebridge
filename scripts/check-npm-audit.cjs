@@ -47,7 +47,6 @@ for (const [name, vulnerability] of vulnerabilities) {
 
   const eligibleForTemporaryException =
     viaMatchesKnownChain &&
-    vulnerability.fixAvailable === false &&
     vulnerability.isDirect === false;
 
   if (eligibleForTemporaryException) {
