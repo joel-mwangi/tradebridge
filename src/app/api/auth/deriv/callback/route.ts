@@ -147,20 +147,28 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(new URL("/?connection=connected", appUrl));
     const secure = process.env.NODE_ENV === "production";
 
-    response.cookies.set("tradebridge_deriv_access_token", data.access_token, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      path: "/",
-      maxAge: expiresIn,
-    });
-    response.cookies.set("tradebridge_deriv_owner", user.id, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      path: "/",
-      maxAge: expiresIn,
-    });
+    // Once the backend session migration is enabled, FastAPI becomes the
+    // only runtime owner of the Deriv token. Keep the legacy cookies only for
+    // the opt-out rollback path.
+    if (process.env.TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED !== "true") {
+      response.cookies.set("tradebridge_deriv_access_token", data.access_token, {
+        httpOnly: true,
+        secure,
+        sameSite: "lax",
+        path: "/",
+        maxAge: expiresIn,
+      });
+      response.cookies.set("tradebridge_deriv_owner", user.id, {
+        httpOnly: true,
+        secure,
+        sameSite: "lax",
+        path: "/",
+        maxAge: expiresIn,
+      });
+    } else {
+      response.cookies.delete("tradebridge_deriv_access_token");
+      response.cookies.delete("tradebridge_deriv_owner");
+    }
     response.cookies.delete("tradebridge_oauth_state");
     response.cookies.delete("tradebridge_pkce_verifier");
     return response;
