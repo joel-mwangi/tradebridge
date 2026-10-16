@@ -15,7 +15,18 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    if (user && process.env.TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED === "true") {
+      const backendUrlRaw = process.env.TRADEBRIDGE_BACKEND_URL?.trim();
+      const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
+      const bridgeToken = process.env.TRADEBRIDGE_SESSION_BRIDGE_TOKEN?.trim();
+      if (backendUrl && bridgeToken) {
+        await fetch(`${backendUrl}/deriv/internal/credentials/${encodeURIComponent(user.id)}`, {
+          method: "DELETE",
+          headers: { "X-Tradebridge-Bridge-Token": bridgeToken },
+          cache: "no-store",
+          signal: AbortSignal.timeout(5_000),
+        }).catch(() => undefined);
+      }
       const admin = createAdminClient();
       await admin
         .from("deriv_live_trading_consents")
