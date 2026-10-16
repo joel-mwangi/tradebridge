@@ -1,6 +1,6 @@
 # TradeBridge
 
-TradeBridge is a Next.js workspace for Deriv Options. It uses Deriv OAuth 2.0 Authorization Code + PKCE, retrieves linked account details server-side, streams market ticks, and supports quote-and-confirm orders on Demo accounts.
+TradeBridge is a Next.js workspace for Deriv Options. In the FastAPI-owned session mode, Next.js handles the browser redirect and app-account linking while FastAPI exchanges the Deriv OAuth code, owns Deriv credentials, retrieves linked accounts, proxies market data, and executes explicitly confirmed Demo orders.
 
 Real accounts can be linked and inspected, but **real-money order entry is deliberately disabled**. TradeBridge currently opens Deriv trading WebSockets directly in the browser; browser-only stake caps and loss stops can be bypassed. Real trading must stay disabled until a server-side execution gateway validates every order and can enforce limits and revocation. The app does not promise profit or prevent an account owner from trading independently on Deriv.
 
@@ -144,3 +144,37 @@ Build success does not replace live-provider verification. Test Demo ownership, 
 - The lockfile overrides the vulnerable Next.js transitive PostCSS dependency with PostCSS 8.5.23.
 - CI fails for unresolved high/critical npm advisories, except the narrowly identified upstream `braces` advisory GHSA-vfj7-8cjw-p6xm. As of October 2026, the advisory has no published patched `braces` release; the check allows only that exact advisory and its development-tool dependency chain (`braces` → `micromatch` → `fast-glob` → `@next/eslint-plugin-next` → `eslint-config-next`). `eslint-config-next` is a direct devDependency, but its exception is limited to that exact inherited advisory path; runtime dependencies and any other advisory remain blocking. All findings remain visible in the audit output; unrelated advisories still fail CI.
 - Recheck the exception by 2026-11-16 and remove it immediately when upstream publishes a fix. Do not suppress unrelated `braces` advisories or new high/critical vulnerabilities.
+
+
+## FastAPI-owned Deriv session migration
+
+The migration is feature-flagged for a controlled rollout. Do not enable it until the FastAPI service is deployed on an always-on ASGI host, the same bridge secret is configured on both services, and the backend checks pass.
+
+### Next.js environment
+
+- `TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED=true` — route the OAuth code exchange to FastAPI and stop setting the legacy Deriv token cookies.
+- `TRADEBRIDGE_BACKEND_URL=https://<backend-host>` — server-only FastAPI base URL.
+- `TRADEBRIDGE_SESSION_BRIDGE_TOKEN=<long-random-secret>` — shared server-only secret for the internal OAuth exchange/revocation endpoint.
+- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED=true` — load account state from FastAPI.
+- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL=https://<backend-host>` — FastAPI HTTP origin.
+- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_ENABLED=true` and `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL=wss://<backend-host>/deriv/ws` — route Demo trading WebSocket messages through FastAPI.
+- `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_ENABLED=true` and `NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL=wss://<backend-host>/deriv/live/market` — route public market-data subscriptions through FastAPI.
+
+### FastAPI environment
+
+- `DERIV_OAUTH_CLIENT_ID` — same Deriv OAuth client ID registered for this app.
+- `DERIV_OAUTH_REDIRECT_URI` — exact callback URL, for example `https://<frontend-host>/api/auth/deriv/callback`; it must match the OAuth request.
+- `TRADEBRIDGE_SESSION_BRIDGE_TOKEN` — same server-only shared secret as Next.js.
+- `TRADEBRIDGE_ALLOWED_ORIGINS` — comma-separated exact origins, for example `https://swigtrade.vercel.app,http://localhost:3000`.
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY` — validate the signed-in app session.
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only account-link ownership checks; never expose this key to the browser.
+- `TRADEBRIDGE_DEMO_MAX_STAKE=1000` — server-side Demo stake ceiling; choose a lower value if appropriate.
+
+### Important operating limits
+
+- Real-account execution stays disabled. The backend permits Demo accounts only.
+- OAuth credentials currently live in process memory and are lost on restart; reconnect after a restart. Run a single always-on ASGI process until shared encrypted credential storage and cross-process coordination are implemented.
+- Live ticks/history are forwarded ephemerally and are not persisted. The legacy `POST /api/internal/market-ticks` endpoint returns HTTP 410. Disable any old external collector that targets it.
+- The WebSocket ticket is short-lived and single-use. Do not log it or put it in a URL.
+- Do not switch flags on in production until end-to-end testing verifies OAuth callback, linked-account listing, live tick/history streaming, proposals, explicit buy confirmation, early sell, settlement/statement reconciliation, reconnect behavior, and sign-out/disconnect revocation.
+- Keep the legacy routes available only as a temporary rollback path during validation; remove them after a verified cutover, not before.
