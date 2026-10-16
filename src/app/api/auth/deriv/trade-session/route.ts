@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchDerivAccounts } from "@/lib/deriv/accounts";
 import { getAuthenticatedDerivContext } from "@/lib/deriv/authenticated";
 import { getOwnedDerivAccountIds } from "@/lib/deriv/ownership";
+import { logger } from "@/lib/logger.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,7 +109,10 @@ export async function POST(request: NextRequest) {
     let socketUrl: URL;
     try {
       socketUrl = new URL(data.url);
-    } catch {
+    } catch (error) {
+      logger.warn("deriv.trading_session.invalid_provider_url", {
+        account_ref: accountId.slice(-4),
+      }, error);
       return NextResponse.json({ error: "invalid_trading_session" }, { status: 502, headers });
     }
 
@@ -126,7 +130,10 @@ export async function POST(request: NextRequest) {
       account_type: "demo",
       account_id: accountId,
     }, { headers });
-  } catch {
+  } catch (error) {
+    logger.error("deriv.trading_session.request_failed", {
+      account_ref: accountId.slice(-4),
+    }, error);
     return NextResponse.json({ error: "trading_session_unavailable" }, { status: 502, headers });
   }
 }
