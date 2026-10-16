@@ -94,22 +94,19 @@ The OAuth access token stays in a server-only HttpOnly cookie and is never expos
 
 ## Verification
 
-GitHub Actions runs `npx tsc --noEmit` and `npm run build` for changes proposed to `main`. Build success does not replace live-provider verification. Test Demo ownership, quotes, order confirmation, order-timeout reconciliation, live P/L updates, early sale, statement refresh, and disconnection. Test Real accounts in read-only mode; do not add a Real order socket until server-side policy enforcement is deployed.
-
-## Verification
-
 Run the same checks used in GitHub Actions before opening a pull request:
 
 ```bash
 npm ci
-npm audit --audit-level=high
 npm run lint
 npm test
 npx tsc --noEmit
 npm run build
 ```
 
-The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included rather than running only one file. Dependency updates are proposed weekly by Dependabot.
+The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included rather than running only one file. Dependency updates are proposed weekly by Dependabot. CI runs the dependency audit through the repository's scoped audit checker so the single documented upstream `braces` advisory does not mask or suppress unrelated high/critical findings.
+
+Build success does not replace live-provider verification. Test Demo ownership, quotes, order confirmation, order-timeout reconciliation, live P/L updates, early sale, statement refresh, and disconnection. Test Real accounts in read-only mode; do not add a Real order socket until server-side policy enforcement is deployed.
 
 
 ## Dependency security policy
