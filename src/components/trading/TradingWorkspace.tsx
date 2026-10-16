@@ -18,6 +18,7 @@ import { RunPanel } from "../bots/RunPanel";
 import { loadBotConfigs } from "../bots/bot-storage";
 import type { BotConfig } from "../bots/bot-types";
 import { logger } from "../../lib/logger.mjs";
+import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/client";
 
 type AccountsResponse = {
   connected?: boolean;
@@ -225,7 +226,24 @@ export default function TradingWorkspace() {
       window.history.replaceState({}, "", window.location.pathname);
     }
 
-    fetch("/api/auth/deriv/accounts", { cache: "no-store" })
+    const accountsRequest = (async () => {
+      if (process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true") {
+        const backendUrl = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL?.trim().replace(/\\/$/, "");
+        if (!backendUrl) throw new Error("Backend session URL is not configured.");
+        const supabase = createSupabaseBrowserClient();
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (sessionError || !accessToken) throw new Error("App session is unavailable.");
+        return fetch(`${backendUrl}/deriv/accounts`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+        });
+      }
+      return fetch("/api/auth/deriv/accounts", { cache: "no-store" });
+    })();
+
+    accountsRequest
       .then(async (response) => {
         const data = await response.json() as AccountsResponse;
         if (!active) return;
@@ -246,7 +264,9 @@ export default function TradingWorkspace() {
         if (active) {
           setConnected(false);
           setAccounts([]);
-          setAuthMessage("Could not verify the trading connection. Check your network and reconnect.");
+          setAuthMessage(process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED === "true"
+            ? "Could not verify the backend trading session. Confirm the FastAPI URL, allowed origin, and Deriv connection."
+            : "Could not verify the trading connection. Check your network and reconnect.");
         }
       });
 
