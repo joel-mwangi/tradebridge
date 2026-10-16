@@ -8,53 +8,15 @@ import type {
   BotTransaction,
   JournalEntry,
   BotStatus,
-  StakeStrategy,
 } from './bot-types';
 import { saveNewRun } from './bot-storage';
-
-function makeInitialState(currency: string): BotRunState {
-  return {
-    status: 'idle',
-    currentStake: 0,
-    tradeCount: 0,
-    wins: 0,
-    losses: 0,
-    netPnl: 0,
-    currency,
-    transactions: [],
-    journal: [],
-    startedAt: null,
-    lastError: null,
-  };
-}
-
-function nextStakeAmount(
-  strategy: StakeStrategy,
-  lastProfit: number | null,
-  prevStake: number
-): number {
-  switch (strategy.type) {
-    case 'fixed':
-      return strategy.amount;
-
-    case 'martingale': {
-      if (lastProfit === null) return strategy.base;
-      if (lastProfit < 0) {
-        return Math.min(prevStake * strategy.multiplier, strategy.maxStake);
-      }
-      return strategy.base;
-    }
-
-    case 'dalembert': {
-      if (lastProfit === null) return strategy.unit;
-      const base = strategy.unit;
-      if (lastProfit < 0) {
-        return Math.min(prevStake + strategy.unit, strategy.maxStake);
-      }
-      return Math.max(prevStake - strategy.unit, base);
-    }
-  }
-}
+import { logger } from '../../lib/logger.mjs';
+import {
+  classifySettlement,
+  findBotStopReason,
+  makeInitialState,
+  nextStakeAmount,
+} from './bot-runner-helpers.mjs';
 
 export function useBotRunner(
   connected: boolean,
@@ -266,7 +228,11 @@ export function useBotRunner(
         underlying_symbol: cfg.symbol,
         ...(cfg.barrier ? { barrier: cfg.barrier } : {}),
         req_id: reqId,
-      })); } catch {
+      })); } catch (error) {
+        logger.error('bot.proposal.send_failed', {
+          bot_id: cfg.id,
+          account_ref: acc.account_id.slice(-4),
+        }, error);
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = null;
         stopBot('Could not send proposal on the Deriv WebSocket.');
@@ -307,7 +273,11 @@ export function useBotRunner(
         appendJournal('error', 'An unresolved order marker exists for this bot. Reconcile open contracts and account history in Deriv before restarting.');
         return;
       }
-    } catch {
+    } catch (error) {
+      logger.warn('bot.order_marker.read_failed', {
+        bot_id: config.id,
+        account_ref: account.account_id.slice(-4),
+      }, error);
       appendJournal('error', 'Browser storage is unavailable; cannot safely confirm there is no unresolved order.');
       return;
     }
@@ -403,7 +373,11 @@ export function useBotRunner(
         try {
           localStorage.setItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`, 'pending');
           setOrderRecoveryRequired(true);
-        } catch {
+        } catch (error) {
+          logger.error('bot.order_marker.write_failed', {
+            bot_id: cfg.id,
+            account_ref: acc.account_id.slice(-4),
+          }, error);
           orderOutcomeUnknownRef.current = true;
           stopBot('Cannot persist the order safety marker. Trading stopped before purchase; verify the Deriv account before retrying.');
           return;
@@ -421,7 +395,11 @@ export function useBotRunner(
             orderOutcomeUnknownRef.current = true;
             stopBot('Timed out waiting for Deriv purchase acknowledgement. The order outcome is unknown; reconcile the Deriv account before restarting.');
           }, 15000);
-        } catch {
+        } catch (error) {
+          logger.error('bot.purchase.send_failed', {
+            bot_id: cfg.id,
+            account_ref: acc.account_id.slice(-4),
+          }, error);
           orderOutcomeUnknownRef.current = true;
           stopBot('Purchase request could not be sent reliably. Reconcile the Deriv account before restarting.');
         }
@@ -456,7 +434,12 @@ export function useBotRunner(
             orderOutcomeUnknownRef.current = true;
             stopBot('Timed out waiting for contract status. The contract may still be open; reconcile it in Deriv before restarting.');
           }, 30000);
-        } catch {
+        } catch (error) {
+          logger.error('bot.contract.subscribe_failed', {
+            bot_id: cfg.id,
+            account_ref: acc.account_id.slice(-4),
+            contract_ref: String(buyResp.contract_id).slice(-4),
+          }, error);
           orderOutcomeUnknownRef.current = true;
           stopBot('Could not subscribe to contract status. The contract may still be open; reconcile it in Deriv before restarting.');
         }
@@ -524,9 +507,7 @@ export function useBotRunner(
           status: poc.status ?? 'sold',
         };
 
-        const isCancelled = contractStatus === 'cancelled';
-        const isWin = contractStatus === 'won' || (contractStatus !== 'lost' && !isCancelled && (profit ?? 0) > 0);
-        const isLoss = !isWin && !isCancelled;
+        const { isCancelled, isWin, isLoss } = classifySettlement(contractStatus, profit);
         const prior = stateRef.current;
         const nextTransactions = [tx, ...prior.transactions];
         const nextRunState: BotRunState = {
@@ -547,26 +528,7 @@ export function useBotRunner(
         // Check stop conditions
         const s = nextRunState;
         const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
-        let stopReason: string | null = null;
-
-        for (const cond of cfg.stopConditions) {
-          if (cond.type === 'profit' && s.netPnl >= cond.target) { stopReason = `Profit target reached (+${s.netPnl.toFixed(2)})`; break; }
-          if (cond.type === 'loss' && s.netPnl <= -Math.abs(cond.limit)) { stopReason = `Loss limit reached (${s.netPnl.toFixed(2)})`; break; }
-          if (cond.type === 'tradeCount' && s.tradeCount >= cond.max) { stopReason = `Max trades reached (${s.tradeCount})`; break; }
-          if (cond.type === 'time' && elapsed >= cond.seconds) { stopReason = `Time limit reached (${Math.round(elapsed)}s)`; break; }
-        }
-        if (!stopReason && cfg.maxTradesPerDay > 0 && s.tradeCount >= cfg.maxTradesPerDay) {
-          stopReason = `Daily trade cap reached (${s.tradeCount})`;
-        }
-        if (!stopReason && isLoss) {
-          let consec = 0;
-          for (const t of s.transactions) {
-            if (t.status.toLowerCase() === 'cancelled') break;
-            if ((t.profit ?? 0) < 0) consec++;
-            else break;
-          }
-          if (consec >= cfg.maxConsecutiveLosses) stopReason = `Max consecutive losses (${consec})`;
-        }
+        const stopReason = findBotStopReason(cfg, s, elapsed, isLoss);
 
         if (stopReason) {
           appendJournal('info', stopReason);
@@ -616,7 +578,11 @@ export function useBotRunner(
       contractStatusSeenRef.current = false;
       setOrderRecoveryRequired(false);
       appendJournal('warn', 'Recovery lock cleared after manual Deriv reconciliation.');
-    } catch {
+    } catch (error) {
+      logger.warn('bot.order_marker.clear_failed', {
+        bot_id: cfg.id,
+        account_ref: acc.account_id.slice(-4),
+      }, error);
       appendJournal('error', 'Could not clear recovery lock because browser storage is unavailable.');
     }
   }, [appendJournal]);

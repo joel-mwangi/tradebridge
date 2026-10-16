@@ -10,6 +10,8 @@ const consentMigration = read("supabase/migrations/20261009140000_add_real_tradi
 const consentRoute = read("src/app/api/auth/deriv/live-consent/route.ts");
 const tradeSessionRoute = read("src/app/api/auth/deriv/trade-session/route.ts");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
+const orderResolution = read("src/components/trading/order-resolution.mjs");
+const activityHelpers = read("src/components/trading/activity-helpers.mjs");
 
 
 
@@ -32,8 +34,9 @@ test("trading sessions are limited to Deriv Demo Options accounts", () => {
 });
 
 test("unresolved order state is shared across tabs, rather than isolated to sessionStorage", () => {
-  assert.match(tradingHook, /window\.localStorage\.getItem\(key\)/);
-  assert.match(tradingHook, /window\.localStorage\.setItem\(key, value\)/);
+  assert.match(tradingHook, /const browserStorage = \(\) => window\.localStorage/);
+  assert.match(orderResolution, /getStorage\(\)\.getItem\(key\)/);
+  assert.match(orderResolution, /getStorage\(\)\.setItem\(key, value\)/);
   assert.match(tradingHook, /window\.addEventListener\("storage", syncResolutionState\)/);
   assert.doesNotMatch(tradingHook, /window\.sessionStorage/);
 });
@@ -62,7 +65,8 @@ test("transaction notifications cannot overwrite balance snapshots or trigger a 
   assert.ok(transactionHandler, "transaction event handler must exist");
   assert.doesNotMatch(transactionHandler, /setBalance\(/);
   assert.doesNotMatch(transactionHandler, /refreshAccount\(/);
-  assert.match(transactionHandler, /\.slice\(0, 500\)/);
+  assert.match(activityHelpers, /mergeActivityRows\(current, incoming, maxRows = 500\)/);
+  assert.match(activityHelpers, /\.slice\(0, maxRows\)/);
 });
 
 test("real-account OTP sessions stay disabled until execution is enforced server-side", () => {
@@ -98,8 +102,9 @@ test("automated bot requests Deriv proposals with the required symbol field and 
 
 test("automated bot treats Deriv-cancelled contracts as settled without counting a loss", () => {
   const botRunner = read("src/components/bots/useBotRunner.ts");
-  assert.match(botRunner, /contractStatus === 'cancelled'/);
-  assert.match(botRunner, /const isLoss = !isWin && !isCancelled/);
+  const botRunnerHelpers = read("src/components/bots/bot-runner-helpers.mjs");
+  assert.match(botRunnerHelpers, /normalizedStatus === "cancelled"/);
+  assert.match(botRunnerHelpers, /isLoss: !isWin && !isCancelled/);
   assert.match(botRunner, /Trade \$\{isCancelled \? 'CANCELLED'/);
 });
 

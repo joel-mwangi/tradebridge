@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test"
+    "test": "node --test",
+    "coverage": "node --experimental-test-coverage --test-coverage-include=src/lib/bots/strategy-engine.mjs --test-coverage-include=src/components/trading/order-resolution.mjs --test-coverage-include=src/components/trading/activity-helpers.mjs --test-coverage-include=src/components/bots/bot-runner-helpers.mjs --test-coverage-lines=50 --test"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

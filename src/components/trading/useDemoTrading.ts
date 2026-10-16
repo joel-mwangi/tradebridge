@@ -2,9 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AccountActivity, DemoQuote, DerivAccount, DigitContractType, OpenPosition } from "./types";
+import {
+  clearOrderResolution as clearStoredOrderResolution,
+  readOrderResolution as readStoredOrderResolution,
+  writeOrderResolution as writeStoredOrderResolution,
+} from "./order-resolution.mjs";
+import {
+  mergeActivityRows,
+  numeric,
+  statementHasMore,
+  statementPageLimit,
+  STATEMENT_PAGE_SIZE,
+  toActivity,
+  toPosition,
+} from "./activity-helpers.mjs";
+import { logger } from "../../lib/logger.mjs";
 
 const EMPTY_BALANCE = { balance: null as number | null, currency: "" };
-const STATEMENT_PAGE_SIZE = 30;
 
 type TradeInput = {
   symbol: string;
@@ -31,78 +45,16 @@ type ApiMessage = {
   subscription?: { id?: string };
 };
 
-function numeric(value: unknown): number | null {
-  const parsed = Number(value);
-  return value !== null && value !== undefined && value !== "" && Number.isFinite(parsed) ? parsed : null;
-}
-
-function toPosition(raw: Record<string, unknown>): OpenPosition | null {
-  const contractId = String(raw.contract_id ?? "");
-  if (!contractId) return null;
-  return {
-    contractId,
-    symbol: String(raw.underlying_symbol ?? raw.symbol ?? "—"),
-    contractType: String(raw.contract_type ?? "Contract"),
-    buyPrice: numeric(raw.buy_price),
-    currentSpot: numeric(raw.current_spot ?? raw.current_spot_display_value),
-    payout: numeric(raw.payout),
-    profit: numeric(raw.profit),
-    currency: String(raw.currency ?? "USD"),
-    startedAt: numeric(raw.date_start ?? raw.purchase_time),
-    expiresAt: numeric(raw.date_expiry ?? raw.expiry_time),
-    status: String(raw.status ?? "open"),
-    longcode: String(raw.longcode ?? raw.display_name ?? ""),
-  };
-}
-
-function toActivity(raw: Record<string, unknown>): AccountActivity | null {
-  const id = String(raw.transaction_id ?? raw.id ?? "");
-  if (!id) return null;
-  return {
-    id,
-    time: numeric(raw.transaction_time ?? raw.time ?? raw.transaction_timestamp),
-    action: String(raw.action_type ?? raw.action ?? raw.type ?? "transaction"),
-    description: String(raw.longcode ?? raw.description ?? raw.shortcode ?? "Account transaction"),
-    amount: numeric(raw.amount),
-    balance: numeric(raw.balance_after ?? raw.balance),
-    currency: String(raw.currency ?? "USD"),
-    contractId: raw.contract_id === undefined ? undefined : String(raw.contract_id),
-    profit: numeric(raw.profit),
-  };
-}
-
 function startOfLocalDayEpoch(): number {
   const now = new Date();
   return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
 }
 
-function readOrderResolution(key: string | null): string | null {
-  if (!key) return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    // If storage is unavailable, fail closed rather than assuming the order failed.
-    return "unknown";
-  }
-}
-
-function writeOrderResolution(key: string | null, value: "pending" | "unknown") {
-  if (!key) return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // The in-memory lock protects this tab; cross-tab persistence is best-effort.
-  }
-}
-
-function clearOrderResolution(key: string | null) {
-  if (!key) return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // In-memory reconciliation state will still remain active until cleared.
-  }
-}
+const browserStorage = () => window.localStorage;
+const readOrderResolution = (key: string | null) => readStoredOrderResolution(browserStorage, key);
+const writeOrderResolution = (key: string | null, value: "pending" | "unknown") =>
+  writeStoredOrderResolution(browserStorage, key, value);
+const clearOrderResolution = (key: string | null) => clearStoredOrderResolution(browserStorage, key);
 
 export function useTradingSession(
   connected: boolean,
@@ -187,7 +139,7 @@ export function useTradingSession(
       send({ portfolio: 1, req_id: portfolioId });
       if (!statementRequestRef.current) {
         const statementId = nextId();
-        const limit = Math.max(STATEMENT_PAGE_SIZE, Math.min(loadedStatementCountRef.current, 999));
+        const limit = statementPageLimit(loadedStatementCountRef.current);
         statementRequestRef.current = { id: statementId, offset: 0, limit };
         setActivityLoading(true);
         send({ statement: 1, limit, offset: 0, description: 1, req_id: statementId });
@@ -307,7 +259,10 @@ export function useTradingSession(
           let message: ApiMessage;
           try {
             message = JSON.parse(event.data) as ApiMessage;
-          } catch {
+          } catch (error) {
+            logger.warn("deriv.websocket.invalid_message", {
+              account_ref: account?.account_id.slice(-4),
+            }, error);
             setStatus("Deriv returned a message TradeBridge could not read.");
             return;
           }
@@ -367,11 +322,7 @@ export function useTradingSession(
               // current-balance snapshot. Balance subscription messages own
               // balance state; the periodic refresh reconciles ledger/P&L.
               setActivity((current) => {
-                const unique = new Map<string, AccountActivity>();
-                for (const item of [incoming, ...current]) unique.set(item.id, item);
-                return [...unique.values()]
-                  .sort((a, b) => (b.time ?? 0) - (a.time ?? 0))
-                  .slice(0, 500);
+                return mergeActivityRows([incoming, ...current], []);
               });
             }
             return;
@@ -407,19 +358,20 @@ export function useTradingSession(
               .map((item) => toActivity(item))
               .filter((item): item is AccountActivity => item !== null);
 
-            const hasMore = typeof message.statement.count === "number"
-              ? request.offset + rawTransactions.length < message.statement.count
-              : rawTransactions.length >= request.limit;
+            const hasMore = statementHasMore(
+              message.statement.count,
+              request.offset,
+              rawTransactions.length,
+              request.limit,
+            );
 
             if (request.offset === 0) {
-              const sorted = nextActivity.sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+              const sorted = mergeActivityRows([], nextActivity);
               setActivity(sorted);
               loadedStatementCountRef.current = Math.max(STATEMENT_PAGE_SIZE, sorted.length);
             } else {
               setActivity((current) => {
-                const unique = new Map<string, AccountActivity>();
-                for (const item of [...current, ...nextActivity]) unique.set(item.id, item);
-                const merged = [...unique.values()].sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+                const merged = mergeActivityRows(current, nextActivity);
                 loadedStatementCountRef.current = Math.max(STATEMENT_PAGE_SIZE, merged.length);
                 return merged;
               });
@@ -566,7 +518,11 @@ export function useTradingSession(
           }
           setSessionState(isRealAccount ? "Real trading disconnected" : "Demo trading disconnected");
         };
-      } catch {
+      } catch (error) {
+        logger.error("deriv.session.connect_failed", {
+          account_ref: account?.account_id.slice(-4),
+          account_type: account?.account_type,
+        }, error);
         if (!cancelled) {
           setSessionState("Demo session unavailable");
           setStatus("Could not connect to Deriv. Check your internet connection and retry.");

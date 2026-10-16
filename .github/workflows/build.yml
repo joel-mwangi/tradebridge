@@ -53,6 +53,9 @@ jobs:
       - name: Regression tests
         run: npm test
 
+      - name: Trading logic coverage
+        run: npm run coverage
+
       - name: Type-check
         run: npx tsc --noEmit
 

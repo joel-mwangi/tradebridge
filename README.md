@@ -42,6 +42,18 @@ npm run dev
 
 On Windows PowerShell use `Copy-Item .env.example .env.local`. Open http://localhost:3000.
 
+## Container deployment
+
+Docker Compose builds and runs the production Next.js app. Supabase and Deriv remain provider services; configure a Supabase project reachable from both the browser and container, and set the Deriv OAuth client ID before starting:
+
+```bash
+cp .env.example .env
+# Fill in the Supabase URL and publishable key, Supabase service-role key, and Deriv client ID.
+docker compose up --build
+```
+
+The app is available at http://localhost:3000. Compose checks `/api/health` and restarts the app if its process exits. Do not commit `.env` or pass service-role credentials as `NEXT_PUBLIC_*` variables.
+
 ## Configure Deriv OAuth
 
 1. Register an OAuth 2.0 application in Deriv.
@@ -100,11 +112,12 @@ Run the same checks used in GitHub Actions before opening a pull request:
 npm ci
 npm run lint
 npm test
+npm run coverage
 npx tsc --noEmit
 npm run build
 ```
 
-The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included rather than running only one file. Dependency updates are proposed weekly by Dependabot. CI runs the dependency audit through the repository's scoped audit checker so the single documented upstream `braces` advisory does not mask or suppress unrelated high/critical findings.
+The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included. The coverage command enforces at least 50% line coverage across the strategy engine, order-resolution storage, and statement/position parsers. Dependency updates are proposed weekly by Dependabot. CI runs the dependency audit through the repository's scoped audit checker so the single documented upstream `braces` advisory does not mask or suppress unrelated high/critical findings.
 
 Build success does not replace live-provider verification. Test Demo ownership, quotes, order confirmation, order-timeout reconciliation, live P/L updates, early sale, statement refresh, and disconnection. Test Real accounts in read-only mode; do not add a Real order socket until server-side policy enforcement is deployed.
 

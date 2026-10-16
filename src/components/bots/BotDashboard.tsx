@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { isBotConfig, type BotConfig, type BotRun } from './bot-types';
 import { upsertBotConfig, deleteBotConfig } from './bot-storage';
+import { BotConfigModal, type BotModalFields, type BotModalMode } from './BotConfigModal';
 import styles from './BotDashboard.module.css';
 
 interface BotDashboardProps {
@@ -16,22 +17,10 @@ interface BotDashboardProps {
   onClearRuns: () => boolean;
 }
 
-type ModalMode = 'new' | 'quick' | null;
 type RunFilter = 'all' | 'error' | 'stopped';
 const RUNS_PAGE_SIZE = 8;
 
-interface ModalFields {
-  name: string;
-  symbol: string;
-  contractType: string;
-  barrier: string;
-  stake: string;
-  profitTarget: string;
-  lossLimit: string;
-  maxTrades: string;
-}
-
-function defaultFields(): ModalFields {
+function defaultFields(): BotModalFields {
   return {
     name: 'My Bot',
     symbol: '1HZ100V',
@@ -64,8 +53,8 @@ export function BotDashboard({
 }: BotDashboardProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const botsListRef = useRef<HTMLDivElement>(null);
-  const [modalMode, setModalMode] = useState<ModalMode>(null);
-  const [fields, setFields] = useState<ModalFields>(defaultFields);
+  const [modalMode, setModalMode] = useState<BotModalMode>(null);
+  const [fields, setFields] = useState<BotModalFields>(defaultFields);
   const [importError, setImportError] = useState('');
   const [formError, setFormError] = useState('');
   const [runFilter, setRunFilter] = useState<RunFilter>('all');
@@ -82,7 +71,7 @@ export function BotDashboard({
   });
   const visibleRuns = showAllRuns ? filteredRuns : filteredRuns.slice(0, RUNS_PAGE_SIZE);
 
-  function openModal(mode: ModalMode) {
+  function openModal(mode: BotModalMode) {
     setFields(defaultFields());
     setFormError('');
     setModalMode(mode);
@@ -93,7 +82,7 @@ export function BotDashboard({
     setFormError('');
   }
 
-  function handleFieldChange(key: keyof ModalFields, value: string) {
+  function handleFieldChange(key: keyof BotModalFields, value: string) {
     setFields((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -483,177 +472,14 @@ export function BotDashboard({
         )}
       </div>
 
-      {/* Quick-strategy / New Bot modal */}
-      {modalMode !== null && (
-        <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Create Bot">
-          <div className={styles.modalBox}>
-            <h3 className={styles.modalTitle}>
-              {modalMode === 'quick' ? 'Quick Strategy' : 'New Bot'}
-            </h3>
-
-            <div>
-              <label className={styles.fieldLabel} htmlFor="bd-name">
-                Bot Name
-              </label>
-              <input
-                id="bd-name"
-                className={styles.fieldInput}
-                type="text"
-                value={fields.name}
-                onChange={(e) => handleFieldChange('name', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className={styles.fieldLabel} htmlFor="bd-symbol">
-                Symbol
-              </label>
-              <select
-                id="bd-symbol"
-                className={styles.fieldSelect}
-                value={fields.symbol}
-                onChange={(e) => handleFieldChange('symbol', e.target.value)}
-              >
-                <optgroup label="Volatility (1s)">
-                  <option value="1HZ10V">Volatility 10 (1s)</option>
-                  <option value="1HZ25V">Volatility 25 (1s)</option>
-                  <option value="1HZ50V">Volatility 50 (1s)</option>
-                  <option value="1HZ75V">Volatility 75 (1s)</option>
-                  <option value="1HZ100V">Volatility 100 (1s)</option>
-                </optgroup>
-                <optgroup label="Volatility">
-                  <option value="R_10">Volatility 10</option>
-                  <option value="R_25">Volatility 25</option>
-                  <option value="R_50">Volatility 50</option>
-                  <option value="R_75">Volatility 75</option>
-                  <option value="R_100">Volatility 100</option>
-                </optgroup>
-              </select>
-            </div>
-
-            <div>
-              <label className={styles.fieldLabel} htmlFor="bd-contract-type">
-                Contract Type
-              </label>
-              <select
-                id="bd-contract-type"
-                className={styles.fieldSelect}
-                value={fields.contractType}
-                onChange={(e) => handleFieldChange('contractType', e.target.value)}
-              >
-                <option value="DIGITOVER">Digit Over</option>
-                <option value="DIGITUNDER">Digit Under</option>
-                <option value="DIGITEVEN">Even</option>
-                <option value="DIGITODD">Odd</option>
-                <option value="DIGITMATCH">Matches</option>
-                <option value="DIGITDIFF">Differs</option>
-              </select>
-            </div>
-
-            {['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(fields.contractType) && (
-              <div>
-                <label className={styles.fieldLabel} htmlFor="bd-barrier">
-                  {fields.contractType === 'DIGITOVER' || fields.contractType === 'DIGITUNDER'
-                    ? 'Barrier digit'
-                    : 'Target digit'}
-                </label>
-                <input
-                  id="bd-barrier"
-                  className={styles.fieldInput}
-                  type="number"
-                  min={fields.contractType === 'DIGITUNDER' ? 1 : 0}
-                  max={fields.contractType === 'DIGITOVER' ? 8 : 9}
-                  step="1"
-                  value={fields.barrier}
-                  onChange={(e) => handleFieldChange('barrier', e.target.value)}
-                  aria-describedby="bd-barrier-hint"
-                />
-                <span id="bd-barrier-hint" className={styles.fieldHint}>
-                  {fields.contractType === 'DIGITOVER'
-                    ? 'Choose 0 to 8.'
-                    : fields.contractType === 'DIGITUNDER'
-                      ? 'Choose 1 to 9.'
-                      : 'Choose a digit from 0 to 9.'}
-                </span>
-              </div>
-            )}
-
-            <div>
-              <label className={styles.fieldLabel} htmlFor="bd-stake">
-                Stake
-              </label>
-              <input
-                id="bd-stake"
-                className={styles.fieldInput}
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={fields.stake}
-                onChange={(e) => handleFieldChange('stake', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className={styles.fieldLabel} htmlFor="bd-profit-target">
-                Profit Target (optional)
-              </label>
-              <input
-                id="bd-profit-target"
-                className={styles.fieldInput}
-                type="number"
-                min="0"
-                step="0.01"
-                value={fields.profitTarget}
-                onChange={(e) => handleFieldChange('profitTarget', e.target.value)}
-                placeholder="Leave blank to disable"
-              />
-            </div>
-
-            <div>
-              <label className={styles.fieldLabel} htmlFor="bd-loss-limit">
-                Loss Limit (optional)
-              </label>
-              <input
-                id="bd-loss-limit"
-                className={styles.fieldInput}
-                type="number"
-                min="0"
-                step="0.01"
-                value={fields.lossLimit}
-                onChange={(e) => handleFieldChange('lossLimit', e.target.value)}
-                placeholder="Leave blank to disable"
-              />
-            </div>
-
-            <div>
-              <label className={styles.fieldLabel} htmlFor="bd-max-trades">
-                Max Trades (optional)
-              </label>
-              <input
-                id="bd-max-trades"
-                className={styles.fieldInput}
-                type="number"
-                min="1"
-                step="1"
-                value={fields.maxTrades}
-                onChange={(e) => handleFieldChange('maxTrades', e.target.value)}
-                placeholder="Leave blank to disable"
-              />
-            </div>
-
-            {formError && <p className={styles.errorMsg}>{formError}</p>}
-
-            <div className={styles.modalActions}>
-              <button className={styles.cancelBtn} onClick={closeModal} type="button">
-                Cancel
-              </button>
-              <button className={styles.confirmBtn} onClick={handleConfirm} type="button">
-                Create Bot
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BotConfigModal
+        mode={modalMode}
+        fields={fields}
+        error={formError}
+        onFieldChange={handleFieldChange}
+        onClose={closeModal}
+        onConfirm={handleConfirm}
+      />
     </div>
   );
 }
