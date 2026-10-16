@@ -17,24 +17,42 @@ try {
   process.exit(2);
 }
 
+// Time-boxed exception for the single upstream-unpatched braces advisory and
+// the dev-tool dependency chain that can only be remediated once braces ships
+// a patched release. Any additional advisory or available fix remains blocking.
+const allowedVia = {
+  braces: ["https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"],
+  micromatch: ["braces"],
+  "fast-glob": ["micromatch"],
+  "@next/eslint-plugin-next": ["fast-glob"],
+  "eslint-config-next": ["@next/eslint-plugin-next"],
+};
+
 const vulnerabilities = Object.entries(report.vulnerabilities ?? {});
-const allowedUnpatchedBracesAdvisory = "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm";
 const blocking = [];
+const excepted = [];
 
 for (const [name, vulnerability] of vulnerabilities) {
   if (!["high", "critical"].includes(vulnerability.severity)) continue;
 
-  const onlyKnownUnpatchedBracesAdvisory =
-    name === "braces" &&
-    vulnerability.fixAvailable === false &&
-    vulnerability.isDirect === false &&
+  const expectedVia = allowedVia[name];
+  const viaMatchesKnownChain =
+    expectedVia &&
     Array.isArray(vulnerability.via) &&
     vulnerability.via.length > 0 &&
-    vulnerability.via.every((item) =>
-      typeof item === "object" && item.url === allowedUnpatchedBracesAdvisory
-    );
+    vulnerability.via.every((item) => {
+      const reference = typeof item === "string" ? item : item?.url;
+      return expectedVia.includes(reference);
+    });
 
-  if (!onlyKnownUnpatchedBracesAdvisory) {
+  const eligibleForTemporaryException =
+    viaMatchesKnownChain &&
+    vulnerability.fixAvailable === false &&
+    vulnerability.isDirect === false;
+
+  if (eligibleForTemporaryException) {
+    excepted.push(name);
+  } else {
     blocking.push({ name, severity: vulnerability.severity, via: vulnerability.via });
   }
 }
@@ -44,22 +62,11 @@ if (blocking.length > 0) {
   process.exit(1);
 }
 
-const allowed = vulnerabilities.filter(([name, vulnerability]) =>
-  name === "braces" &&
-  vulnerability.severity === "high" &&
-  vulnerability.fixAvailable === false &&
-  Array.isArray(vulnerability.via) &&
-  vulnerability.via.length > 0 &&
-  vulnerability.via.every((item) =>
-    typeof item === "object" && item.url === allowedUnpatchedBracesAdvisory
-  )
-);
-
-if (allowed.length) {
+if (excepted.length) {
   console.warn(
-    "Temporary audit exception: braces has no published patched release for GHSA-vfj7-8cjw-p6xm. " +
-    "It is a transitive development-tool dependency, is not pinned as a direct dependency, and remains visible in this audit. " +
-    "Recheck upstream before 2026-11-16; remove this exception as soon as a fix is available."
+    "Temporary exception for the unpatched braces advisory chain only: " +
+    excepted.sort().join(", ") +
+    ". This is development tooling, remains visible in npm audit, and must be rechecked by 2026-11-16."
   );
 }
 console.log(`Dependency audit gate passed: ${vulnerabilities.length} package(s) have advisories; no unexcepted high/critical issues remain.`);
