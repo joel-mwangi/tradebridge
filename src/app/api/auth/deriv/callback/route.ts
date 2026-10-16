@@ -115,6 +115,34 @@ export async function GET(request: NextRequest) {
     const expiresIn = Number.isFinite(data.expires_in) && (data.expires_in ?? 0) > 0
       ? Math.min(Math.floor(data.expires_in as number), 24 * 60 * 60)
       : 3600;
+    // Optional dual-write bridge. Keep disabled until the FastAPI session
+    // endpoints are deployed and the frontend has migrated off Next.js cookies.
+    // The OAuth token is sent server-to-server only; it is never put in a URL.
+    if (process.env.TRADEBRIDGE_BACKEND_DERIV_SESSIONS_ENABLED === "true") {
+      const backendUrl = process.env.TRADEBRIDGE_BACKEND_URL?.trim().replace(/\\/$/, "");
+      const bridgeToken = process.env.TRADEBRIDGE_SESSION_BRIDGE_TOKEN?.trim();
+      if (!backendUrl || !bridgeToken) return fail("backend_session_unavailable");
+      try {
+        const bridgeResponse = await fetch(`${backendUrl}/deriv/internal/credentials`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Tradebridge-Bridge-Token": bridgeToken,
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            access_token: data.access_token,
+            expires_in: expiresIn,
+          }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!bridgeResponse.ok) return fail("backend_session_unavailable");
+      } catch {
+        return fail("backend_session_unavailable");
+      }
+    }
+
     const response = NextResponse.redirect(new URL("/?connection=connected", appUrl));
     const secure = process.env.NODE_ENV === "production";
 
