@@ -56,8 +56,6 @@ export default function DemoTradeTicket({
 }: Props) {
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("5");
-  const [takeProfit, setTakeProfit] = useState("");
-  const [stopLoss, setStopLoss] = useState("");
   const [now, setNow] = useState(Date.now());
   const accountType = (account?.account_type ?? "").toLowerCase();
   const isDemo = accountType === "demo";
@@ -176,25 +174,6 @@ export default function DemoTradeTicket({
       </div>
     </div>
     <p className={styles.compactControlsHint} id="ticket-inputs-note">{isRealAccount ? "Read-only: real-money order entry is disabled." : "Demo funds only · quotes expire after 30 seconds."}</p>
-
-    <details className={styles.advancedRisk}>
-      <summary>Advanced risk settings <span>Optional</span></summary>
-      <p className={styles.compactRiskNote}>These thresholds are for reference only; they are not sent to Deriv or automatically enforced by the current order flow.</p>
-      <div className={styles.compactRiskFields}>
-        <div>
-          <label className={styles.fieldLabel} htmlFor="tradebridge-tp">Take Profit</label>
-          <div className={styles.inputShell}>
-            <input id="tradebridge-tp" type="number" placeholder="Target P/L" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} disabled={!ready || busy} />
-          </div>
-        </div>
-        <div>
-          <label className={styles.fieldLabel} htmlFor="tradebridge-sl">Stop Loss</label>
-          <div className={styles.inputShell}>
-            <input id="tradebridge-sl" type="number" placeholder="Max loss" value={stopLoss} onChange={e => setStopLoss(e.target.value)} disabled={!ready || busy} />
-          </div>
-        </div>
-      </div>
-    </details>
 
     {quote && quoteMatchesForm && <div className={isRealAccount ? styles.liveQuoteCard : styles.quoteCard} role="status">
       <div className={styles.quoteCardHeader}><span>LIVE QUOTE</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
