@@ -128,13 +128,12 @@ test("bot dashboard can search and filter run history and explain saved errors",
   assert.match(dashboard, /onClick=\{\(\) => botsListRef\.current\?\.scrollIntoView/);
 });
 
-test("bot run status and history are read from the authenticated server API", () => {
+test("bot run status and history use local run summaries and the shared-session runner", () => {
   const workspace = read("src/components/bots/BotsWorkspace.tsx");
-  assert.match(workspace, /fetch\('\/api\/bots\/runs\?limit=100'/);
-  assert.match(workspace, /setRuns\(records\.map\(toDashboardRun\)\)/);
-  assert.match(workspace, /refreshServerDetail\(activeServerRunId\)/);
-  assert.match(workspace, /Server run history/);
-  assert.doesNotMatch(workspace, /handleClearRuns|loadBotRuns/);
+  assert.match(workspace, /setRuns\(loadBotRuns\(\)\)/);
+  assert.match(workspace, /BOT_RUNS_UPDATED_EVENT/);
+  assert.match(workspace, /useBotRunner\(connected, account, activeConfig, sharedSocketRef, nextSharedSeqId, sessionState\)/);
+  assert.doesNotMatch(workspace, /\/api\/bots\/runs/);
 });
 
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
@@ -155,13 +154,13 @@ test("bot request timeouts stop execution and retain ambiguous purchase state fo
 });
 
 
-test("ambiguous server bot orders cannot be cleared by browser acknowledgement", () => {
-  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
+test("ambiguous bot orders remain locked until explicit Deriv reconciliation", () => {
+  const botRunner = read("src/components/bots/useBotRunner.ts");
   const runPanel = read("src/components/bots/RunPanel.tsx");
-  assert.match(botsWorkspace, /reconciliation_required/);
+  assert.match(botRunner, /orderRecoveryRequired/);
+  assert.match(botRunner, /window\.confirm\([\s\S]*confirmed there is no unresolved\/open contract/);
   assert.match(runPanel, /orderRecoveryRequired/);
-  assert.match(runPanel, /cannot be cleared by a browser acknowledgement/);
-  assert.doesNotMatch(runPanel, /I checked Deriv — clear recovery lock/);
+  assert.match(runPanel, /local safety lock must only be cleared after checking Deriv directly/);
 });
 
 test("imported and persisted bot configs are validated before execution", () => {
@@ -226,10 +225,11 @@ test("live market feed can be switched to FastAPI without storing ticks", () => 
   assert.doesNotMatch(tickIngestionRoute, /createAdminClient|\.from\("market_ticks"\)/);
 });
 
-test("automated bot execution is server-authoritative and absent from chart browser code", () => {
+test("automated bot execution stays in the Bots workspace and uses the guarded Demo runner", () => {
   assert.doesNotMatch(workspace, /useBotRunner\(connected, activeAccount/);
   assert.match(workspace, /Bot Workspace/);
-  assert.match(botsWorkspace, /\/api\/bots\/runs/);
-  assert.match(botsWorkspace, /reconciliation_required/);
+  assert.match(botsWorkspace, /useBotRunner\(connected, account, activeConfig/);
+  assert.doesNotMatch(botsWorkspace, /\/api\/bots\/runs/);
+  assert.match(botRunner, /account\.account_type \?\? ''\)\.toLowerCase\(\) !== 'demo'/);
   assert.doesNotMatch(botRunner, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED/);
 });
