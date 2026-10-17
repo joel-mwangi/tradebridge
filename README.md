@@ -102,12 +102,12 @@ Review the migration list and target project before running database changes. Do
 
 - `GET /api/auth/deriv/start` — creates PKCE/state values and redirects to Deriv.
 - `GET /api/auth/deriv/callback` — validates state, exchanges the code server-side, verifies returned accounts, and links account IDs to the authenticated user.
-- `GET /api/auth/deriv/status` — verifies the saved authorization against Deriv.
+- `GET /api/auth/deriv/status` — proxies safe connection status from FastAPI; it never calls Deriv directly.
 - `GET /api/auth/deriv/live-consent?account_id=...` — reads the signed-in user's consent and configured app limits for a linked account.
 - `POST /api/auth/deriv/live-consent` — revokes consent for an owned Real account. Enabling new live consent is denied while server-side order enforcement is unavailable.
 - `POST /api/auth/deriv/disconnect` — clears local Deriv cookies and attempts to revoke persisted live-trading consent.
 
-The Deriv OAuth access token is held by FastAPI and is never stored in a browser cookie. The browser requests a short-lived single-use FastAPI WebSocket ticket; all upstream Deriv connections are owned by FastAPI.
+The Deriv OAuth access token is held by FastAPI and is never stored in a browser cookie. Account listing and status checks use FastAPI; the browser requests a short-lived single-use FastAPI WebSocket ticket; all upstream Deriv REST and WebSocket connections are owned by FastAPI. The legacy Next.js `/api/auth/deriv/trade-session` and `/api/auth/deriv/demo-session` routes return HTTP 410 and must not be used.
 
 ## Risk controls — important limitations
 
@@ -178,4 +178,4 @@ No enable/disable flags are used. Missing configuration must fail closed; do not
 - Live ticks/history are forwarded ephemerally and are not persisted. The legacy `POST /api/internal/market-ticks` endpoint returns HTTP 410. Disable any old external collector that targets it.
 - The WebSocket ticket is short-lived and single-use. Do not log it or put it in a URL.
 - Do not deploy the frontend integration to production until end-to-end testing verifies OAuth callback, linked-account listing, live tick/history streaming, proposals, explicit buy confirmation, early sell, settlement/statement reconciliation, reconnect behavior, and sign-out/disconnect revocation.
-- Legacy Next.js Deriv account/session routes are not supported as fallbacks. They must not be called by the frontend and should be retired after verifying no external consumer depends on them.
+- Legacy Next.js Deriv account/session routes are not supported as fallbacks. The direct-provider session routes are retired; account listing and status routes proxy only to FastAPI.
