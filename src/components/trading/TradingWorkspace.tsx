@@ -14,10 +14,6 @@ import PriceChart from "./PriceChart";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { MostTradedMarkets } from "./MostTradedMarkets";
 import { BotsWorkspace } from "../bots/BotsWorkspace";
-import { useBotRunner } from "../bots/useBotRunner";
-import { RunPanel } from "../bots/RunPanel";
-import { loadBotConfigs } from "../bots/bot-storage";
-import type { BotConfig } from "../bots/bot-types";
 import { logger } from "../../lib/logger.mjs";
 import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/client";
 
@@ -131,14 +127,6 @@ export default function TradingWorkspace() {
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [tradeView, setTradeView] = useState<"analyse" | "charts">("analyse");
 
-  // Bot configs for Charts view — loaded from localStorage
-  const [botConfigs, setBotConfigs] = useState<BotConfig[]>([]);
-  const [activeChartBotId, setActiveChartBotId] = useState<string | null>(null);
-  useEffect(() => {
-    const configs = loadBotConfigs();
-    setBotConfigs(configs);
-    if (configs.length > 0) setActiveChartBotId(configs[0].id);
-  }, []);
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
   const [digitTarget, setDigitTarget] = useState(5);
@@ -207,16 +195,6 @@ export default function TradingWorkspace() {
   const liveBalance = activeAccountIsDemo || effectiveLiveTradingEnabled
     ? trading.balance.balance ?? activeAccount?.balance ?? null
     : activeAccount?.balance ?? null;
-
-  // Bot runner for Charts view — shares the authenticated trading session socket
-  const activeChartBot = botConfigs.find((c) => c.id === activeChartBotId) ?? null;
-  const {
-    runState: botRunState,
-    start: startBot,
-    stop: stopBot,
-    orderRecoveryRequired: botOrderRecovery,
-    acknowledgeOrderReconciled: botAcknowledge,
-  } = useBotRunner(connected, activeAccount, activeChartBot, trading.sharedSocketRef, trading.nextSharedSeqId, trading.sessionState);
 
   useEffect(() => {
     let active = true;
@@ -651,104 +629,22 @@ export default function TradingWorkspace() {
                       onLoadCandles={requestCandles}
                     />
 
-                    {/* Right: bot run panel */}
-                    <div style={{
+                    {/* Automated execution is server-owned; the chart never submits bot orders. */}
+                    <aside style={{
                       border: "1px solid var(--line)", borderRadius: "14px",
                       background: "var(--panel)", boxShadow: "var(--card-shadow)",
-                      overflow: "hidden",
+                      padding: "18px", display: "grid", alignContent: "start", gap: "10px",
                     }}>
-                      {/* Run / Stop bar */}
-                      <div style={{
-                        display: "flex", alignItems: "center", gap: "10px",
-                        padding: "10px 14px", borderBottom: "1px solid var(--line)",
-                        background: botRunState.status === "running" || botRunState.status === "cooldown"
-                          ? "var(--teal-soft)" : "var(--surface)",
-                      }}>
-                        {(botRunState.status === "idle" || botRunState.status === "stopped" || botRunState.status === "error") && (
-                          <button
-                            type="button"
-                            onClick={startBot}
-                            disabled={!activeChartBot || !connected}
-                            style={{
-                              display: "inline-flex", alignItems: "center", gap: "6px",
-                              minHeight: "34px", padding: "0 16px",
-                              border: "none", borderRadius: "8px",
-                              background: "var(--teal)", color: "#0b1320",
-                              fontSize: "12px", fontWeight: 800, cursor: "pointer",
-                              opacity: !activeChartBot || !connected ? 0.5 : 1,
-                            }}
-                          >▶ Run</button>
-                        )}
-                        {(botRunState.status === "running" || botRunState.status === "cooldown" || botRunState.status === "connecting" || botRunState.status === "stopping") && (
-                          <button
-                            type="button"
-                            onClick={stopBot}
-                            style={{
-                              display: "inline-flex", alignItems: "center", gap: "6px",
-                              minHeight: "34px", padding: "0 16px",
-                              border: "none", borderRadius: "8px",
-                              background: "var(--red)", color: "#fff",
-                              fontSize: "12px", fontWeight: 800, cursor: "pointer",
-                            }}
-                          >⏹ Stop</button>
-                        )}
-                        <span style={{
-                          flex: 1, fontSize: "11px", fontWeight: 700,
-                          color: botRunState.status === "running" ? "var(--teal)"
-                            : botRunState.status === "error" ? "var(--red)" : "var(--muted)",
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                        }}>
-                          {botRunState.status === "running" || botRunState.status === "cooldown"
-                            ? "Contract bought"
-                            : botRunState.status === "error"
-                              ? botRunState.lastError ?? "Error"
-                              : botRunState.status === "stopping"
-                                ? "Stopping…"
-                                : "Bot is not running"}
-                        </span>
-                      </div>
-
-                      {/* Bot selector */}
-                      {botConfigs.length > 0 && (
-                        <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", background: "var(--surface)" }}>
-                          <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>BOT</span>
-                            <select
-                              value={activeChartBotId ?? ""}
-                              onChange={(e) => setActiveChartBotId(e.target.value || null)}
-                              disabled={botRunState.status === "running" || botRunState.status === "cooldown"}
-                              style={{
-                                flex: 1, minHeight: "32px", padding: "0 8px",
-                                border: "1px solid var(--border)", borderRadius: "7px",
-                                background: "var(--panel)", color: "var(--ink)",
-                                fontSize: "11px", fontWeight: 600,
-                              }}
-                            >
-                              {botConfigs.map((c) => (
-                                <option key={c.id} value={c.id}>{c.name} · {c.symbol}</option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                      )}
-                      {botConfigs.length === 0 && (
-                        <div style={{ padding: "14px", background: "var(--surface)", borderBottom: "1px solid var(--line)" }}>
-                          <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)", lineHeight: 1.5 }}>
-                            No bots configured. Go to the <strong>Bots</strong> tab to create one first.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Run panel: Summary / Transactions / Journal */}
-                      <RunPanel
-                        runState={botRunState}
-                        onStart={startBot}
-                        onStop={stopBot}
-                        orderRecoveryRequired={botOrderRecovery}
-                        onAcknowledgeOrderReconciled={botAcknowledge}
-                        config={activeChartBot}
-                      />
-                    </div>
+                      <strong style={{ fontSize: "14px" }}>Automated bot execution</strong>
+                      <p style={{ margin: 0, color: "var(--muted)", fontSize: "12px", lineHeight: 1.6 }}>
+                        Bot runs, stop requests, trade history, and recovery status are controlled by the server. The chart does not submit automated orders from your browser.
+                      </p>
+                      <button type="button" onClick={() => router.push("/bots")} style={{
+                        minHeight: "36px", border: "none", borderRadius: "8px",
+                        background: "var(--teal)", color: "#0b1320", fontWeight: 800,
+                        cursor: "pointer",
+                      }}>Open Bot Workspace</button>
+                    </aside>
                   </div>
                 )}
               </section>
