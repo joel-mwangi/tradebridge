@@ -133,8 +133,8 @@ test("bot run status and history are read from the authenticated server API", ()
   assert.match(workspace, /fetch\('\/api\/bots\/runs\?limit=100'/);
   assert.match(workspace, /setRuns\(records\.map\(toDashboardRun\)\)/);
   assert.match(workspace, /refreshServerDetail\(activeServerRunId\)/);
-  assert.match(workspace, /Run history is stored by the server and cannot be cleared/);
-  assert.doesNotMatch(workspace, /loadBotRuns/);
+  assert.match(workspace, /Server run history/);
+  assert.doesNotMatch(workspace, /handleClearRuns|loadBotRuns/);
 });
 
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
