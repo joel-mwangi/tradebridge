@@ -127,13 +127,13 @@ test("bot dashboard can search and filter run history and explain saved errors",
   assert.match(dashboard, /onClick=\{\(\) => botsListRef\.current\?\.scrollIntoView/);
 });
 
-test("bot run history updates the dashboard immediately and can be cleared", () => {
-  const storage = read("src/components/bots/bot-storage.ts");
+test("bot run status and history are read from the authenticated server API", () => {
   const workspace = read("src/components/bots/BotsWorkspace.tsx");
-  assert.match(storage, /window\.dispatchEvent\(new Event\(BOT_RUNS_UPDATED_EVENT\)\)/);
-  assert.match(storage, /export function clearBotRuns\(\): boolean/);
-  assert.match(workspace, /window\.addEventListener\(BOT_RUNS_UPDATED_EVENT, syncRuns\)/);
-  assert.match(workspace, /onClearRuns=\{handleClearRuns\}/);
+  assert.match(workspace, /fetch\('\/api\/bots\/runs\?limit=100'/);
+  assert.match(workspace, /setRuns\(records\.map\(toDashboardRun\)\)/);
+  assert.match(workspace, /refreshServerDetail\(activeServerRunId\)/);
+  assert.match(workspace, /Run history is stored by the server and cannot be cleared/);
+  assert.doesNotMatch(workspace, /loadBotRuns/);
 });
 
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
