@@ -1,56 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
-import { fetchDerivAccounts } from "@/lib/deriv/accounts";
-import { getAuthenticatedDerivContext } from "@/lib/deriv/authenticated";
-import { getOwnedDerivAccountIds } from "@/lib/deriv/ownership";
+import { NextResponse } from "next/server";
+import { getDerivBackendSession } from "@/lib/deriv/backend";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const headers = { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" };
 
-export async function GET(request: NextRequest) {
-  const context = await getAuthenticatedDerivContext(request);
-  if (!context.ok) {
-    const response = NextResponse.json(
-      { connected: false, error: context.error },
-      { status: context.error === "configuration" ? 503 : 401, headers },
-    );
-    if (context.error !== "not_connected") {
-      response.cookies.delete("tradebridge_deriv_access_token");
-      response.cookies.delete("tradebridge_deriv_owner");
+export async function GET() {
+  const session = await getDerivBackendSession();
+  if (!session.ok) {
+    return NextResponse.json({ connected: false, error: session.error }, { status: session.status, headers });
+  }
+
+  try {
+    const upstream = await fetch(`${session.backendUrl}/deriv/session`, {
+      headers: { Authorization: `Bearer ${session.accessToken}`, Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    const payload: unknown = await upstream.json();
+    if (!upstream.ok) {
+      return NextResponse.json(
+        { connected: false, error: upstream.status === 401 ? "session_expired" : "deriv_unavailable" },
+        { status: upstream.status === 401 ? 401 : 502, headers },
+      );
     }
-    return response;
+    const root = typeof payload === "object" && payload !== null ? payload as { connected?: unknown } : {};
+    return NextResponse.json({ connected: root.connected === true }, { headers });
+  } catch {
+    return NextResponse.json({ connected: false, error: "deriv_unavailable" }, { status: 502, headers });
   }
-
-  const result = await fetchDerivAccounts(context.token);
-  if (!result.ok) {
-    const response = NextResponse.json(
-      { connected: false, error: result.error === "unauthorized" ? "token_expired" : result.error === "forbidden" ? "insufficient_scope" : "deriv_unavailable" },
-      { status: result.error === "unauthorized" ? 401 : result.error === "forbidden" ? 403 : 502, headers },
-    );
-    if (result.error === "unauthorized") {
-      response.cookies.delete("tradebridge_deriv_access_token");
-      response.cookies.delete("tradebridge_deriv_owner");
-    }
-    return response;
-  }
-
-  const ownership = await getOwnedDerivAccountIds(
-    context.supabase,
-    context.userId,
-    result.accounts.map((account) => account.account_id),
-  );
-  if (ownership.error || !ownership.accountIds) {
-    return NextResponse.json({ connected: false, error: "account_linking_unavailable" }, { status: 503, headers });
-  }
-
-  const ownedCount = result.accounts.filter((account) => ownership.accountIds?.has(account.account_id)).length;
-  if (ownedCount === 0) {
-    const response = NextResponse.json({ connected: false, error: "account_mismatch" }, { status: 409, headers });
-    response.cookies.delete("tradebridge_deriv_access_token");
-    response.cookies.delete("tradebridge_deriv_owner");
-    return response;
-  }
-
-  return NextResponse.json({ connected: true, accountCount: ownedCount }, { headers });
 }

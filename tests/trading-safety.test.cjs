@@ -28,11 +28,10 @@ test("Real-account consent cannot be enabled without a server execution gateway"
   assert.match(consentRoute, /\.update\(\{ enabled: false \}\)/);
 });
 
-test("trading sessions are limited to Deriv Demo Options accounts", () => {
-  assert.match(tradeSessionRoute, /if\s*\(accountType === "real"\)/);
-  assert.match(tradeSessionRoute, /real_execution_gateway_unavailable/);
-  assert.match(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/demo"/);
-  assert.doesNotMatch(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/real"/);
+test("legacy Next.js trade-session route is retired in favor of FastAPI", () => {
+  assert.match(tradeSessionRoute, /status:\s*410/);
+  assert.match(tradeSessionRoute, /legacy_endpoint_retired/);
+  assert.doesNotMatch(tradeSessionRoute, /api\.derivws\.com|fetch\s*\(/);
 });
 
 test("unresolved order state is shared across tabs, rather than isolated to sessionStorage", () => {
@@ -71,10 +70,9 @@ test("transaction notifications cannot overwrite balance snapshots or trigger a 
   assert.match(activityHelpers, /\.slice\(0, maxRows\)/);
 });
 
-test("real-account OTP sessions stay disabled until execution is enforced server-side", () => {
-  assert.match(tradeSessionRoute, /if \(accountType === "real"\)[\s\S]{0,250}real_execution_gateway_unavailable/);
-  assert.match(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/demo"/);
-  assert.doesNotMatch(tradeSessionRoute, /socketUrl\.pathname !== "\/trading\/v1\/options\/ws\/real"/);
+test("legacy session route cannot issue a Deriv OTP URL for any account type", () => {
+  assert.match(tradeSessionRoute, /status:\s*410/);
+  assert.doesNotMatch(tradeSessionRoute, /api\.derivws\.com|fetch\s*\(/);
 });
 
 
@@ -202,10 +200,19 @@ test("backend migration exchanges OAuth code server-to-server and does not set l
   assert.match(derivCallbackRoute, /response\.cookies\.delete\("tradebridge_deriv_access_token"\)/);
 });
 
-test("all Deriv frontend connections require FastAPI; no direct or legacy fallback is present", () => {
-  assert.doesNotMatch(tradingHook, /\/api\/auth\/deriv\/trade-session/);
+test("all Deriv connections require FastAPI and legacy Next.js routes never call Deriv", () => {
+  const accountsRoute = read("src/app/api/auth/deriv/accounts/route.ts");
+  const statusRoute = read("src/app/api/auth/deriv/status/route.ts");
+  const demoSessionRoute = read("src/app/api/auth/deriv/demo-session/route.ts");
+  const backendHelper = read("src/lib/deriv/backend.ts");
+  assert.doesNotMatch(tradingHook, /\/api\/auth\/deriv\/(?:trade-session|demo-session)/);
   assert.doesNotMatch(workspace, /\/api\/auth\/deriv\/accounts/);
   assert.doesNotMatch(marketHook, /wss:\/\/api\.derivws\.com/);
+  for (const source of [accountsRoute, statusRoute, tradeSessionRoute, demoSessionRoute, backendHelper]) {
+    assert.doesNotMatch(source, /api\.derivws\.com|auth\.deriv\.com\/oauth2\/token/);
+  }
+  assert.match(accountsRoute, /\/deriv\/accounts/);
+  assert.match(statusRoute, /\/deriv\/session/);
   assert.match(tradingHook, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL/);
   assert.match(workspace, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL/);
   assert.match(marketHook, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL/);
