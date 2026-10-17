@@ -207,7 +207,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     : 'idle';
   const runState: BotRunState = {
     status: mappedStatus,
-    currentStake: Number(activeServerRun?.config?.stakeStrategy?.amount ?? activeConfig?.stakeStrategy?.amount ?? 0),
+    currentStake: activeServerRun?.config?.stakeStrategy?.type === 'fixed' ? Number(activeServerRun.config.stakeStrategy.amount) : activeConfig?.stakeStrategy.type === 'fixed' ? activeConfig.stakeStrategy.amount : 0,
     tradeCount: Number(activeServerRun?.trade_count ?? 0),
     wins: Number(activeServerRun?.wins ?? 0),
     losses: Number(activeServerRun?.losses ?? 0),
