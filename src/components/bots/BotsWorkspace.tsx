@@ -403,7 +403,6 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
               onNewConfig={handleNewConfig}
               onDeleteConfig={handleDeleteConfig}
               onImportConfig={handleImportConfig}
-              onClearRuns={handleClearRuns}
             />
           )}
           {innerTab === 'builder' && (
