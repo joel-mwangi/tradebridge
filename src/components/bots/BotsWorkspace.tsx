@@ -244,6 +244,14 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
       setServerError('The server worker currently supports fixed stake only. Select a fixed-stake strategy.');
       return;
     }
+    if (activeConfig.durationUnit !== 't' || !['DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'DIGITMATCH', 'DIGITDIFF'].includes(activeConfig.contractType)) {
+      setServerError('The server worker supports digit contracts with a duration of 1–10 ticks only.');
+      return;
+    }
+    if (!activeConfig.stopConditions.some((condition) => condition.type === 'loss' || condition.type === 'tradeCount' || condition.type === 'time')) {
+      setServerError('Add a loss limit, maximum trade count, or time limit before starting this bot.');
+      return;
+    }
     if (activeServerRun?.status === 'reconciliation_required') {
       setServerError('This run requires broker reconciliation. Do not restart it until the unresolved contract outcome is confirmed.');
       return;
@@ -259,8 +267,8 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           contractType: activeConfig.contractType, ...(activeConfig.barrier !== undefined ? { barrier: activeConfig.barrier } : {}),
           duration: activeConfig.duration, durationUnit: activeConfig.durationUnit,
           stakeStrategy: activeConfig.stakeStrategy, stopConditions: activeConfig.stopConditions,
-          cooldownSeconds: activeConfig.cooldownSeconds, maxTradesPerDay: activeConfig.maxTradesPerDay,
-          maxConsecutiveLosses: activeConfig.maxConsecutiveLosses,
+          cooldownSeconds: activeConfig.cooldownSeconds, maxTradesPerDay: Math.min(activeConfig.maxTradesPerDay, 20),
+          maxConsecutiveLosses: Math.min(activeConfig.maxConsecutiveLosses, 3),
         } }),
         cache: 'no-store',
       });
