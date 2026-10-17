@@ -254,7 +254,14 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     try {
       const response = await fetch('/api/bots/runs', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ account_id: account.account_id, config: activeConfig }),
+        body: JSON.stringify({ account_id: account.account_id, config: {
+          id: activeConfig.id, name: activeConfig.name, symbol: activeConfig.symbol,
+          contractType: activeConfig.contractType, ...(activeConfig.barrier !== undefined ? { barrier: activeConfig.barrier } : {}),
+          duration: activeConfig.duration, durationUnit: activeConfig.durationUnit,
+          stakeStrategy: activeConfig.stakeStrategy, stopConditions: activeConfig.stopConditions,
+          cooldownSeconds: activeConfig.cooldownSeconds, maxTradesPerDay: activeConfig.maxTradesPerDay,
+          maxConsecutiveLosses: activeConfig.maxConsecutiveLosses,
+        } }),
         cache: 'no-store',
       });
       const payload = await response.json().catch(() => null);
