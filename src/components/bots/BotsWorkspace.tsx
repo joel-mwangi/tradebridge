@@ -534,6 +534,21 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           )}
         </div>
         <aside>
+          <label style={{ display: 'grid', gap: 6, marginBottom: 10, fontSize: 12, color: 'var(--muted)' }}>
+            Server run history
+            <select
+              value={activeServerRunId ?? ''}
+              onChange={(event) => setActiveServerRunId(event.target.value || null)}
+              style={{ width: '100%', minHeight: 36, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', background: 'var(--card, transparent)', color: 'var(--foreground, inherit)' }}
+            >
+              <option value="">Select a run to inspect</option>
+              {serverRuns.map((run) => (
+                <option key={run.id} value={run.id}>
+                  {(run.config?.name ?? run.bot_id)} · {run.status} · {new Date(run.created_at).toLocaleString()}
+                </option>
+              ))}
+            </select>
+          </label>
           <RunPanel
             runState={runState}
             onStart={start}
