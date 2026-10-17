@@ -131,7 +131,6 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
       }
       setServerTrades(payload.trades as ServerBotTrade[]);
       setServerRuns((current) => current.map((run) => run.id === runId ? payload.run as ServerBotRun : run));
-      setRuns((current) => current.map((run) => run.botId === payload.run.bot_id ? toDashboardRun(payload.run as ServerBotRun) : run));
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Server run details are unavailable.');
     }
@@ -334,6 +333,10 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
 
   return (
     <section className={styles.botsPage} aria-label="Automated bots">
+      {serverError && <div role="alert" style={{ border: '1px solid var(--danger, #b45353)', borderRadius: 10, padding: 12, color: 'var(--foreground, inherit)', fontSize: 12 }}>
+        <strong>Server bot service</strong><p style={{ margin: '5px 0 0' }}>{serverError}</p>
+      </div>}
+      {serverBusy && <p role="status" style={{ margin: 0, color: 'var(--muted)', fontSize: 12 }}>Waiting for server confirmation…</p>}
       {/* Inner tab bar */}
       <div className={styles.tabNavWrap}>
         <div className={styles.workspaceTabs} role="tablist">
