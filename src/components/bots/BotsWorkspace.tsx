@@ -244,7 +244,11 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
       setServerError('The server worker currently supports fixed stake only. Select a fixed-stake strategy.');
       return;
     }
-    if (serverBusy || ['queued', 'running', 'stopping', 'reconciliation_required'].includes(activeServerRun?.status ?? '')) return;
+    if (activeServerRun?.status === 'reconciliation_required') {
+      setServerError('This run requires broker reconciliation. Do not restart it until the unresolved contract outcome is confirmed.');
+      return;
+    }
+    if (serverBusy || ['queued', 'running', 'stopping'].includes(activeServerRun?.status ?? '')) return;
     setServerBusy(true);
     setServerError(null);
     try {
