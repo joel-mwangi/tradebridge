@@ -41,7 +41,7 @@ export function RunPanel({ runState, onStart, onStop, orderRecoveryRequired, onA
   const winRate =
     tradeCount > 0 ? ((wins / tradeCount) * 100).toFixed(1) + '%' : '—';
 
-  const canRun = IDLE_STATUSES.includes(status) && config !== null;
+  const canRun = IDLE_STATUSES.includes(status) && config !== null && !orderRecoveryRequired;
   const isActive = ACTIVE_STATUSES.includes(status);
 
   return (
