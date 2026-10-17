@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { BotConfig, BotRun, BotRunState, BotTransaction, BotStatus } from './bot-types';
 import {
   loadBotConfigs,
@@ -101,7 +101,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
   const [serverBusy, setServerBusy] = useState(false);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
 
-  async function refreshServerRuns() {
+  const refreshServerRuns = useCallback(async () => {
     try {
       const response = await fetch('/api/bots/runs?limit=100', { cache: 'no-store', headers: { Accept: 'application/json' } });
       const payload = await response.json().catch(() => null);
@@ -120,9 +120,9 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Server bot history is unavailable.');
     }
-  }
+  }, []);
 
-  async function refreshServerDetail(runId: string) {
+  const refreshServerDetail = useCallback(async (runId: string) => {
     try {
       const response = await fetch(`/api/bots/runs/${encodeURIComponent(runId)}`, { cache: 'no-store', headers: { Accept: 'application/json' } });
       const payload = await response.json().catch(() => null);
@@ -134,7 +134,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Server run details are unavailable.');
     }
-  }
+  }, []);
 
   useEffect(() => {
     setConfigs(loadBotConfigs());
@@ -143,7 +143,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
       void refreshServerRuns();
     }, 3000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [refreshServerRuns]);
 
   useEffect(() => {
     if (!activeServerRunId) {
@@ -153,7 +153,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     void refreshServerDetail(activeServerRunId);
     const timer = window.setInterval(() => void refreshServerDetail(activeServerRunId), 2500);
     return () => window.clearInterval(timer);
-  }, [activeServerRunId]);
+  }, [activeServerRunId, refreshServerDetail]);
 
 
   useEffect(() => {
