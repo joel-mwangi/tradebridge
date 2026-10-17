@@ -10,6 +10,7 @@ const consentMigration = read("supabase/migrations/20261009140000_add_real_tradi
 const consentRoute = read("src/app/api/auth/deriv/live-consent/route.ts");
 const tradeSessionRoute = read("src/app/api/auth/deriv/trade-session/route.ts");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
+const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
 const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const orderResolution = read("src/components/trading/order-resolution.mjs");
 const activityHelpers = read("src/components/trading/activity-helpers.mjs");
@@ -225,8 +226,10 @@ test("live market feed can be switched to FastAPI without storing ticks", () => 
   assert.doesNotMatch(tickIngestionRoute, /createAdminClient|\.from\("market_ticks"\)/);
 });
 
-test("automated bot runner is disabled in backend-owned manual trading mode", () => {
-  assert.match(botRunner, /Automated execution is disabled; TradeBridge supports manual trading only/);
-  assert.match(workspace, /useBotRunner\(connected, activeAccount, activeChartBot, trading\.sharedSocketRef, trading\.nextSharedSeqId, trading\.sessionState\)/);
+test("automated bot execution is server-authoritative and absent from chart browser code", () => {
+  assert.doesNotMatch(workspace, /useBotRunner\(connected, activeAccount/);
+  assert.match(workspace, /Bot Workspace/);
+  assert.match(botsWorkspace, /\/api\/bots\/runs/);
+  assert.match(botsWorkspace, /reconciliation_required/);
   assert.doesNotMatch(botRunner, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED/);
 });
