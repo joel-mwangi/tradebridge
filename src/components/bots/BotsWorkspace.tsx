@@ -332,11 +332,6 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     handleSaveConfig(config);
   }
 
-  function handleClearRuns() {
-    setServerError('Run history is stored by the server and cannot be cleared from this dashboard.');
-    return false;
-  }
-
   return (
     <section className={styles.botsPage} aria-label="Automated bots">
       {serverError && <div role="alert" style={{ border: '1px solid var(--danger, #b45353)', borderRadius: 10, padding: 12, color: 'var(--foreground, inherit)', fontSize: 12 }}>
