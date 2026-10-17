@@ -72,7 +72,7 @@ test("transaction notifications cannot overwrite balance snapshots or trigger a 
 
 test("legacy session route cannot issue a Deriv OTP URL for any account type", () => {
   assert.match(tradeSessionRoute, /status:\s*410/);
-  assert.doesNotMatch(tradeSessionRoute, /api\\.derivws\\.com|fetch\\s*\\(/);
+  assert.doesNotMatch(tradeSessionRoute, /api\.derivws\.com|fetch\s*\(/);
 });
 
 
