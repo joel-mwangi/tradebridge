@@ -56,7 +56,6 @@ export default function WorkspaceLoading() {
                   <SkeletonBlock className={styles.chartLine} />
                   <SkeletonBlock className={styles.chartLine} />
                 </div>
-                <SkeletonBlock className={styles.chartShape} />
               </div>
               <div className={styles.chartFooter}>
                 <SkeletonBlock className={styles.shortLine} />
