@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   const accountId = accountIdFrom(request);
   if (!accountId) return NextResponse.json({ error: "invalid_account" }, { status: 400, headers });
 
-  const ownership = await getOwnedDerivAccountIds(context.supabase, context.userId, [accountId]);
+  const ownership = await getOwnedDerivAccountIds(context.userId, [accountId]);
   if (ownership.error || !ownership.accountIds) {
     return NextResponse.json({ error: "account_linking_unavailable" }, { status: 503, headers });
   }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
   // Ownership is validated through the user's normal RLS-bound client before
   // any privileged mutation. Disabling consent deliberately does not depend on
   // a fresh Deriv API call: a stale/expired provider token must never prevent revocation.
-  const ownership = await getOwnedDerivAccountIds(context.supabase, context.userId, [accountId]);
+  const ownership = await getOwnedDerivAccountIds(context.userId, [accountId]);
   if (ownership.error || !ownership.accountIds) {
     return NextResponse.json({ error: "account_linking_unavailable" }, { status: 503, headers });
   }
