@@ -539,7 +539,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
             onStart={start}
             onStop={stop}
             orderRecoveryRequired={orderRecoveryRequired}
-            onAcknowledgeOrderReconciled={acknowledgeOrderReconciled}
+            onAcknowledgeOrderReconciled={undefined}
             config={activeConfig}
           />
         </aside>
