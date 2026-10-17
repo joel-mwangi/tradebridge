@@ -14,7 +14,6 @@ interface BotDashboardProps {
   onNewConfig: (config: BotConfig) => void;
   onDeleteConfig: (id: string) => void;
   onImportConfig: (config: BotConfig) => void;
-  onClearRuns: () => boolean;
 }
 
 type RunFilter = 'all' | 'error' | 'stopped';
@@ -29,7 +28,7 @@ function defaultFields(): BotModalFields {
     stake: '1',
     profitTarget: '',
     lossLimit: '',
-    maxTrades: '',
+    maxTrades: '10',
   };
 }
 
@@ -49,7 +48,6 @@ export function BotDashboard({
   onNewConfig,
   onDeleteConfig,
   onImportConfig,
-  onClearRuns,
 }: BotDashboardProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const botsListRef = useRef<HTMLDivElement>(null);
@@ -60,7 +58,6 @@ export function BotDashboard({
   const [runFilter, setRunFilter] = useState<RunFilter>('all');
   const [runSearch, setRunSearch] = useState('');
   const [showAllRuns, setShowAllRuns] = useState(false);
-  const [runHistoryError, setRunHistoryError] = useState('');
 
   const failedRuns = runs.filter((run) => run.status === 'error').length;
   const totalTrades = runs.reduce((total, run) => total + run.tradeCount, 0);
@@ -140,6 +137,10 @@ export function BotDashboard({
     if (maxTrades !== null) {
       stopConditions.push({ type: 'tradeCount', max: maxTrades });
     }
+    if (!stopConditions.some((condition) => condition.type === 'loss' || condition.type === 'tradeCount' || condition.type === 'time')) {
+      setFormError('Add a loss limit or maximum trade count before saving a runnable bot.');
+      return;
+    }
 
     const config: BotConfig = {
       id: crypto.randomUUID(),
@@ -152,8 +153,8 @@ export function BotDashboard({
       stakeStrategy: { type: 'fixed', amount: stake },
       stopConditions,
       cooldownSeconds: 2,
-      maxTradesPerDay: 50,
-      maxConsecutiveLosses: 5,
+      maxTradesPerDay: 20,
+      maxConsecutiveLosses: 3,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -190,16 +191,6 @@ export function BotDashboard({
   function handleDelete(id: string) {
     deleteBotConfig(id);
     onDeleteConfig(id);
-  }
-
-  function handleClearRuns() {
-    if (!window.confirm('Clear all saved bot run history from this browser? This cannot be undone.')) return;
-    if (!onClearRuns()) {
-      setRunHistoryError('Could not clear run history. Check browser storage permissions and try again.');
-      return;
-    }
-    setRunHistoryError('');
-    setShowAllRuns(false);
   }
 
   return (
@@ -362,13 +353,7 @@ export function BotDashboard({
             <h2 className={styles.sectionHeading}>Recent runs</h2>
             <p className={styles.sectionDescription}>The latest run summaries and any saved failure details.</p>
           </div>
-          {runs.length > 0 && (
-            <button className={styles.clearHistoryBtn} onClick={handleClearRuns} type="button">
-              Clear history
-            </button>
-          )}
         </div>
-        {runHistoryError && <p className={styles.errorMsg} role="alert">{runHistoryError}</p>}
         {runs.length === 0 ? (
           <div className={styles.emptyState}>
             <strong>No runs recorded yet</strong>

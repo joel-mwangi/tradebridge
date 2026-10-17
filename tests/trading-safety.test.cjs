@@ -10,6 +10,7 @@ const consentMigration = read("supabase/migrations/20261009140000_add_real_tradi
 const consentRoute = read("src/app/api/auth/deriv/live-consent/route.ts");
 const tradeSessionRoute = read("src/app/api/auth/deriv/trade-session/route.ts");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
+const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
 const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const orderResolution = read("src/components/trading/order-resolution.mjs");
 const activityHelpers = read("src/components/trading/activity-helpers.mjs");
@@ -127,13 +128,13 @@ test("bot dashboard can search and filter run history and explain saved errors",
   assert.match(dashboard, /onClick=\{\(\) => botsListRef\.current\?\.scrollIntoView/);
 });
 
-test("bot run history updates the dashboard immediately and can be cleared", () => {
-  const storage = read("src/components/bots/bot-storage.ts");
+test("bot run status and history are read from the authenticated server API", () => {
   const workspace = read("src/components/bots/BotsWorkspace.tsx");
-  assert.match(storage, /window\.dispatchEvent\(new Event\(BOT_RUNS_UPDATED_EVENT\)\)/);
-  assert.match(storage, /export function clearBotRuns\(\): boolean/);
-  assert.match(workspace, /window\.addEventListener\(BOT_RUNS_UPDATED_EVENT, syncRuns\)/);
-  assert.match(workspace, /onClearRuns=\{handleClearRuns\}/);
+  assert.match(workspace, /fetch\('\/api\/bots\/runs\?limit=100'/);
+  assert.match(workspace, /setRuns\(records\.map\(toDashboardRun\)\)/);
+  assert.match(workspace, /refreshServerDetail\(activeServerRunId\)/);
+  assert.match(workspace, /Server run history/);
+  assert.doesNotMatch(workspace, /handleClearRuns|loadBotRuns/);
 });
 
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
@@ -154,13 +155,13 @@ test("bot request timeouts stop execution and retain ambiguous purchase state fo
 });
 
 
-test("ambiguous bot orders require an explicit Deriv reconciliation acknowledgement", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
+test("ambiguous server bot orders cannot be cleared by browser acknowledgement", () => {
+  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
   const runPanel = read("src/components/bots/RunPanel.tsx");
-  assert.match(botRunner, /acknowledgeOrderReconciled/);
-  assert.match(botRunner, /window\.confirm/);
+  assert.match(botsWorkspace, /reconciliation_required/);
   assert.match(runPanel, /orderRecoveryRequired/);
-  assert.match(runPanel, /I checked Deriv — clear recovery lock/);
+  assert.match(runPanel, /cannot be cleared by a browser acknowledgement/);
+  assert.doesNotMatch(runPanel, /I checked Deriv — clear recovery lock/);
 });
 
 test("imported and persisted bot configs are validated before execution", () => {
@@ -225,8 +226,10 @@ test("live market feed can be switched to FastAPI without storing ticks", () => 
   assert.doesNotMatch(tickIngestionRoute, /createAdminClient|\.from\("market_ticks"\)/);
 });
 
-test("automated bot runner is disabled in backend-owned manual trading mode", () => {
-  assert.match(botRunner, /Automated execution is disabled; TradeBridge supports manual trading only/);
-  assert.match(workspace, /useBotRunner\(connected, activeAccount, activeChartBot, trading\.sharedSocketRef, trading\.nextSharedSeqId, trading\.sessionState\)/);
+test("automated bot execution is server-authoritative and absent from chart browser code", () => {
+  assert.doesNotMatch(workspace, /useBotRunner\(connected, activeAccount/);
+  assert.match(workspace, /Bot Workspace/);
+  assert.match(botsWorkspace, /\/api\/bots\/runs/);
+  assert.match(botsWorkspace, /reconciliation_required/);
   assert.doesNotMatch(botRunner, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED/);
 });
