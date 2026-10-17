@@ -71,10 +71,6 @@ Before expecting results, apply `supabase/migrations/20261016100000_market_ticks
 
 The analysis is descriptive only. Digit frequency and chi-square statistics do not establish a predictive edge or constitute a trading signal.
 
-## Shared Demo bot execution schema
-
-The canonical execution-ledger migration is maintained here at `supabase/migrations/20261017010000_bot_execution_ledger.sql`. Apply it once to the verified TradeBridge Supabase project using the normal migration workflow. The separate `joel-mwangi/ai-tradingbridge` repository owns the persistent Python worker, not a second copy of the database migration. Do not apply duplicate copies or reset the database.
-
 ## Configure Deriv OAuth
 
 1. Register an OAuth 2.0 application in Deriv.

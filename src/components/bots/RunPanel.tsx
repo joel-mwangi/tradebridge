@@ -117,7 +117,7 @@ export function RunPanel({ runState, onStart, onStop, orderRecoveryRequired, onA
             )}
             {orderRecoveryRequired && !isActive && (
               <div role="alert" className={styles.emptyState}>
-                <p>An order outcome is unresolved. Check Deriv open contracts and account history. This local safety lock must only be cleared after checking Deriv directly and confirming there is no unresolved contract.</p>
+                <p>An order outcome is unresolved. Check Deriv open contracts and account history. This server-side safety lock cannot be cleared by a browser acknowledgement.</p>
                 {onAcknowledgeOrderReconciled && (
                   <button className={styles.stopButton} onClick={onAcknowledgeOrderReconciled}>
                     Refresh reconciliation status

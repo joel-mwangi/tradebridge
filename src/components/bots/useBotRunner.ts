@@ -242,9 +242,17 @@ export function useBotRunner(
   );
 
   const start = useCallback(() => {
+    // Legacy chart workspace runner is intentionally disabled. Automated runs now
+    // require the authenticated server queue and persistent worker; never place
+    // automated orders directly from a browser tab.
+    if (connected && account && config) {
+      appendJournal('warn', 'Browser-side bot execution is disabled. Start Demo runs from the Bots dashboard through the server worker.');
+      patchState({ status: 'error', lastError: 'Browser-side automated execution is disabled; use server-authoritative Demo runs.' });
+      return;
+    }
     if (!connected || !account || !config) {
-      appendJournal('warn', 'Connect a verified Demo account and select a saved bot configuration before running.');
-      patchState({ status: 'error', lastError: 'Connect a verified Demo account and select a bot configuration.' });
+      appendJournal('warn', 'Automated execution is disabled; TradeBridge supports manual trading only.');
+      patchState({ status: 'error', lastError: 'Automated execution is disabled. Use the manual Trade ticket.' });
       return;
     }
 
