@@ -291,11 +291,6 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
       setServerBusy(false);
     }
   }
-  async function acknowledgeOrderReconciled() {
-    await refreshServerRuns();
-    if (activeServerRunId) await refreshServerDetail(activeServerRunId);
-  }
-
   function handleSaveConfig(config: BotConfig) {
     upsertBotConfig(config);
     setConfigs((prev) => {
