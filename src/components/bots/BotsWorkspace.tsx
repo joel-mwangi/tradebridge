@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import type { BotConfig, BotRun, BotRunState, BotTransaction, BotStatus } from './bot-types';
+import { useEffect, useState } from 'react';
+import type { BotConfig, BotRun } from './bot-types';
 import {
   loadBotConfigs,
   loadBotRuns,
@@ -376,7 +376,7 @@ export function BotsWorkspace({ connected, account, sharedSocketRef, nextSharedS
             onAcknowledgeOrderReconciled={acknowledgeOrderReconciled}
             config={activeConfig}
           />
-        </aside></aside>
+        </aside>
       </div>
     </section>
   );
