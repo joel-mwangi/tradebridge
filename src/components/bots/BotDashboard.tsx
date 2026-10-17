@@ -28,7 +28,7 @@ function defaultFields(): BotModalFields {
     stake: '1',
     profitTarget: '',
     lossLimit: '',
-    maxTrades: '',
+    maxTrades: '10',
   };
 }
 
@@ -137,6 +137,10 @@ export function BotDashboard({
     if (maxTrades !== null) {
       stopConditions.push({ type: 'tradeCount', max: maxTrades });
     }
+    if (!stopConditions.some((condition) => condition.type === 'loss' || condition.type === 'tradeCount' || condition.type === 'time')) {
+      setFormError('Add a loss limit or maximum trade count before saving a runnable bot.');
+      return;
+    }
 
     const config: BotConfig = {
       id: crypto.randomUUID(),
@@ -149,8 +153,8 @@ export function BotDashboard({
       stakeStrategy: { type: 'fixed', amount: stake },
       stopConditions,
       cooldownSeconds: 2,
-      maxTradesPerDay: 50,
-      maxConsecutiveLosses: 5,
+      maxTradesPerDay: 20,
+      maxConsecutiveLosses: 3,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
