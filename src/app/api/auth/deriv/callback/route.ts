@@ -79,35 +79,9 @@ export async function GET(request: NextRequest) {
     }
     if (accounts.length === 0) return fail("account_verification_failed");
 
-    const links = accounts.map((account) => ({
-      deriv_account_id: account.account_id,
-      user_id: user.id,
-      account_type: account.account_type,
-      currency: account.currency,
-    }));
-    const { data: inserted, error: linkError } = await supabase
-      .from("deriv_account_links")
-      .upsert(links, { onConflict: "deriv_account_id", ignoreDuplicates: true })
-      .select("deriv_account_id");
-
-    if (linkError) return fail("account_linking_unavailable");
-
-    const { data: ownedLinks, error: verifyError } = await supabase
-      .from("deriv_account_links")
-      .select("deriv_account_id")
-      .eq("user_id", user.id)
-      .in("deriv_account_id", accounts.map((account) => account.account_id));
-
-    const ownedIds = new Set((ownedLinks ?? []).map((link) => link.deriv_account_id));
-    const allOwned = !verifyError && accounts.every((account) => ownedIds.has(account.account_id));
-    if (!allOwned) {
-      const insertedIds = (inserted ?? []).map((link) => link.deriv_account_id);
-      if (insertedIds.length > 0) {
-        await supabase.from("deriv_account_links").delete().eq("user_id", user.id).in("deriv_account_id", insertedIds);
-      }
-      return fail(verifyError ? "account_linking_unavailable" : "account_conflict");
-    }
-
+    // FastAPI verifies the Deriv accounts and persists their ownership links.
+    // A successful exchange response is returned only after both credential and
+    // account-link writes succeed. The frontend must never write this table.
     const response = NextResponse.redirect(new URL("/?connection=connected", appUrl));
     response.cookies.delete("tradebridge_deriv_access_token");
     response.cookies.delete("tradebridge_deriv_owner");
