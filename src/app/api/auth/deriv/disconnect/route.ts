@@ -9,37 +9,54 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
   }
 
-  // Best-effort revocation uses a server-only privileged client because direct
-  // authenticated UPDATE access is intentionally forbidden by RLS. Clearing
-  // cookies must still work if Supabase is unavailable or is not configured.
+  let persistentRevocationFailed = false;
+  // Server-side revocation is attempted before clearing local cookies. If it
+  // fails, still clear browser state but make the failure visible to the user.
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError) {
+      persistentRevocationFailed = true;
+    } else if (user) {
       const backendUrlRaw = process.env.TRADEBRIDGE_BACKEND_URL?.trim();
       const backendUrl = backendUrlRaw?.endsWith("/") ? backendUrlRaw.slice(0, -1) : backendUrlRaw;
       const bridgeToken = process.env.TRADEBRIDGE_SESSION_BRIDGE_TOKEN?.trim();
-      if (backendUrl && bridgeToken) {
-        await fetch(`${backendUrl}/deriv/internal/credentials/${encodeURIComponent(user.id)}`, {
-          method: "DELETE",
-          headers: { "X-Tradebridge-Bridge-Token": bridgeToken },
-          cache: "no-store",
-          signal: AbortSignal.timeout(5_000),
-        }).catch(() => undefined);
+      if (!backendUrl || !bridgeToken) {
+        persistentRevocationFailed = true;
+      } else {
+        try {
+          const backendResponse = await fetch(`${backendUrl}/deriv/internal/credentials/${encodeURIComponent(user.id)}`, {
+            method: "DELETE",
+            headers: { "X-Tradebridge-Bridge-Token": bridgeToken },
+            cache: "no-store",
+            signal: AbortSignal.timeout(5_000),
+          });
+          if (!backendResponse.ok) persistentRevocationFailed = true;
+        } catch {
+          persistentRevocationFailed = true;
+        }
       }
-      const admin = createAdminClient();
-      await admin
-        .from("deriv_live_trading_consents")
-        .update({ enabled: false })
-        .eq("user_id", user.id)
-        .eq("enabled", true);
+
+      try {
+        const admin = createAdminClient();
+        const { error } = await admin
+          .from("deriv_live_trading_consents")
+          .update({ enabled: false })
+          .eq("user_id", user.id)
+          .eq("enabled", true);
+        if (error) persistentRevocationFailed = true;
+      } catch {
+        persistentRevocationFailed = true;
+      }
     }
   } catch {
-    // Disconnect still clears local authorization cookies, but persistent
-    // revocation cannot be confirmed when server-side Supabase is unavailable.
+    persistentRevocationFailed = true;
   }
 
-  const response = NextResponse.redirect(new URL("/", request.url), { status: 303 });
+  const response = NextResponse.redirect(
+    new URL(persistentRevocationFailed ? "/?disconnect_error=server_revoke_failed" : "/", request.url),
+    { status: 303 },
+  );
   response.cookies.delete("tradebridge_deriv_access_token");
   response.cookies.delete("tradebridge_deriv_owner");
   response.cookies.delete("tradebridge_oauth_state");
