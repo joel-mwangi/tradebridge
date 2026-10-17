@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createClient as createSupabaseBrowserClient } from '../../lib/supabase/client';
 import type { BotConfig, BotRun, BotRunState, BotTransaction, BotStatus } from './bot-types';
 import {
   loadBotConfigs,
@@ -99,62 +100,18 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
   const [activeServerRunId, setActiveServerRunId] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [serverBusy, setServerBusy] = useState(false);
+  const botSocketRef = useRef<WebSocket | null>(null);
+  const [liveJournal, setLiveJournal] = useState<BotRunState['journal']>([]);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
-
-  const refreshServerRuns = useCallback(async () => {
-    try {
-      const response = await fetch('/api/bots/runs?limit=100', { cache: 'no-store', headers: { Accept: 'application/json' } });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !Array.isArray(payload?.runs)) {
-        throw new Error(typeof payload?.error === 'string' ? payload.error : 'Server bot history is unavailable.');
-      }
-      const records = payload.runs as ServerBotRun[];
-      setServerRuns(records);
-      setRuns(records.map(toDashboardRun));
-      setServerError(null);
-      setActiveServerRunId((current) => {
-        if (current && records.some((run) => run.id === current)) return current;
-        const active = records.find((run) => ['queued', 'running', 'stopping', 'reconciliation_required'].includes(run.status));
-        return active?.id ?? null;
-      });
-    } catch (error) {
-      setServerError(error instanceof Error ? error.message : 'Server bot history is unavailable.');
-    }
-  }, []);
-
-  const refreshServerDetail = useCallback(async (runId: string) => {
-    try {
-      const response = await fetch(`/api/bots/runs/${encodeURIComponent(runId)}`, { cache: 'no-store', headers: { Accept: 'application/json' } });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.run || !Array.isArray(payload?.trades)) {
-        throw new Error(typeof payload?.error === 'string' ? payload.error : 'Server run details are unavailable.');
-      }
-      setServerTrades(payload.trades as ServerBotTrade[]);
-      setServerRuns((current) => current.map((run) => run.id === runId ? payload.run as ServerBotRun : run));
-    } catch (error) {
-      setServerError(error instanceof Error ? error.message : 'Server run details are unavailable.');
-    }
-  }, []);
 
   useEffect(() => {
     setConfigs(loadBotConfigs());
-    void refreshServerRuns();
-    const timer = window.setInterval(() => {
-      void refreshServerRuns();
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [refreshServerRuns]);
-
-  useEffect(() => {
-    if (!activeServerRunId) {
-      setServerTrades([]);
-      return;
-    }
-    void refreshServerDetail(activeServerRunId);
-    const timer = window.setInterval(() => void refreshServerDetail(activeServerRunId), 2500);
-    return () => window.clearInterval(timer);
-  }, [activeServerRunId, refreshServerDetail]);
-
+    return () => {
+      const socket = botSocketRef.current;
+      if (socket && socket.readyState <= WebSocket.OPEN) socket.close(1000, 'Bot workspace unmounted');
+      botSocketRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (innerTab !== 'ai' || aiSection !== 'market') return;
@@ -202,102 +159,109 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
   const activeServerRun = serverRuns.find((run) => run.id === activeServerRunId) ?? null;
   const activeTradeRows = activeServerRun ? serverTrades : [];
   const mappedStatus: BotStatus = activeServerRun
-    ? ({ queued: 'connecting', running: 'running', stopping: 'stopping', stopped: 'stopped', completed: 'stopped',
-         failed: 'error', interrupted: 'error', reconciliation_required: 'error' } as Record<string, BotStatus>)[activeServerRun.status] ?? 'idle'
+    ? ({ queued: 'connecting', running: 'running', stopping: 'stopping', stopped: 'stopped', completed: 'stopped', failed: 'error', interrupted: 'error', reconciliation_required: 'error' } as Record<string, BotStatus>)[activeServerRun.status] ?? 'idle'
     : 'idle';
   const runState: BotRunState = {
     status: mappedStatus,
     currentStake: activeServerRun?.config?.stakeStrategy?.type === 'fixed' ? Number(activeServerRun.config.stakeStrategy.amount) : activeConfig?.stakeStrategy.type === 'fixed' ? activeConfig.stakeStrategy.amount : 0,
-    tradeCount: Number(activeServerRun?.trade_count ?? 0),
-    wins: Number(activeServerRun?.wins ?? 0),
-    losses: Number(activeServerRun?.losses ?? 0),
-    netPnl: Number(activeServerRun?.realized_pnl ?? 0),
+    tradeCount: Number(activeServerRun?.trade_count ?? 0), wins: Number(activeServerRun?.wins ?? 0),
+    losses: Number(activeServerRun?.losses ?? 0), netPnl: Number(activeServerRun?.realized_pnl ?? 0),
     currency: activeServerRun?.currency ?? account?.currency ?? 'USD',
     transactions: activeTradeRows.filter((trade) => trade.contract_id).map((trade) => ({
-      id: trade.id, contractId: String(trade.contract_id), contractType: trade.contract_type,
-      symbol: trade.symbol, stake: Number(trade.stake), payout: trade.payout === null ? null : Number(trade.payout),
+      id: trade.id, contractId: String(trade.contract_id), contractType: trade.contract_type, symbol: trade.symbol,
+      stake: Number(trade.stake), payout: trade.payout === null ? null : Number(trade.payout),
       profit: trade.profit === null ? null : Number(trade.profit), currency: trade.currency,
       startedAt: Date.parse(trade.opened_at ?? trade.created_at), settledAt: trade.settled_at ? Date.parse(trade.settled_at) : null,
       status: trade.state,
     } satisfies BotTransaction)),
-    journal: activeServerRun ? [{
-      timestamp: Date.now(),
-      level: activeServerRun.status === 'reconciliation_required' || activeServerRun.status === 'failed' ? 'error' : 'info',
-      message: activeServerRun.stop_reason ?? `Server run status: ${activeServerRun.status}`,
-    }] : [],
+    journal: liveJournal,
     startedAt: activeServerRun?.started_at ? Date.parse(activeServerRun.started_at) : null,
-    lastError: activeServerRun?.status === 'reconciliation_required' || activeServerRun?.status === 'failed' || activeServerRun?.status === 'interrupted'
-      ? activeServerRun.stop_reason ?? 'Server run requires attention.' : null,
+    lastError: ['failed', 'interrupted', 'reconciliation_required'].includes(activeServerRun?.status ?? '') ? activeServerRun?.stop_reason ?? 'Server run requires attention.' : null,
   };
-  const orderRecoveryRequired = activeServerRun?.status === 'reconciliation_required'
-    || activeTradeRows.some((trade) => trade.state === 'outcome_unknown');
+  const orderRecoveryRequired = activeTradeRows.some((trade) => trade.state === 'outcome_unknown');
+  function updateActiveRun(patch: Partial<ServerBotRun>) {
+    setServerRuns((current) => current.map((run) => run.id === activeServerRunId ? { ...run, ...patch, updated_at: new Date().toISOString() } : run));
+  }
   async function start() {
-    if (!connected || !account || !activeConfig) {
-      setServerError('Connect a verified Demo account and select a bot configuration first.');
-      return;
-    }
-    if ((account.account_type ?? '').toLowerCase() !== 'demo') {
-      setServerError('Automated execution is Demo-only. Real-account automation is disabled.');
-      return;
-    }
-    if (activeConfig.stakeStrategy.type !== 'fixed') {
-      setServerError('The server worker currently supports fixed stake only. Select a fixed-stake strategy.');
-      return;
-    }
-    if (activeConfig.durationUnit !== 't' || !['DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'DIGITMATCH', 'DIGITDIFF'].includes(activeConfig.contractType)) {
-      setServerError('The server worker supports digit contracts with a duration of 1–10 ticks only.');
-      return;
-    }
-    if (!activeConfig.stopConditions.some((condition) => condition.type === 'loss' || condition.type === 'tradeCount' || condition.type === 'time')) {
-      setServerError('Add a loss limit, maximum trade count, or time limit before starting this bot.');
-      return;
-    }
-    if (activeServerRun?.status === 'reconciliation_required') {
-      setServerError('This run requires broker reconciliation. Do not restart it until the unresolved contract outcome is confirmed.');
-      return;
-    }
+    if (!connected || !account || !activeConfig) { setServerError('Connect a verified Demo account and select a bot configuration first.'); return; }
+    if ((account.account_type ?? '').toLowerCase() !== 'demo') { setServerError('Automated execution is Demo-only. Real-account automation is disabled.'); return; }
+    if (activeConfig.stakeStrategy.type !== 'fixed') { setServerError('The server runner supports fixed stake only. Select a fixed-stake strategy.'); return; }
+    if (activeConfig.durationUnit !== 't' || !['DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'DIGITMATCH', 'DIGITDIFF'].includes(activeConfig.contractType)) { setServerError('The server runner supports digit contracts with a duration of 1–10 ticks only.'); return; }
+    if (!activeConfig.stopConditions.some((condition) => condition.type === 'loss' || condition.type === 'tradeCount' || condition.type === 'time')) { setServerError('Add a loss limit, maximum trade count, or time limit before starting this bot.'); return; }
     if (serverBusy || ['queued', 'running', 'stopping'].includes(activeServerRun?.status ?? '')) return;
-    setServerBusy(true);
-    setServerError(null);
+    if (botSocketRef.current && botSocketRef.current.readyState < WebSocket.CLOSING) { setServerError('A bot session is already connected. Stop or wait for it to finish.'); return; }
+    setServerBusy(true); setServerError(null); setServerTrades([]);
+    setLiveJournal([{ timestamp: Date.now(), level: 'info', message: 'Requesting a short-lived server WebSocket ticket…' }]);
     try {
-      const response = await fetch('/api/bots/runs', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ account_id: account.account_id, config: {
-          id: activeConfig.id, name: activeConfig.name, symbol: activeConfig.symbol,
-          contractType: activeConfig.contractType, ...(activeConfig.barrier !== undefined ? { barrier: activeConfig.barrier } : {}),
-          duration: activeConfig.duration, durationUnit: activeConfig.durationUnit,
-          stakeStrategy: activeConfig.stakeStrategy, stopConditions: activeConfig.stopConditions,
-          cooldownSeconds: activeConfig.cooldownSeconds, maxTradesPerDay: Math.min(activeConfig.maxTradesPerDay, 20),
-          maxConsecutiveLosses: Math.min(activeConfig.maxConsecutiveLosses, 3),
-        } }),
-        cache: 'no-store',
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.run?.id) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Server did not confirm the run was queued.');
-      setActiveServerRunId(payload.run.id);
-      await refreshServerRuns();
+      const backendWs = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL?.trim();
+      if (!backendWs) throw new Error('Bot WebSocket is not configured. Set NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL.');
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.access_token) throw new Error('Sign in again before starting a bot.');
+      const ticketUrl = new URL(backendWs);
+      ticketUrl.protocol = ticketUrl.protocol === 'wss:' ? 'https:' : 'http:';
+      ticketUrl.pathname = '/deriv/ws-ticket'; ticketUrl.search = '';
+      const ticketResponse = await fetch(ticketUrl.toString(), { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, Accept: 'application/json' }, cache: 'no-store' });
+      const ticketPayload = await ticketResponse.json().catch(() => null);
+      if (!ticketResponse.ok || typeof ticketPayload?.ticket !== 'string') throw new Error(typeof ticketPayload?.detail === 'string' ? ticketPayload.detail : 'Could not obtain a bot session ticket.');
+      const socketUrl = new URL(backendWs);
+      socketUrl.pathname = '/bots/run'; socketUrl.search = ''; socketUrl.searchParams.set('account_id', account.account_id);
+      const socket = new WebSocket(socketUrl.toString(), ['tradebridge', ticketPayload.ticket]);
+      botSocketRef.current = socket;
+      const runId = crypto.randomUUID(); const now = new Date().toISOString();
+      const localRun: ServerBotRun = { id: runId, user_id: '', account_id: account.account_id, bot_id: activeConfig.id, config: activeConfig, status: 'queued', trade_count: 0, wins: 0, losses: 0, realized_pnl: 0, currency: account.currency ?? 'USD', started_at: now, ended_at: null, created_at: now, updated_at: now };
+      setServerRuns((current) => [localRun, ...current]); setActiveServerRunId(runId);
+      socket.onopen = () => {
+        setServerBusy(false); updateActiveRun({ status: 'running' });
+        setLiveJournal((current) => [...current, { timestamp: Date.now(), level: 'info', message: 'Connected to FastAPI; sending validated Demo configuration.' }]);
+        socket.send(JSON.stringify({ id: activeConfig.id, name: activeConfig.name, symbol: activeConfig.symbol, contractType: activeConfig.contractType, ...(activeConfig.barrier !== undefined ? { barrier: activeConfig.barrier } : {}), duration: activeConfig.duration, durationUnit: activeConfig.durationUnit, stakeStrategy: activeConfig.stakeStrategy, stopConditions: activeConfig.stopConditions, cooldownSeconds: Math.max(1, Math.min(activeConfig.cooldownSeconds, 60)), maxTradesPerDay: Math.min(activeConfig.maxTradesPerDay, 20), maxConsecutiveLosses: Math.min(activeConfig.maxConsecutiveLosses, 3) }));
+      };
+      socket.onmessage = (message) => {
+        let event: Record<string, unknown>;
+        try { event = JSON.parse(String(message.data)) as Record<string, unknown>; } catch { setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: 'Malformed server event received.' }]); return; }
+        const name = String(event.event ?? '');
+        if (name === 'started') setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: 'Bot execution started on FastAPI.' }]);
+        else if (name === 'trade_opened') {
+          const id = String(event.contract_id ?? '');
+          setServerTrades((v) => [...v, { id: id || crypto.randomUUID(), run_id: runId, user_id: '', account_id: account.account_id, state: 'open', contract_type: activeConfig.contractType, symbol: activeConfig.symbol, stake: Number(event.stake ?? activeConfig.stakeStrategy.amount), payout: null, profit: null, currency: account.currency ?? 'USD', contract_id: id || null, created_at: new Date().toISOString(), opened_at: new Date().toISOString(), settled_at: null }]);
+          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: `Trade opened · contract ${id || 'pending'}` }]);
+        } else if (name === 'trade_settled') {
+          const id = String(event.contract_id ?? ''); const profit = Number(event.profit ?? 0); const count = Number(event.trade_count ?? 0);
+          setServerTrades((v) => v.map((t) => String(t.contract_id) === id ? { ...t, state: 'settled', payout: Number(event.payout ?? 0), profit, settled_at: new Date().toISOString() } : t));
+          updateActiveRun({ status: 'running', trade_count: count, wins: profit > 0 ? Number(activeServerRun?.wins ?? 0) + 1 : Number(activeServerRun?.wins ?? 0), losses: profit < 0 ? Number(activeServerRun?.losses ?? 0) + 1 : Number(activeServerRun?.losses ?? 0), realized_pnl: Number(event.total_profit ?? 0) });
+          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: profit >= 0 ? 'info' : 'warn', message: `Trade settled · P/L ${profit.toFixed(2)} ${account.currency ?? 'USD'}` }]);
+        } else if (name === 'error') {
+          const reason = String(event.reason ?? 'Bot execution error');
+          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: reason }]);
+          if (/unknown|timeout|reconcil/i.test(reason)) setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: reason } : t));
+          updateActiveRun({ status: 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
+          setServerError(`Bot stopped: ${reason}. Do not restart until any uncertain purchase outcome is resolved.`);
+        } else if (name === 'done') {
+          updateActiveRun({ status: 'stopped', stop_reason: String(event.stop_reason ?? 'completed'), trade_count: Number(event.trade_count ?? 0), realized_pnl: Number(event.total_profit ?? 0), ended_at: new Date().toISOString() });
+          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: `Bot finished · ${String(event.stop_reason ?? 'completed')}` }]);
+        }
+      };
+      socket.onerror = () => { setServerBusy(false); setServerError('Bot WebSocket failed. Check the deployed FastAPI service and allowed origin configuration.'); setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: 'WebSocket transport error; broker status may be uncertain.' }]); };
+      socket.onclose = (event) => {
+        setServerBusy(false); if (botSocketRef.current === socket) botSocketRef.current = null;
+        if (event.code !== 1000 && event.code !== 1001) {
+          setServerError(`Bot WebSocket closed unexpectedly (code ${event.code}). Verify broker state before restarting.`);
+          setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: 'WebSocket disconnected before settlement confirmation.' } : t));
+          updateActiveRun({ status: 'interrupted', stop_reason: `WebSocket closed (${event.code})`, ended_at: new Date().toISOString() });
+        }
+      };
     } catch (error) {
-      setServerError(error instanceof Error ? error.message : 'Could not start server bot run.');
-    } finally {
-      setServerBusy(false);
+      setServerBusy(false); setServerError(error instanceof Error ? error.message : 'Could not start server bot run.');
+      setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: error instanceof Error ? error.message : 'Could not start bot.' }]);
     }
   }
   async function stop() {
-    if (!activeServerRunId || serverBusy) return;
-    setServerBusy(true);
-    setServerError(null);
-    try {
-      const response = await fetch(`/api/bots/runs/${encodeURIComponent(activeServerRunId)}/stop`, {
-        method: 'POST', headers: { Accept: 'application/json' }, cache: 'no-store',
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Server did not confirm stop request.');
-      await refreshServerRuns();
-    } catch (error) {
-      setServerError(error instanceof Error ? error.message : 'Could not stop server bot run.');
-    } finally {
-      setServerBusy(false);
-    }
+    const socket = botSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || serverBusy) { setServerError('No active bot WebSocket is available to receive the stop request.'); return; }
+    setServerBusy(true); setServerError(null); updateActiveRun({ status: 'stopping' });
+    try { socket.send(JSON.stringify({ action: 'stop' })); setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: 'Stop requested; server will finish the current trade before stopping.' }]); }
+    catch { setServerError('Stop request could not be sent. Verify broker state before another run.'); }
+    finally { setServerBusy(false); }
   }
   function handleSaveConfig(config: BotConfig) {
     upsertBotConfig(config);
@@ -536,21 +500,9 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           )}
         </div>
         <aside>
-          <label style={{ display: 'grid', gap: 6, marginBottom: 10, fontSize: 12, color: 'var(--muted)' }}>
-            Server run history
-            <select
-              value={activeServerRunId ?? ''}
-              onChange={(event) => setActiveServerRunId(event.target.value || null)}
-              style={{ width: '100%', minHeight: 36, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', background: 'var(--card, transparent)', color: 'var(--foreground, inherit)' }}
-            >
-              <option value="">Select a run to inspect</option>
-              {serverRuns.map((run) => (
-                <option key={run.id} value={run.id}>
-                  {(run.config?.name ?? run.bot_id)} · {run.status} · {new Date(run.created_at).toLocaleString()}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 12 }}>
+            Live server session · history is not durable across reloads.
+          </p>
           <RunPanel
             runState={runState}
             onStart={start}
