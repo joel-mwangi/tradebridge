@@ -236,7 +236,11 @@ test("live market feed can be switched to FastAPI without storing ticks", () => 
 test("automated bot execution is server-authoritative and absent from chart browser code", () => {
   assert.doesNotMatch(workspace, /useBotRunner\(connected, activeAccount/);
   assert.match(workspace, /Bot Workspace/);
-  assert.match(botsWorkspace, /\/api\/bots\/runs/);
-  assert.match(botsWorkspace, /reconciliation_required/);
+  assert.match(botsWorkspace, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL/);
+  assert.match(botsWorkspace, /\/bots\/run/);
+  assert.match(botsWorkspace, /deriv\/ws-ticket/);
+  assert.match(botsWorkspace, /action: 'stop'/);
+  assert.doesNotMatch(botsWorkspace, /\/api\/bots\/runs/);
+  assert.match(botsWorkspace, /outcome_unknown/);
   assert.doesNotMatch(botRunner, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED/);
 });
