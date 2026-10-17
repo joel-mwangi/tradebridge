@@ -30,18 +30,6 @@ type ServerBotRun = {
   realized_pnl: number | string; currency: string; started_at: string | null; ended_at: string | null;
   created_at: string; updated_at: string;
 };
-function toDashboardRun(run: ServerBotRun): BotRun {
-  const status: BotStatus = ({ queued: 'connecting', running: 'running', stopping: 'stopping', stopped: 'stopped',
-    completed: 'stopped', failed: 'error', interrupted: 'error', reconciliation_required: 'error' } as Record<string, BotStatus>)[run.status] ?? 'error';
-  return {
-    botId: run.bot_id, botName: run.config?.name ?? run.bot_id,
-    startedAt: run.started_at ? Date.parse(run.started_at) : Date.parse(run.created_at),
-    endedAt: run.ended_at ? Date.parse(run.ended_at) : null, status,
-    tradeCount: Number(run.trade_count ?? 0), wins: Number(run.wins ?? 0), losses: Number(run.losses ?? 0),
-    netPnl: Number(run.realized_pnl ?? 0), currency: run.currency ?? 'USD', error: run.stop_reason ?? null,
-  };
-}
-
 interface MarketAnalysisResponse {
   symbol: string;
   source: "supabase.market_ticks";
@@ -179,8 +167,11 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     lastError: ['failed', 'interrupted', 'reconciliation_required'].includes(activeServerRun?.status ?? '') ? activeServerRun?.stop_reason ?? 'Server run requires attention.' : null,
   };
   const orderRecoveryRequired = activeTradeRows.some((trade) => trade.state === 'outcome_unknown');
+  function updateRunById(runId: string, patch: Partial<ServerBotRun>) {
+    setServerRuns((current) => current.map((run) => run.id === runId ? { ...run, ...patch, updated_at: new Date().toISOString() } : run));
+  }
   function updateActiveRun(patch: Partial<ServerBotRun>) {
-    setServerRuns((current) => current.map((run) => run.id === activeServerRunId ? { ...run, ...patch, updated_at: new Date().toISOString() } : run));
+    if (activeServerRunId) updateRunById(activeServerRunId, patch);
   }
   async function start() {
     if (!connected || !account || !activeConfig) { setServerError('Connect a verified Demo account and select a bot configuration first.'); return; }
@@ -210,9 +201,9 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
       botSocketRef.current = socket;
       const runId = crypto.randomUUID(); const now = new Date().toISOString();
       const localRun: ServerBotRun = { id: runId, user_id: '', account_id: account.account_id, bot_id: activeConfig.id, config: activeConfig, status: 'queued', trade_count: 0, wins: 0, losses: 0, realized_pnl: 0, currency: account.currency ?? 'USD', started_at: now, ended_at: null, created_at: now, updated_at: now };
-      setServerRuns((current) => [localRun, ...current]); setActiveServerRunId(runId);
+      setServerRuns((current) => [localRun, ...current]); setRuns((current) => [{ botId: activeConfig.id, botName: activeConfig.name, startedAt: Date.now(), endedAt: null, status: 'connecting', tradeCount: 0, wins: 0, losses: 0, netPnl: 0, currency: account.currency ?? 'USD', error: null }, ...current]); setActiveServerRunId(runId);
       socket.onopen = () => {
-        setServerBusy(false); updateActiveRun({ status: 'running' });
+        setServerBusy(false); updateRunById(runId, { status: 'running' });
         setLiveJournal((current) => [...current, { timestamp: Date.now(), level: 'info', message: 'Connected to FastAPI; sending validated Demo configuration.' }]);
         socket.send(JSON.stringify({ id: activeConfig.id, name: activeConfig.name, symbol: activeConfig.symbol, contractType: activeConfig.contractType, ...(activeConfig.barrier !== undefined ? { barrier: activeConfig.barrier } : {}), duration: activeConfig.duration, durationUnit: activeConfig.durationUnit, stakeStrategy: activeConfig.stakeStrategy, stopConditions: activeConfig.stopConditions, cooldownSeconds: Math.max(1, Math.min(activeConfig.cooldownSeconds, 60)), maxTradesPerDay: Math.min(activeConfig.maxTradesPerDay, 20), maxConsecutiveLosses: Math.min(activeConfig.maxConsecutiveLosses, 3) }));
       };
@@ -228,16 +219,16 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
         } else if (name === 'trade_settled') {
           const id = String(event.contract_id ?? ''); const profit = Number(event.profit ?? 0); const count = Number(event.trade_count ?? 0);
           setServerTrades((v) => v.map((t) => String(t.contract_id) === id ? { ...t, state: 'settled', payout: Number(event.payout ?? 0), profit, settled_at: new Date().toISOString() } : t));
-          updateActiveRun({ status: 'running', trade_count: count, wins: profit > 0 ? Number(activeServerRun?.wins ?? 0) + 1 : Number(activeServerRun?.wins ?? 0), losses: profit < 0 ? Number(activeServerRun?.losses ?? 0) + 1 : Number(activeServerRun?.losses ?? 0), realized_pnl: Number(event.total_profit ?? 0) });
+          updateRunById(runId, { status: 'running', trade_count: count, wins: profit > 0 ? Number(activeServerRun?.wins ?? 0) + 1 : Number(activeServerRun?.wins ?? 0), losses: profit < 0 ? Number(activeServerRun?.losses ?? 0) + 1 : Number(activeServerRun?.losses ?? 0), realized_pnl: Number(event.total_profit ?? 0) });
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: profit >= 0 ? 'info' : 'warn', message: `Trade settled · P/L ${profit.toFixed(2)} ${account.currency ?? 'USD'}` }]);
         } else if (name === 'error') {
           const reason = String(event.reason ?? 'Bot execution error');
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: reason }]);
           if (/unknown|timeout|reconcil/i.test(reason)) setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: reason } : t));
-          updateActiveRun({ status: 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
+          updateRunById(runId, { status: 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
           setServerError(`Bot stopped: ${reason}. Do not restart until any uncertain purchase outcome is resolved.`);
         } else if (name === 'done') {
-          updateActiveRun({ status: 'stopped', stop_reason: String(event.stop_reason ?? 'completed'), trade_count: Number(event.trade_count ?? 0), realized_pnl: Number(event.total_profit ?? 0), ended_at: new Date().toISOString() });
+          updateRunById(runId, { status: 'stopped', stop_reason: String(event.stop_reason ?? 'completed'), trade_count: Number(event.trade_count ?? 0), realized_pnl: Number(event.total_profit ?? 0), ended_at: new Date().toISOString() });
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: `Bot finished · ${String(event.stop_reason ?? 'completed')}` }]);
         }
       };
@@ -247,7 +238,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
         if (event.code !== 1000 && event.code !== 1001) {
           setServerError(`Bot WebSocket closed unexpectedly (code ${event.code}). Verify broker state before restarting.`);
           setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: 'WebSocket disconnected before settlement confirmation.' } : t));
-          updateActiveRun({ status: 'interrupted', stop_reason: `WebSocket closed (${event.code})`, ended_at: new Date().toISOString() });
+          updateRunById(runId, { status: 'interrupted', stop_reason: `WebSocket closed (${event.code})`, ended_at: new Date().toISOString() });
         }
       };
     } catch (error) {
