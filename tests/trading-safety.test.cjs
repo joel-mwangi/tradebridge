@@ -155,13 +155,13 @@ test("bot request timeouts stop execution and retain ambiguous purchase state fo
 });
 
 
-test("ambiguous bot orders require an explicit Deriv reconciliation acknowledgement", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
+test("ambiguous server bot orders cannot be cleared by browser acknowledgement", () => {
+  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
   const runPanel = read("src/components/bots/RunPanel.tsx");
-  assert.match(botRunner, /acknowledgeOrderReconciled/);
-  assert.match(botRunner, /window\.confirm/);
+  assert.match(botsWorkspace, /reconciliation_required/);
   assert.match(runPanel, /orderRecoveryRequired/);
-  assert.match(runPanel, /I checked Deriv — clear recovery lock/);
+  assert.match(runPanel, /cannot be cleared by a browser acknowledgement/);
+  assert.doesNotMatch(runPanel, /I checked Deriv — clear recovery lock/);
 });
 
 test("imported and persisted bot configs are validated before execution", () => {
