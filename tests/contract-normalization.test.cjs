@@ -33,6 +33,21 @@ test("zero-payout loss supports string flags", async () => {
  assert.equal(c.settled,true);
 });
 
+test("zero sell price is preserved instead of falling back to potential payout", async () => {
+ const { normalizeDerivContract } = await modulePromise;
+ const c=normalizeDerivContract({contract_id:10,buy_price:"25",sell_price:"0",payout:"46.13",status:"sold",is_sold:true});
+ assert.equal(c.payout,0);
+ assert.equal(c.profit,-25);
+ assert.equal(c.outcome,"lost");
+ assert.equal(c.status,"settled");
+});
+test("terminal loss cannot inherit a positive potential payout", async () => {
+ const { normalizeDerivContract } = await modulePromise;
+ const c=normalizeDerivContract({contract_id:11,buy_price:"25",payout:"46.13",status:"lost",is_expired:true});
+ assert.equal(c.payout,0);
+ assert.equal(c.profit,-25);
+ assert.equal(c.outcome,"lost");
+});
 test("position adapter exposes normalized settled state for numeric and string flags", async () => {
  const { toPosition } = await activityPromise;
  const sold = toPosition({contract_id:"17578914379", contract_type:"DIGITUNDER", underlying:"Volatility 50 (1s) Index", buy_price:"25.00", payout:"46.13", profit:"21.13", status:"open", is_sold:"1", currency:"USD"});
