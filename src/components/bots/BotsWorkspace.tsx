@@ -78,7 +78,7 @@ function loadStoredBotHistory(): { runs: ServerBotRun[]; trades: ServerBotTrade[
       return typeof trade.id === 'string' && typeof trade.run_id === 'string' && knownRunIds.has(trade.run_id)
         && typeof trade.state === 'string' && typeof trade.symbol === 'string';
     }).slice(-500).map((trade) => trade.state === 'open'
-      ? { ...trade, state: 'outcome_unknown', error_message: 'The browser session was reloaded before settlement was confirmed. Reconcile in Deriv.' }
+      ? { ...trade, state: 'outcome_unknown' as const, error_message: 'The browser session was reloaded before settlement was confirmed. Reconcile in Deriv.' }
       : trade) : [];
     return { runs, trades };
   } catch {
