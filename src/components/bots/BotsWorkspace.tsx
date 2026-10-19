@@ -22,6 +22,7 @@ type ServerBotTrade = {
   id: string; run_id: string; user_id: string; account_id: string; state: string;
   contract_type: string; symbol: string; stake: number | string; payout: number | string | null;
   profit: number | string | null; currency: string; contract_id: string | null;
+  outcome?: string | null; provider_status?: string | null;
   created_at: string; opened_at: string | null; settled_at: string | null; error_message?: string | null;
 };
 type ServerBotRun = {
@@ -327,12 +328,12 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           setServerTrades((current) => {
             const exists = current.some((trade) => String(trade.contract_id) === id);
             if (exists) return current.map((trade) => String(trade.contract_id) === id
-              ? { ...trade, state: 'settled', payout, profit, settled_at: settledAt, error_message: null } : trade);
+              ? { ...trade, state: 'settled', payout, profit, outcome, provider_status: String(event.provider_status ?? 'unknown'), settled_at: settledAt, error_message: null } : trade);
             return [{
               id: crypto.randomUUID(), run_id: runId, user_id: '', account_id: account.account_id,
               state: 'settled', contract_type: activeConfig.contractType, symbol: activeConfig.symbol,
               stake: Number.isFinite(Number(event.stake)) ? Number(event.stake) : fixedStake,
-              payout, profit, currency: account.currency ?? 'USD', contract_id: id,
+              payout, profit, outcome, provider_status: String(event.provider_status ?? 'unknown'), currency: account.currency ?? 'USD', contract_id: id,
               created_at: settledAt, opened_at: settledAt, settled_at: settledAt,
             }, ...current].slice(0, 500);
           });
