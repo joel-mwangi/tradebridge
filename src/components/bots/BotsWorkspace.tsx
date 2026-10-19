@@ -30,6 +30,62 @@ type ServerBotRun = {
   realized_pnl: number | string; currency: string; started_at: string | null; ended_at: string | null;
   created_at: string; updated_at: string;
 };
+const BOT_RUN_HISTORY_KEY = 'tradebridge:bots:server-history:v1';
+const VALID_RUN_STATUSES = new Set(['queued', 'running', 'stopping', 'stopped', 'completed', 'failed', 'interrupted', 'reconciliation_required']);
+
+function toDashboardRun(run: ServerBotRun): BotRun {
+  const status: BotStatus = run.status === 'queued' ? 'connecting'
+    : run.status === 'running' ? 'running'
+    : run.status === 'stopping' ? 'stopping'
+    : ['failed', 'interrupted', 'reconciliation_required'].includes(run.status) ? 'error'
+    : 'stopped';
+  return {
+    botId: run.bot_id,
+    botName: typeof run.config?.name === 'string' ? run.config.name : 'Saved bot',
+    startedAt: run.started_at ? Date.parse(run.started_at) : Date.parse(run.created_at),
+    endedAt: run.ended_at ? Date.parse(run.ended_at) : null,
+    status,
+    tradeCount: Number(run.trade_count) || 0,
+    wins: Number(run.wins) || 0,
+    losses: Number(run.losses) || 0,
+    netPnl: Number(run.realized_pnl) || 0,
+    currency: run.currency || 'USD',
+    error: run.stop_reason ?? null,
+  };
+}
+
+function loadStoredBotHistory(): { runs: ServerBotRun[]; trades: ServerBotTrade[] } {
+  try {
+    const raw = window.localStorage.getItem(BOT_RUN_HISTORY_KEY);
+    if (!raw) return { runs: [], trades: [] };
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || !('runs' in parsed) || !('trades' in parsed)) return { runs: [], trades: [] };
+    const value = parsed as { runs?: unknown; trades?: unknown };
+    const runs = Array.isArray(value.runs) ? value.runs.filter((item): item is ServerBotRun => {
+      if (typeof item !== 'object' || item === null) return false;
+      const run = item as Partial<ServerBotRun>;
+      return typeof run.id === 'string' && typeof run.bot_id === 'string' && typeof run.config === 'object'
+        && run.config !== null && typeof run.status === 'string' && VALID_RUN_STATUSES.has(run.status)
+        && typeof run.trade_count === 'number' && typeof run.created_at === 'string';
+    }).slice(0, 100).map((run) => {
+      if (!['queued', 'running', 'stopping'].includes(run.status)) return run;
+      return { ...run, status: 'interrupted', stop_reason: 'The browser session was reloaded. Verify the contract directly in Deriv before restarting.' };
+    }) : [];
+    const knownRunIds = new Set(runs.map((run) => run.id));
+    const trades = Array.isArray(value.trades) ? value.trades.filter((item): item is ServerBotTrade => {
+      if (typeof item !== 'object' || item === null) return false;
+      const trade = item as Partial<ServerBotTrade>;
+      return typeof trade.id === 'string' && typeof trade.run_id === 'string' && knownRunIds.has(trade.run_id)
+        && typeof trade.state === 'string' && typeof trade.symbol === 'string';
+    }).slice(-500).map((trade) => trade.state === 'open'
+      ? { ...trade, state: 'outcome_unknown', error_message: 'The browser session was reloaded before settlement was confirmed. Reconcile in Deriv.' }
+      : trade) : [];
+    return { runs, trades };
+  } catch {
+    return { runs: [], trades: [] };
+  }
+}
+
 interface MarketAnalysisResponse {
   symbol: string;
   source: "supabase.market_ticks";
@@ -91,15 +147,38 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
   const botSocketRef = useRef<WebSocket | null>(null);
   const [liveJournal, setLiveJournal] = useState<BotRunState['journal']>([]);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
+  const [historyHydrated, setHistoryHydrated] = useState(false);
 
   useEffect(() => {
     setConfigs(loadBotConfigs());
+    const savedHistory = loadStoredBotHistory();
+    setServerRuns(savedHistory.runs);
+    setServerTrades(savedHistory.trades);
+    if (savedHistory.runs.length > 0) setActiveServerRunId(savedHistory.runs[0].id);
+    setHistoryHydrated(true);
     return () => {
       const socket = botSocketRef.current;
       if (socket && socket.readyState <= WebSocket.OPEN) socket.close(1000, 'Bot workspace unmounted');
       botSocketRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!historyHydrated) return;
+    try {
+      window.localStorage.setItem(BOT_RUN_HISTORY_KEY, JSON.stringify({
+        version: 1,
+        runs: serverRuns.slice(0, 100),
+        trades: serverTrades.slice(-500),
+      }));
+    } catch {
+      // Local history is a convenience cache; Deriv remains authoritative for financial records.
+    }
+  }, [historyHydrated, serverRuns, serverTrades]);
+
+  useEffect(() => {
+    setRuns(serverRuns.map(toDashboardRun).slice(0, 100));
+  }, [serverRuns]);
 
   useEffect(() => {
     if (innerTab !== 'ai' || aiSection !== 'market') return;
@@ -203,7 +282,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
       botSocketRef.current = socket;
       const runId = crypto.randomUUID(); const now = new Date().toISOString();
       const localRun: ServerBotRun = { id: runId, user_id: '', account_id: account.account_id, bot_id: activeConfig.id, config: activeConfig, status: 'queued', trade_count: 0, wins: 0, losses: 0, realized_pnl: 0, currency: account.currency ?? 'USD', started_at: now, ended_at: null, created_at: now, updated_at: now };
-      setServerRuns((current) => [localRun, ...current]); setRuns((current) => [{ botId: activeConfig.id, botName: activeConfig.name, startedAt: Date.now(), endedAt: null, status: 'connecting', tradeCount: 0, wins: 0, losses: 0, netPnl: 0, currency: account.currency ?? 'USD', error: null }, ...current]); setActiveServerRunId(runId);
+      setServerRuns((current) => [localRun, ...current].slice(0, 100)); setActiveServerRunId(runId);
       socket.onopen = () => {
         setServerBusy(false); updateRunById(runId, { status: 'running' });
         setLiveJournal((current) => [...current, { timestamp: Date.now(), level: 'info', message: 'Connected to FastAPI; sending validated Demo configuration.' }]);
@@ -494,7 +573,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
         </div>
         <aside>
           <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 12 }}>
-            Live server session · history is not durable across reloads.
+            Bot run metadata is saved in this browser. Deriv remains the source of truth for contract and account history; verify uncertain outcomes there.
           </p>
           <RunPanel
             runState={runState}
