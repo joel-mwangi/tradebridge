@@ -137,6 +137,14 @@ test("bot run metadata persists in localStorage and reloads conservatively", () 
   assert.doesNotMatch(workspace, /\/api\/bots\/runs/);
 });
 
+test("unexpected bot socket close cannot downgrade reconciliation or failure status", () => {
+  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
+  const closeHandler = botsWorkspace.match(/socket\.onclose = \(event\) => \{([\s\S]*?)\n      \};/)?.[1];
+  assert.ok(closeHandler, "bot socket close handler must exist");
+  assert.match(closeHandler, /\['reconciliation_required', 'failed'\]\.includes\(run\.status\)/);
+  assert.match(closeHandler, /status: 'interrupted'/);
+});
+
 test("server bot trade history and recovery mutations are scoped to their run", () => {
   const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
   assert.match(botsWorkspace, /serverTrades\.filter\(\(trade\) => trade\.run_id === activeServerRun\.id\)/);

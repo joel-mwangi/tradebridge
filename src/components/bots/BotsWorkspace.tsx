@@ -378,7 +378,19 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
         if (event.code !== 1000 && event.code !== 1001) {
           setServerError(`Bot WebSocket closed unexpectedly (code ${event.code}). Verify broker state before restarting.`);
           setServerTrades((v) => v.map((t) => t.run_id === runId && t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: 'WebSocket disconnected before settlement confirmation.' } : t));
-          updateRunById(runId, { status: 'interrupted', stop_reason: `WebSocket closed (${event.code})`, ended_at: new Date().toISOString() });
+          setServerRuns((current) => current.map((run) => {
+            if (run.id !== runId) return run;
+            // The socket close often follows an explicit error event. Preserve the
+            // stronger failure/reconciliation state instead of downgrading it.
+            if (['reconciliation_required', 'failed'].includes(run.status)) return run;
+            return {
+              ...run,
+              status: 'interrupted',
+              stop_reason: `WebSocket closed (${event.code})`,
+              ended_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+          }));
         }
       };
     } catch (error) {
