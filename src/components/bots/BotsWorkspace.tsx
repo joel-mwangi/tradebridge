@@ -226,7 +226,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
 
   const activeConfig = configs.find((c) => c.id === activeConfigId) ?? null;
   const activeServerRun = serverRuns.find((run) => run.id === activeServerRunId) ?? null;
-  const activeTradeRows = activeServerRun ? serverTrades : [];
+  const activeTradeRows = activeServerRun ? serverTrades.filter((trade) => trade.run_id === activeServerRun.id) : [];
   const mappedStatus: BotStatus = activeServerRun
     ? ({ queued: 'connecting', running: 'running', stopping: 'stopping', stopped: 'stopped', completed: 'stopped', failed: 'error', interrupted: 'error', reconciliation_required: 'error' } as Record<string, BotStatus>)[activeServerRun.status] ?? 'idle'
     : 'idle';
@@ -310,7 +310,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           const totalProfit = totalProfitRaw === null || totalProfitRaw === undefined || totalProfitRaw === '' ? Number.NaN : Number(totalProfitRaw);
           const count = Number(event.trade_count);
           if (!id || !Number.isFinite(payout) || !Number.isFinite(profit) || !Number.isFinite(totalProfit) || !Number.isFinite(count)) {
-            setServerTrades((v) => v.map((t) => String(t.contract_id) === id && t.state === 'open'
+            setServerTrades((v) => v.map((t) => t.run_id === runId && String(t.contract_id) === id && t.state === 'open'
               ? { ...t, state: 'outcome_unknown', error_message: 'Settlement event did not contain valid confirmed monetary values.' } : t));
             updateRunById(runId, { status: 'reconciliation_required', stop_reason: 'invalid_settlement_event', ended_at: new Date().toISOString() });
             setServerError('The backend settlement event was incomplete. Verify the contract in Deriv before starting another run.');
@@ -348,7 +348,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           const reason = String(event.reason ?? 'Bot execution error');
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: reason }]);
           const outcomeUnknown = event.state === 'outcome_unknown' || /unknown|timeout|reconcil|settlement_values_missing/i.test(reason);
-          if (outcomeUnknown) setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: reason } : t));
+          if (outcomeUnknown) setServerTrades((v) => v.map((t) => t.run_id === runId && t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: reason } : t));
           updateRunById(runId, { status: outcomeUnknown ? 'reconciliation_required' : 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
           setServerError(`Bot stopped: ${reason}. Do not restart until any uncertain purchase outcome is resolved.`);
         } else if (name === 'done') {
@@ -377,7 +377,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
         setServerBusy(false); if (botSocketRef.current === socket) botSocketRef.current = null;
         if (event.code !== 1000 && event.code !== 1001) {
           setServerError(`Bot WebSocket closed unexpectedly (code ${event.code}). Verify broker state before restarting.`);
-          setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: 'WebSocket disconnected before settlement confirmation.' } : t));
+          setServerTrades((v) => v.map((t) => t.run_id === runId && t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: 'WebSocket disconnected before settlement confirmation.' } : t));
           updateRunById(runId, { status: 'interrupted', stop_reason: `WebSocket closed (${event.code})`, ended_at: new Date().toISOString() });
         }
       };
