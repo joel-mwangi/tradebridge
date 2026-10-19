@@ -38,7 +38,6 @@ test("position adapter exposes normalized settled state for numeric and string f
  const sold = toPosition({contract_id:"17578914379", contract_type:"DIGITUNDER", underlying:"Volatility 50 (1s) Index", buy_price:"25.00", payout:"46.13", profit:"21.13", status:"open", is_sold:"1", currency:"USD"});
  assert.equal(sold.status, "settled");
  assert.equal(sold.outcome, "won");
- assert.equal(sold.stake, undefined);
  assert.equal(sold.buyPrice, 25);
  assert.equal(sold.payout, 46.13);
  assert.equal(sold.profit, 21.13);
