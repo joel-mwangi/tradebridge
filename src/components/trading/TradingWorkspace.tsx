@@ -730,7 +730,10 @@ export default function TradingWorkspace() {
                       {connected ? (
                         <form action="/api/auth/deriv/disconnect" method="post"><button className={styles.secondaryButton} type="submit">Disconnect broker</button></form>
                       ) : (
-                        <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Deriv ↗</button>
+                        <button className={styles.connectButton} type="button" onClick={startDerivConnect} aria-label="Link Deriv account">
+                          <span className={styles.derivIcon} aria-hidden="true">D</span>
+                          <span>Link</span>
+                        </button>
                       )}
                       {connected && <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>}
                     </div>

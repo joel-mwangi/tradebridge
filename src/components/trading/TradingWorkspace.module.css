@@ -892,3 +892,18 @@
 @media (max-width: 900px) {
   .botsLayout { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Deriv account-link action: compact brand mark beside the short label. */
+.derivIcon {
+  display: inline-grid;
+  flex: 0 0 20px;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ff444f;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1;
+}
