@@ -126,13 +126,15 @@ test("bot dashboard can search and filter run history and explain saved errors",
   assert.match(dashboard, /onClick=\{\(\) => botsListRef\.current\?\.scrollIntoView/);
 });
 
-test("bot run status and history are read from the authenticated server API", () => {
+test("bot run metadata persists in localStorage and reloads conservatively", () => {
   const workspace = read("src/components/bots/BotsWorkspace.tsx");
-  assert.match(workspace, /fetch\('\/api\/bots\/runs\?limit=100'/);
-  assert.match(workspace, /setRuns\(records\.map\(toDashboardRun\)\)/);
-  assert.match(workspace, /refreshServerDetail\(activeServerRunId\)/);
-  assert.match(workspace, /Server run history/);
-  assert.doesNotMatch(workspace, /handleClearRuns|loadBotRuns/);
+  assert.match(workspace, /tradebridge:bots:server-history:v1/);
+  assert.match(workspace, /window\.localStorage\.setItem\(BOT_RUN_HISTORY_KEY/);
+  assert.match(workspace, /loadStoredBotHistory\(\)/);
+  assert.match(workspace, /The browser session was reloaded/);
+  assert.match(workspace, /outcome_unknown/);
+  assert.match(workspace, /Deriv remains the source of truth for contract and account history/);
+  assert.doesNotMatch(workspace, /\/api\/bots\/runs/);
 });
 
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
