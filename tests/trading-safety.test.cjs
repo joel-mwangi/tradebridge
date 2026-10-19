@@ -137,6 +137,13 @@ test("bot run metadata persists in localStorage and reloads conservatively", () 
   assert.doesNotMatch(workspace, /\/api\/bots\/runs/);
 });
 
+test("server bot trade history and recovery mutations are scoped to their run", () => {
+  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
+  assert.match(botsWorkspace, /serverTrades\.filter\(\(trade\) => trade\.run_id === activeServerRun\.id\)/);
+  assert.match(botsWorkspace, /t\.run_id === runId && String\(t\.contract_id\) === id && t\.state === 'open'/);
+  assert.match(botsWorkspace, /t\.run_id === runId && t\.state === 'open' \? \{ \.\.\.t, state: 'outcome_unknown'/);
+});
+
 test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
   const botRunner = read("src/components/bots/useBotRunner.ts");
   assert.match(botRunner, /sessionStateRef\.current === 'Demo trading connected'/);
