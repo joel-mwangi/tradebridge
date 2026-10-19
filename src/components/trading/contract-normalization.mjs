@@ -21,9 +21,10 @@ export function normalizeDerivContract(raw = {}) {
   // A zero sell price is meaningful. Avoid truthy fallbacks that replace it with
   // a positive potential payout.
   if (sold || status === "sold") payout = sellPrice !== null ? sellPrice : explicitPayout;
-  if (status === "lost" && profit === null && stake !== null) {
+  if (status === "lost") {
+    // A lost contract returns zero regardless of any potential payout field.
     payout = 0;
-    profit = -stake;
+    if (profit === null && stake !== null) profit = -stake;
   } else if (settled && profit === null && payout !== null && stake !== null) {
     profit = payout - stake;
   }
