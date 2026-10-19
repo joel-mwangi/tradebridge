@@ -4,7 +4,8 @@ export function parseDerivNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 export function isDerivTrue(value) {
-  return value === true || value === 1 || value === "1";
+  if (value === true || value === 1) return true;
+  return typeof value === "string" && ["1", "true", "yes"].includes(value.trim().toLowerCase());
 }
 export function normalizeDerivContract(raw = {}) {
   const contractId = raw.contract_id ?? raw.id;
