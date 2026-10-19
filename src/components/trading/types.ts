@@ -59,10 +59,12 @@ export interface OpenPosition {
   currentSpot: number | null;
   payout: number | null;
   profit: number | null;
+  outcome: "open" | "won" | "lost" | "breakeven" | "cancelled" | "unknown";
   currency: string;
   startedAt: number | null;
   expiresAt: number | null;
-  status: string;
+  status: "open" | "settled";
+  providerStatus: string;
   longcode: string;
 }
 
