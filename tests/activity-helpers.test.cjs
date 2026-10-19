@@ -39,7 +39,9 @@ test("position conversion normalizes provider fields and numeric values", () => 
     currency: "USD",
     startedAt: 1000,
     expiresAt: 1060,
+    outcome: "open",
     status: "open",
+    providerStatus: "unknown",
     longcode: "",
   });
 });
