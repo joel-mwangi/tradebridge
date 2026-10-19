@@ -352,7 +352,23 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           updateRunById(runId, { status: outcomeUnknown ? 'reconciliation_required' : 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
           setServerError(`Bot stopped: ${reason}. Do not restart until any uncertain purchase outcome is resolved.`);
         } else if (name === 'done') {
-          updateRunById(runId, { status: 'stopped', stop_reason: String(event.stop_reason ?? 'completed'), trade_count: Number(event.trade_count ?? 0), realized_pnl: Number(event.total_profit ?? 0), ended_at: new Date().toISOString() });
+          // The backend emits "done" after both normal completion and error/unknown outcomes.
+          // Never let this summary event erase a fail-closed state set by an earlier error.
+          setServerRuns((current) => current.map((run) => {
+            if (run.id !== runId) return run;
+            if (['reconciliation_required', 'interrupted', 'failed'].includes(run.status)) return run;
+            const tradeCount = Number(event.trade_count);
+            const totalProfit = Number(event.total_profit);
+            return {
+              ...run,
+              status: 'stopped',
+              stop_reason: String(event.stop_reason ?? 'completed'),
+              ...(Number.isFinite(tradeCount) ? { trade_count: tradeCount } : {}),
+              ...(Number.isFinite(totalProfit) ? { realized_pnl: totalProfit } : {}),
+              ended_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+          }));
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: `Bot finished · ${String(event.stop_reason ?? 'completed')}` }]);
         }
       };
