@@ -346,11 +346,13 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: profit >= 0 ? 'info' : 'warn', message: `Trade settled · P/L ${profit.toFixed(2)} ${account.currency ?? 'USD'} · ${outcome}` }]);
         } else if (name === 'error') {
           const reason = String(event.reason ?? 'Bot execution error');
-          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: reason }]);
+          const detail = typeof event.detail === 'string' && event.detail.trim() ? event.detail.trim() : null;
+          const message = detail ? `${reason}: ${detail}` : reason;
+          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message }]);
           const outcomeUnknown = event.state === 'outcome_unknown' || /unknown|timeout|reconcil|settlement_values_missing/i.test(reason);
           if (outcomeUnknown) setServerTrades((v) => v.map((t) => t.run_id === runId && t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: reason } : t));
           updateRunById(runId, { status: outcomeUnknown ? 'reconciliation_required' : 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
-          setServerError(`Bot stopped: ${reason}. Do not restart until any uncertain purchase outcome is resolved.`);
+          setServerError(`Bot stopped: ${message}. Do not restart until any uncertain purchase outcome is resolved.`);
         } else if (name === 'done') {
           // The backend emits "done" after both normal completion and error/unknown outcomes.
           // Never let this summary event erase a fail-closed state set by an earlier error.
