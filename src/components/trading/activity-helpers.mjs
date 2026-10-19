@@ -1,8 +1,9 @@
+import { parseDerivNumber } from "./contract-normalization.mjs";
+
 export const STATEMENT_PAGE_SIZE = 30;
 
 export function numeric(value) {
-  const parsed = Number(value);
-  return value !== null && value !== undefined && value !== "" && Number.isFinite(parsed) ? parsed : null;
+  return parseDerivNumber(value);
 }
 
 export function toPosition(raw) {
