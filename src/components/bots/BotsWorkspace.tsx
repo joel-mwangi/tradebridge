@@ -145,6 +145,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [serverBusy, setServerBusy] = useState(false);
   const botSocketRef = useRef<WebSocket | null>(null);
+  const settledContractIdsRef = useRef<Set<string>>(new Set());
   const [liveJournal, setLiveJournal] = useState<BotRunState['journal']>([]);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
   const [historyHydrated, setHistoryHydrated] = useState(false);
@@ -263,6 +264,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     if (serverBusy || ['queued', 'running', 'stopping'].includes(activeServerRun?.status ?? '')) return;
     if (botSocketRef.current && botSocketRef.current.readyState < WebSocket.CLOSING) { setServerError('A bot session is already connected. Stop or wait for it to finish.'); return; }
     setServerBusy(true); setServerError(null); setServerTrades([]);
+    settledContractIdsRef.current.clear();
     setLiveJournal([{ timestamp: Date.now(), level: 'info', message: 'Requesting a short-lived server WebSocket ticket…' }]);
     try {
       const backendWs = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL?.trim();
@@ -298,15 +300,55 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
           setServerTrades((v) => [...v, { id: id || crypto.randomUUID(), run_id: runId, user_id: '', account_id: account.account_id, state: 'open', contract_type: activeConfig.contractType, symbol: activeConfig.symbol, stake: Number(event.stake ?? fixedStake), payout: null, profit: null, currency: account.currency ?? 'USD', contract_id: id || null, created_at: new Date().toISOString(), opened_at: new Date().toISOString(), settled_at: null }]);
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: `Trade opened · contract ${id || 'pending'}` }]);
         } else if (name === 'trade_settled') {
-          const id = String(event.contract_id ?? ''); const profit = Number(event.profit ?? 0); const count = Number(event.trade_count ?? 0);
-          setServerTrades((v) => v.map((t) => String(t.contract_id) === id ? { ...t, state: 'settled', payout: Number(event.payout ?? 0), profit, settled_at: new Date().toISOString() } : t));
-          updateRunById(runId, { status: 'running', trade_count: count, wins: profit > 0 ? Number(activeServerRun?.wins ?? 0) + 1 : Number(activeServerRun?.wins ?? 0), losses: profit < 0 ? Number(activeServerRun?.losses ?? 0) + 1 : Number(activeServerRun?.losses ?? 0), realized_pnl: Number(event.total_profit ?? 0) });
-          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: profit >= 0 ? 'info' : 'warn', message: `Trade settled · P/L ${profit.toFixed(2)} ${account.currency ?? 'USD'}` }]);
+          const id = String(event.contract_id ?? '');
+          const payoutRaw = event.payout;
+          const profitRaw = event.profit;
+          const totalProfitRaw = event.total_profit;
+          const payout = payoutRaw === null || payoutRaw === undefined || payoutRaw === '' ? Number.NaN : Number(payoutRaw);
+          const profit = profitRaw === null || profitRaw === undefined || profitRaw === '' ? Number.NaN : Number(profitRaw);
+          const totalProfit = totalProfitRaw === null || totalProfitRaw === undefined || totalProfitRaw === '' ? Number.NaN : Number(totalProfitRaw);
+          const count = Number(event.trade_count);
+          if (!id || !Number.isFinite(payout) || !Number.isFinite(profit) || !Number.isFinite(totalProfit) || !Number.isFinite(count)) {
+            setServerTrades((v) => v.map((t) => String(t.contract_id) === id && t.state === 'open'
+              ? { ...t, state: 'outcome_unknown', error_message: 'Settlement event did not contain valid confirmed monetary values.' } : t));
+            updateRunById(runId, { status: 'reconciliation_required', stop_reason: 'invalid_settlement_event', ended_at: new Date().toISOString() });
+            setServerError('The backend settlement event was incomplete. Verify the contract in Deriv before starting another run.');
+            setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: 'Rejected incomplete settlement event; reconciliation is required.' }]);
+            return;
+          }
+          if (settledContractIdsRef.current.has(id)) {
+            setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'warn', message: `Ignored duplicate settlement event for contract ${id}.` }]);
+            return;
+          }
+          settledContractIdsRef.current.add(id);
+          const outcome = ['won', 'lost', 'breakeven', 'cancelled'].includes(String(event.outcome))
+            ? String(event.outcome) : profit > 0 ? 'won' : profit < 0 ? 'lost' : 'breakeven';
+          const settledAt = new Date().toISOString();
+          setServerTrades((current) => {
+            const exists = current.some((trade) => String(trade.contract_id) === id);
+            if (exists) return current.map((trade) => String(trade.contract_id) === id
+              ? { ...trade, state: 'settled', payout, profit, settled_at: settledAt, error_message: null } : trade);
+            return [{
+              id: crypto.randomUUID(), run_id: runId, user_id: '', account_id: account.account_id,
+              state: 'settled', contract_type: activeConfig.contractType, symbol: activeConfig.symbol,
+              stake: Number.isFinite(Number(event.stake)) ? Number(event.stake) : fixedStake,
+              payout, profit, currency: account.currency ?? 'USD', contract_id: id,
+              created_at: settledAt, opened_at: settledAt, settled_at: settledAt,
+            }, ...current].slice(0, 500);
+          });
+          setServerRuns((current) => current.map((run) => run.id === runId ? {
+            ...run, status: 'running', trade_count: count,
+            wins: run.wins + (outcome === 'won' ? 1 : 0),
+            losses: run.losses + (outcome === 'lost' ? 1 : 0),
+            realized_pnl: totalProfit, updated_at: settledAt,
+          } : run));
+          setLiveJournal((v) => [...v, { timestamp: Date.now(), level: profit >= 0 ? 'info' : 'warn', message: `Trade settled · P/L ${profit.toFixed(2)} ${account.currency ?? 'USD'} · ${outcome}` }]);
         } else if (name === 'error') {
           const reason = String(event.reason ?? 'Bot execution error');
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'error', message: reason }]);
-          if (/unknown|timeout|reconcil/i.test(reason)) setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: reason } : t));
-          updateRunById(runId, { status: 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
+          const outcomeUnknown = event.state === 'outcome_unknown' || /unknown|timeout|reconcil|settlement_values_missing/i.test(reason);
+          if (outcomeUnknown) setServerTrades((v) => v.map((t) => t.state === 'open' ? { ...t, state: 'outcome_unknown', error_message: reason } : t));
+          updateRunById(runId, { status: outcomeUnknown ? 'reconciliation_required' : 'failed', stop_reason: reason, ended_at: new Date().toISOString() });
           setServerError(`Bot stopped: ${reason}. Do not restart until any uncertain purchase outcome is resolved.`);
         } else if (name === 'done') {
           updateRunById(runId, { status: 'stopped', stop_reason: String(event.stop_reason ?? 'completed'), trade_count: Number(event.trade_count ?? 0), realized_pnl: Number(event.total_profit ?? 0), ended_at: new Date().toISOString() });
