@@ -11,6 +11,7 @@ import type {
 } from './bot-types';
 import { saveNewRun } from './bot-storage';
 import { logger } from '../../lib/logger.mjs';
+import { normalizeDerivContract } from '../trading/contract-normalization.mjs';
 import {
   classifySettlement,
   findBotStopReason,
@@ -457,19 +458,12 @@ export function useBotRunner(
 
       // Settlement — subscription pushes have no req_id; filter by contract_id instead
       if (msgType === 'proposal_open_contract') {
-        const poc = msg.proposal_open_contract as {
-          contract_id?: number; is_sold?: number | boolean; is_expired?: number | boolean;
-          profit?: number; payout?: number; contract_type?: string;
-          underlying?: string; date_start?: number; status?: string;
-        } | undefined;
-        if (!poc) return;
-        const contractStatus = String(poc.status ?? '').toLowerCase();
-
-        // Only handle our in-flight contract
-        if (!inFlightContractIdRef.current || poc.contract_id === undefined || poc.contract_id === null) return;
-        if (String(poc.contract_id) !== inFlightContractIdRef.current) return;
-        // The first matching status message proves the subscription is alive.
-        // Do not use the short subscription-ack timeout as a settlement timeout.
+        const rawContract = msg.proposal_open_contract as Record<string, unknown> | undefined;
+        if (!rawContract) return;
+        const normalized = normalizeDerivContract(rawContract);
+        const contractStatus = normalized.providerStatus;
+        if (!inFlightContractIdRef.current || normalized.contractId === null) return;
+        if (normalized.contractId !== inFlightContractIdRef.current) return;
         if (!contractStatusSeenRef.current) {
           contractStatusSeenRef.current = true;
           if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
@@ -479,17 +473,10 @@ export function useBotRunner(
             stopBot('Contract status stopped updating before settlement. Reconcile the open contract and account history in Deriv before restarting.');
           }, Math.max(60000, cfg.durationUnit === 's' ? (cfg.duration + 60) * 1000 : 120000));
         }
-
-        const isClosed = poc.is_sold === 1 || poc.is_sold === true
-          || poc.is_expired === 1 || poc.is_expired === true
-          || contractStatus === 'won' || contractStatus === 'lost'
-          || contractStatus === 'sold' || contractStatus === 'expired'
-          || contractStatus === 'cancelled';
-        if (!isClosed) return;
-
-        const profit = typeof poc.profit === 'number' ? poc.profit : Number.isFinite(Number(poc.profit)) ? Number(poc.profit) : null;
-        const payout = typeof poc.payout === 'number' ? poc.payout : Number.isFinite(Number(poc.payout)) ? Number(poc.payout) : null;
-        if (profit === null) {
+        if (!normalized.settled) return;
+        const profit = normalized.profit;
+        const payout = normalized.payout;
+        if (profit === null || normalized.outcome === 'unknown') {
           orderOutcomeUnknownRef.current = true;
           stopBot('Deriv closed the contract without a usable realized profit value. Reconcile account history before restarting.');
           return;
@@ -497,25 +484,24 @@ export function useBotRunner(
         if (responseTimerRef.current) clearTimeout(responseTimerRef.current);
         responseTimerRef.current = null;
         activeRequestRef.current = null;
-        const stake = stateRef.current.currentStake;
-
+        const stake = normalized.stake ?? stateRef.current.currentStake;
+        const settledId = normalized.contractId;
+        if (stateRef.current.transactions.some((item) => item.contractId === settledId)) return;
         try { localStorage.removeItem(`tradebridge:bot-order-pending:${acc.account_id}:${cfg.id}`); setOrderRecoveryRequired(false); } catch { /* ignore */ }
         orderOutcomeUnknownRef.current = false;
         inFlightContractIdRef.current = null;
         contractStatusSeenRef.current = false;
-
         const tx: BotTransaction = {
-          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          contractId: poc.contract_id ? String(poc.contract_id) : '',
-          contractType: poc.contract_type ?? cfg.contractType,
-          symbol: poc.underlying ?? cfg.symbol,
+          id: `contract-${settledId}`,
+          contractId: settledId,
+          contractType: normalized.contractType || cfg.contractType,
+          symbol: normalized.symbol || cfg.symbol,
           stake, payout, profit,
-          currency: acc.currency ?? 'USD',
-          startedAt: poc.date_start ? poc.date_start * 1000 : Date.now(),
+          currency: normalized.currency || acc.currency || 'USD',
+          startedAt: normalized.startedAt !== null ? normalized.startedAt * 1000 : Date.now(),
           settledAt: Date.now(),
-          status: poc.status ?? 'sold',
+          status: normalized.providerStatus || 'settled',
         };
-
         const { isCancelled, isWin, isLoss } = classifySettlement(contractStatus, profit);
         const prior = stateRef.current;
         const nextTransactions = [tx, ...prior.transactions];

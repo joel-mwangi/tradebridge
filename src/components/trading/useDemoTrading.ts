@@ -492,8 +492,9 @@ export function useTradingSession(
             const raw = message.proposal_open_contract;
             const position = toPosition(raw);
             if (!position) return;
-            const terminalStates = new Set(["won", "lost", "sold", "expired", "cancelled"]);
-            const isClosed = terminalStates.has(position.status.toLowerCase()) || raw.is_sold === 1 || raw.is_expired === 1;
+            // toPosition normalizes provider-specific terminal flags/status.
+            // Never compare normalized "settled" to raw Deriv status names.
+            const isClosed = position.status === "settled";
             if (isClosed) {
               subscribedContractIdsRef.current.delete(position.contractId);
               setPositions((current) => current.filter((item) => item.contractId !== position.contractId));

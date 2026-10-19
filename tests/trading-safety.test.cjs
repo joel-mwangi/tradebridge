@@ -87,7 +87,7 @@ test("automated bot only accepts its own correlated requests and exact contract 
   const botRunner = read("src/components/bots/useBotRunner.ts");
   assert.match(botRunner, /reqId === null \|\| !botReqIds\.has\(reqId\) \|\| requestStage\.get\(reqId\) !== 'proposal'/);
   assert.match(botRunner, /requestStage\.get\(reqId\) !== 'buy'/);
-  assert.match(botRunner, /String\(poc\.contract_id\) !== inFlightContractIdRef\.current/);
+  assert.match(botRunner, /normalized\.contractId !== inFlightContractIdRef\.current/);
 });
 
 test("automated bot requests Deriv proposals with the required symbol field and buys at the quoted price", () => {
