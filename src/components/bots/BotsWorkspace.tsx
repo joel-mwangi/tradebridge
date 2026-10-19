@@ -177,6 +177,8 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
     if (!connected || !account || !activeConfig) { setServerError('Connect a verified Demo account and select a bot configuration first.'); return; }
     if ((account.account_type ?? '').toLowerCase() !== 'demo') { setServerError('Automated execution is Demo-only. Real-account automation is disabled.'); return; }
     if (activeConfig.stakeStrategy.type !== 'fixed') { setServerError('The server runner supports fixed stake only. Select a fixed-stake strategy.'); return; }
+    // Capture the narrowed fixed stake before asynchronous WebSocket callbacks.
+    const fixedStake = activeConfig.stakeStrategy.amount;
     if (activeConfig.durationUnit !== 't' || !['DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'DIGITMATCH', 'DIGITDIFF'].includes(activeConfig.contractType)) { setServerError('The server runner supports digit contracts with a duration of 1–10 ticks only.'); return; }
     if (!activeConfig.stopConditions.some((condition) => condition.type === 'loss' || condition.type === 'tradeCount' || condition.type === 'time')) { setServerError('Add a loss limit, maximum trade count, or time limit before starting this bot.'); return; }
     if (serverBusy || ['queued', 'running', 'stopping'].includes(activeServerRun?.status ?? '')) return;
@@ -214,7 +216,7 @@ export function BotsWorkspace({ connected, account }: BotsWorkspaceProps) {
         if (name === 'started') setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: 'Bot execution started on FastAPI.' }]);
         else if (name === 'trade_opened') {
           const id = String(event.contract_id ?? '');
-          setServerTrades((v) => [...v, { id: id || crypto.randomUUID(), run_id: runId, user_id: '', account_id: account.account_id, state: 'open', contract_type: activeConfig.contractType, symbol: activeConfig.symbol, stake: Number(event.stake ?? activeConfig.stakeStrategy.amount), payout: null, profit: null, currency: account.currency ?? 'USD', contract_id: id || null, created_at: new Date().toISOString(), opened_at: new Date().toISOString(), settled_at: null }]);
+          setServerTrades((v) => [...v, { id: id || crypto.randomUUID(), run_id: runId, user_id: '', account_id: account.account_id, state: 'open', contract_type: activeConfig.contractType, symbol: activeConfig.symbol, stake: Number(event.stake ?? fixedStake), payout: null, profit: null, currency: account.currency ?? 'USD', contract_id: id || null, created_at: new Date().toISOString(), opened_at: new Date().toISOString(), settled_at: null }]);
           setLiveJournal((v) => [...v, { timestamp: Date.now(), level: 'info', message: `Trade opened · contract ${id || 'pending'}` }]);
         } else if (name === 'trade_settled') {
           const id = String(event.contract_id ?? ''); const profit = Number(event.profit ?? 0); const count = Number(event.trade_count ?? 0);
