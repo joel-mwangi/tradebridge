@@ -69,7 +69,7 @@ function loadStoredBotHistory(): { runs: ServerBotRun[]; trades: ServerBotTrade[
         && typeof run.trade_count === 'number' && typeof run.created_at === 'string';
     }).slice(0, 100).map((run) => {
       if (!['queued', 'running', 'stopping'].includes(run.status)) return run;
-      return { ...run, status: 'interrupted', stop_reason: 'The browser session was reloaded. Verify the contract directly in Deriv before restarting.' };
+      return { ...run, status: 'interrupted' as const, stop_reason: 'The browser session was reloaded. Verify the contract directly in Deriv before restarting.' };
     }) : [];
     const knownRunIds = new Set(runs.map((run) => run.id));
     const trades = Array.isArray(value.trades) ? value.trades.filter((item): item is ServerBotTrade => {
