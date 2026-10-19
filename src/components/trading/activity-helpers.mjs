@@ -1,4 +1,4 @@
-import { parseDerivNumber } from "./contract-normalization.mjs";
+import { normalizeDerivContract, parseDerivNumber } from "./contract-normalization.mjs";
 
 export const STATEMENT_PAGE_SIZE = 30;
 
@@ -7,20 +7,22 @@ export function numeric(value) {
 }
 
 export function toPosition(raw) {
-  const contractId = String(raw.contract_id ?? "");
-  if (!contractId) return null;
+  const normalized = normalizeDerivContract(raw);
+  if (!normalized.contractId) return null;
   return {
-    contractId,
-    symbol: String(raw.underlying_symbol ?? raw.symbol ?? "—"),
-    contractType: String(raw.contract_type ?? "Contract"),
-    buyPrice: numeric(raw.buy_price),
+    contractId: normalized.contractId,
+    symbol: normalized.symbol,
+    contractType: normalized.contractType,
+    buyPrice: normalized.stake,
     currentSpot: numeric(raw.current_spot ?? raw.current_spot_display_value),
-    payout: numeric(raw.payout),
-    profit: numeric(raw.profit),
-    currency: String(raw.currency ?? "USD"),
-    startedAt: numeric(raw.date_start ?? raw.purchase_time),
-    expiresAt: numeric(raw.date_expiry ?? raw.expiry_time),
-    status: String(raw.status ?? "open"),
+    payout: normalized.payout,
+    profit: normalized.profit,
+    outcome: normalized.outcome,
+    currency: normalized.currency,
+    startedAt: normalized.startedAt,
+    expiresAt: normalized.expiresAt,
+    status: normalized.status,
+    providerStatus: normalized.providerStatus,
     longcode: String(raw.longcode ?? raw.display_name ?? ""),
   };
 }
