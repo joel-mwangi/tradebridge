@@ -903,3 +903,23 @@
   font-weight: 850;
   line-height: 1;
 }
+
+
+/* Contract-coloured primary Buy action and quote review dialog. */
+.buyButton { display:flex; justify-content:center; align-items:center; width:100%; min-height:46px; margin-top:8px; border:1px solid transparent; border-radius:9px; color:#fff; font-size:13px; font-weight:850; letter-spacing:.01em; transition:filter .15s ease, transform .15s ease; }
+.buyButton:hover:not(:disabled) { filter:brightness(1.08); }
+.buyButton:active:not(:disabled) { transform:translateY(1px); }
+.buyButton:disabled { cursor:not-allowed; opacity:.48; }
+.buyButtonOver { background:#16a34a; border-color:#15803d; }
+.buyButtonUnder { background:#dc2626; border-color:#b91c1c; }
+.buyButtonEven { background:#2563eb; border-color:#1d4ed8; }
+.buyButtonOdd { background:#9333ea; border-color:#7e22ce; }
+.buyButtonMatches { background:#d97706; border-color:#b45309; }
+.buyButtonDiffers { background:#0891b2; border-color:#0e7490; }
+.buyConfirmOverlay { position:fixed; inset:0; z-index:200; display:grid; place-items:center; padding:18px; background:rgba(3,7,18,.68); backdrop-filter:blur(5px); }
+.buyConfirmOverlay > section { width:min(440px,100%); max-height:min(90vh,720px); overflow:auto; box-shadow:0 24px 80px rgba(0,0,0,.35); }
+.buyConfirmTitle { margin:14px 0 0; color:var(--ink); font-size:17px; font-weight:850; }
+.buyConfirmActions { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:8px; margin-top:14px; }
+.buyConfirmActions .confirmButton { margin-top:0; }
+.cancelBuyButton { min-height:42px; padding:0 12px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); font-size:11px; font-weight:750; }
+@media (max-width:420px) { .buyConfirmOverlay { padding:10px; } .buyConfirmActions { grid-template-columns:1fr; } }
