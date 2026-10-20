@@ -35,19 +35,25 @@ export default function DigitAnalysis({
     Number.isInteger(p.lastDigit) && p.lastDigit! >= 0 && p.lastDigit! <= 9
       ? [{ digit: p.lastDigit!, time: p.time }] : []
   ), [points]);
-  const counts = useMemo(() => DIGITS.map((d) => digits.filter((p) => p.digit === d).length), [digits]);
-  const total = digits.length;
+  // Frequency percentages/counts come only from the backend snapshot; never recalculate in the browser.
+  const frequency = snapshot?.digitFrequency?.windows?.[String(windowSize)];
+  const counts = DIGITS.map((d) => frequency?.counts[String(d)] ?? 0);
+  const total = frequency?.sample_size ?? 0;
+  const localTotal = digits.length;
   // Frequency rank and newest tick are independent signals.
   const latestDigit = digits.length ? digits[digits.length - 1].digit : null;
   const ranking = useMemo(() => [...DIGITS].sort((a, b) => counts[b] - counts[a] || a - b), [counts]);
-  const rank = (d: number) => ranking.indexOf(d) + 1;
+  const rank = (d: number) => total ? ranking.indexOf(d) + 1 : 0;
   const even = digits.filter((p) => p.digit % 2 === 0).length;
-  const odd = total - even;
+  const odd = localTotal - even;
   const above = digits.filter((p) => p.digit > target).length;
   const below = digits.filter((p) => p.digit < target).length;
   const matches = counts[target];
   const differs = total - matches;
-  const percent = (n: number) => total ? (n / total * 100).toFixed(1) + "%" : "—";
+  const percent = (digit: number) => {
+    const value = frequency?.percentages[String(digit)];
+    return typeof value === "number" ? value.toFixed(1) + "%" : "—";
+  };
 
   return <section className={styles.root} aria-label="Digit analysis">
     <div className={styles.controls}>
@@ -65,14 +71,14 @@ export default function DigitAnalysis({
       </label>}
     </div>
     <section className={styles.panel}>
-      <div className={styles.panelTitle}><div><h3>Digit frequency</h3><p>Final digits · {total} valid ticks in selected window</p></div></div>
+      <div className={styles.panelTitle}><div><h3>Digit frequency</h3><p>Backend-calculated final digits · {total} valid ticks in selected window</p></div></div>
       <div className={styles.frequencyGrid}>{DIGITS.map((d) => {
         const r = rank(d);
         const cls = r === 1 ? styles.top : r === 2 ? styles.second : r === 10 ? styles.low : r === 9 ? styles.secondLow : "";
         return <div className={styles.frequencyItem} key={d}>
-          <div className={[styles.ring, cls, d === latestDigit ? styles.latestDigitRing : ""].filter(Boolean).join(" ")} aria-label={`Digit ${d}, ${percent(counts[d])} of observed ticks`}><strong className={styles.digitNumber}>{d}</strong><span className={styles.digitPercent}>{percent(counts[d])}</span>{d === latestDigit && <span className={styles.star} aria-label="Latest incoming tick digit" title="Latest incoming tick">★</span>}</div>
-          <span className={styles.count}>{counts[d]} ticks</span>
-          <span className={styles.rank}>{r === 1 ? "Highest" : r === 2 ? "2nd high" : r === 9 ? "2nd low" : r === 10 ? "Lowest" : " "}</span>
+          <div className={[styles.ring, cls, d === latestDigit ? styles.latestDigitRing : ""].filter(Boolean).join(" ")} aria-label={`Digit ${d}, ${percent(d)} of observed ticks`}><strong className={styles.digitNumber}>{d}</strong><span className={styles.digitPercent}>{percent(d)}</span>{d === latestDigit && <span className={styles.star} aria-label="Latest incoming tick digit" title="Latest incoming tick">★</span>}</div>
+          <span className={styles.count}>{frequency ? `${counts[d]} ticks` : "Waiting for backend"}</span>
+          <span className={styles.rank}>{!total ? " " : r === 1 ? "Highest" : r === 2 ? "2nd high" : r === 9 ? "2nd low" : r === 10 ? "Lowest" : " "}</span>
         </div>;
       })}</div>
     </section>

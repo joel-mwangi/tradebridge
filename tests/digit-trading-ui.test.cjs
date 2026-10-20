@@ -65,17 +65,21 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
   assert.notEqual(chartEnd, -1);
   const chartView = workspace.slice(chartStart, chartEnd);
   assert.ok(chartView.indexOf("<PriceChart") < chartView.indexOf("<DemoTradeTicket"));
-  assert.match(chartView, /<TradingActivity[\\s\\S]*?positionsOnly/);
+  assert.match(chartView, /<TradingActivity[\s\S]*?positionsOnly/);
   assert.doesNotMatch(chartView, /Automated bot execution|Open Bot Workspace/);
 });
 
-test("Buy ticket includes compact digit frequency circles calculated from recent real ticks", () => {
-  assert.ok(ticket.includes("Digit frequency"));
-  assert.ok(ticket.includes("point.lastDigit"));
-  assert.ok(ticket.includes("digitFrequencyCounts.map"));
-  assert.ok(ticket.includes("digitFrequencyPercent(count)"));
-  assert.ok(ticket.includes('mode === "over-under" && <section className={styles.ticketDigitFrequency}'));
-  assert.ok(workspaceCss.includes(".ticketDigitFrequencyGrid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr))"));
+test("digit frequency percentages are rendered from backend snapshots, not recalculated in the browser", () => {
+  assert.ok(analysis.includes("snapshot?.digitFrequency?.windows?.[String(windowSize)]"));
+  assert.ok(analysis.includes("frequency?.percentages[String(digit)]"));
+  assert.ok(analysis.includes("frequency?.counts[String(d)]"));
+  assert.ok(!analysis.includes("(n / total * 100).toFixed(1)"));
+  assert.ok(ticket.includes('snapshot?.digitFrequency?.windows?.["100"]'));
+  assert.ok(ticket.includes("recentFrequency?.percentages[String(digit)]"));
+  assert.ok(ticket.includes("recentFrequency?.counts[String(digit)]"));
+  assert.ok(!ticket.includes("digitFrequencyPercent(count)"));
+  assert.ok(!ticket.includes("recentDigits.filter((value) => value === digit).length"));
+  assert.ok(workspaceCss.includes(".ticketDigitFrequencyGrid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)"));
   assert.ok(workspaceCss.includes(".ticketDigitCircle { display: grid; place-items: center; width: min(100%, 27px); aspect-ratio: 1"));
   assert.ok(!read("src/components/trading/PriceChart.tsx").includes("Digit frequency"));
-});
+});;
