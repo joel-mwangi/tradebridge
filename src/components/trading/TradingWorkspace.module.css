@@ -988,8 +988,10 @@
   margin-bottom: 4px;
 }
 .workspaceBodyTrade .marketGrid {
-  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+  /* Keep Digit Analysis dominant on the left and the trade ticket visible on the right. */
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, .7fr);
   align-items: start;
+  gap: 18px;
 }
 .workspaceBodyTrade .marketColumn {
   min-width: 0;
@@ -1000,7 +1002,7 @@
 .workspaceBodyTrade .footer {
   margin-top: auto;
 }
-@media (max-width: 1020px) {
+@media (max-width: 900px) {
   .workspaceBody {
     grid-template-columns: 68px minmax(0, 1fr);
   }
@@ -1020,9 +1022,6 @@
   }
   .workspaceBody .content {
     padding: 22px 18px;
-  }
-  .workspaceBodyTrade .marketGrid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 720px) {
