@@ -168,7 +168,7 @@ export default function DemoTradeTicket({
         <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake</label>
         <div className={styles.inputShell}>
           <span>{account?.currency ?? "—"}</span>
-          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} disabled={!ready || busy} />
         </div>
         <div className={styles.presets + " " + styles.compactPresets} aria-label="Stake presets">
           {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value}</button>)}
@@ -177,7 +177,7 @@ export default function DemoTradeTicket({
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Duration</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} disabled={!ready || busy} />
           <span>ticks</span>
         </div>
         <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
