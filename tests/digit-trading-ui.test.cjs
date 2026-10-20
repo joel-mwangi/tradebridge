@@ -65,7 +65,7 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
   assert.notEqual(chartEnd, -1);
   const chartView = workspace.slice(chartStart, chartEnd);
   assert.ok(chartView.indexOf("<PriceChart") < chartView.indexOf("<DemoTradeTicket"));
-  assert.match(chartView, /<TradingActivity[\\s\\S]*?positionsOnly/);
+  assert.match(chartView, /<TradingActivity[\s\S]*?positionsOnly/);
   assert.doesNotMatch(chartView, /Automated bot execution|Open Bot Workspace/);
 });
 
