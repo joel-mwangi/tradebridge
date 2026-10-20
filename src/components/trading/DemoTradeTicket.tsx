@@ -100,6 +100,18 @@ export default function DemoTradeTicket({
   const quoteSecondsRemaining = quote ? Math.max(0, Math.ceil((30_000 - (now - quote.receivedAt)) / 1000)) : 0;
   const quoteExpired = Boolean(quote && quoteSecondsRemaining <= 0);
 
+  // One-click Buy: submit a fresh quote automatically after the quote response
+  // has cleared the request's busy state. confirmQuote keeps the existing
+  // account, expiry, risk, and unresolved-order guards.
+  useEffect(() => {
+    if (!quote || !quoteMatchesForm || busy) return;
+    if (quoteExpired) {
+      dismissQuote();
+      return;
+    }
+    confirmQuote();
+  }, [quote, quoteMatchesForm, busy, quoteExpired, confirmQuote, dismissQuote]);
+
   return <section className={styles.ticketPanel + " " + styles.ticketPanelCompact} id="ticket">
     <div className={styles.panelHeading}>
       <div>
@@ -175,28 +187,6 @@ export default function DemoTradeTicket({
       </div>
     </div>
     <p className={styles.compactControlsHint} id="ticket-inputs-note">{isRealAccount ? "Read-only: real-money order entry is disabled." : "Demo funds only · quotes expire after 30 seconds."}</p>
-
-    {quote && quoteMatchesForm && <div className={styles.buyConfirmOverlay} role="presentation">
-      <section className={isRealAccount ? styles.liveQuoteCard : styles.quoteCard} role="dialog" aria-modal="true" aria-labelledby="buy-confirm-title">
-        <div className={styles.quoteCardHeader}><span>REVIEW YOUR BUY</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
-        <h3 id="buy-confirm-title" className={styles.buyConfirmTitle}>Confirm {getContractLabel(quote.contractType, quote.barrier)}</h3>
-        <div className={styles.quoteMetrics}>
-          <div><small>Stake</small><strong>{quote.stake.toLocaleString()} {quote.currency}</strong></div>
-          <div><small>Purchase price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
-          <div><small>Potential payout</small><strong>{quote.payout === null ? "Not returned" : quote.payout.toLocaleString() + " " + quote.currency}</strong></div>
-        </div>
-        <p>{getContractLabel(quote.contractType, quote.barrier)} · {quote.symbol} · {quote.duration} ticks</p>
-        <div className={styles.buyConfirmActions}>
-          <button type="button" className={styles.cancelBuyButton} onClick={dismissQuote} disabled={busy}>Cancel</button>
-          <button type="button" className={styles.confirmButton} onClick={confirmQuote} disabled={!ready || busy || quoteExpired}>
-            {busy ? "Submitting…" : "Confirm Buy"} <span>→</span>
-          </button>
-        </div>
-        <small className={styles.quoteWarning}>{isRealAccount
-          ? "This action sends a live order and can immediately lose real money. Review the quoted stake and potential payout. Confirmation cannot guarantee a profit."
-          : "This confirms a purchase on your Demo account using virtual funds. Review the stake and potential payout before proceeding."}</small>
-      </section>
-    </div>}
 
     <div className={styles.ticketStatus} role="status">
       <span className={sessionState === expectedSessionState ? styles.statusDotConnected : styles.statusDot} />
