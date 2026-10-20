@@ -8,6 +8,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const ticket = read("src/components/trading/DemoTradeTicket.tsx");
 const analysis = read("src/components/trading/DigitAnalysis.tsx");
+const chart = read("src/components/trading/PriceChart.tsx");
+const workspaceCss = read("src/components/trading/TradingWorkspace.module.css");
 const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
 const marketData = read("src/components/trading/useMarketData.ts");
@@ -66,4 +68,13 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
   assert.ok(chartView.indexOf("<PriceChart") < chartView.indexOf("<DemoTradeTicket"));
   assert.match(chartView, /<TradingActivity[\\s\\S]*?positionsOnly/);
   assert.doesNotMatch(chartView, /Automated bot execution|Open Bot Workspace/);
+});
+
+test("chart includes compact digit frequency circles calculated from recent real ticks", () => {
+  assert.match(chart, /Digit frequency/);
+  assert.match(chart, /point\.lastDigit/);
+  assert.match(chart, /digitFrequency\.counts\.map/);
+  assert.match(chart, /digitFrequency\.total \? \(count \/ digitFrequency\.total \* 100\)/);
+  assert.match(workspaceCss, /\.chartDigitFrequencyGrid \{ display: grid; grid-template-columns: repeat\(10, minmax\(0, 1fr\)\)/);
+  assert.match(workspaceCss, /\.chartDigitCircle \{[^}]*aspect-ratio: 1/);
 });
