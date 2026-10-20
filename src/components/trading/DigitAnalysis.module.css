@@ -16,7 +16,7 @@
 .modeSummary > div strong { color:var(--ink); font-size:17px; line-height:1.2; font-variant-numeric:tabular-nums; }
 .modeSummary > div small { color:var(--muted); font-size:9px; }
 .modeSummary p { grid-column:1/-1; margin:0; color:var(--muted); font-size:9px; line-height:1.4; }
-.panel { min-width:0; padding:17px; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+.panel { min-width:0; padding:17px; border:1px solid var(--line); border-radius:12px; background:var(--panel); container-type:inline-size; container-name:digit-frequency-panel; }
 .panelTitle { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:16px; }
 .panelTitle h3 { margin:0; color:var(--ink); font-size:14px; font-weight:800; }
 .panelTitle p { margin:5px 0 0; color:var(--muted); font-size:10px; }
@@ -52,8 +52,9 @@
 .disclaimer { display:grid; gap:5px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
 .disclaimer strong { color:var(--teal); font-size:10px; font-weight:800; }
 .disclaimer p { margin:0; color:var(--muted); font-size:10px; line-height:1.55; }
-@media (max-width:900px) { .frequencyGrid { grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; } .lowerGrid { grid-template-columns:1fr; } }
-@media (max-width:520px) { .frequencyGrid { gap:14px 8px; } .digitNumber { font-size:1.2rem; } .digitPercent { font-size:.7rem; } .ring { max-width:76px; } }
+@media (max-width:900px) { .lowerGrid { grid-template-columns:1fr; } }
+@container digit-frequency-panel (max-width:760px) { .frequencyGrid { grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; } }
+@container digit-frequency-panel (max-width:420px) { .frequencyGrid { gap:14px 8px; } .digitNumber { font-size:1.2rem; } .digitPercent { font-size:.7rem; } .ring { max-width:76px; } }
 @media (max-width:520px) { .controls { grid-template-columns:1fr; } .header { flex-direction:column; } .statusLive,.statusStale { max-width:100%; } .modeSummary > div strong { font-size:20px; } .panel { padding:12px; } }
 
 .botWidget { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); transition: border-color 0.2s, box-shadow 0.2s; }
