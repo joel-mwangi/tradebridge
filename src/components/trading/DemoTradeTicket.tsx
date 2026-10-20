@@ -83,6 +83,11 @@ export default function DemoTradeTicket({
   const aboveCount = observedDigits.filter((digit) => digit > target).length;
   const belowCount = observedDigits.filter((digit) => digit < target).length;
   const percent = (count: number) => observedDigits.length ? (count / observedDigits.length * 100).toFixed(1) + "%" : "—";
+  const recentDigits = (snapshot?.points ?? []).slice(-100)
+    .map((point) => point.lastDigit)
+    .filter((digit): digit is number => Number.isInteger(digit) && digit! >= 0 && digit! <= 9);
+  const digitFrequencyCounts = Array.from({ length: 10 }, (_, digit) => recentDigits.filter((value) => value === digit).length);
+  const digitFrequencyPercent = (count: number) => recentDigits.length ? (count / recentDigits.length * 100).toFixed(1) + "%" : "—";
 
   useEffect(() => {
     setDuration("5");
@@ -166,6 +171,19 @@ export default function DemoTradeTicket({
       </div>
     </fieldset>
     {mode === "over-under" && <p className={styles.compactControlsHint}>Barrier digit: <strong>{target}</strong>. Over wins above the barrier; Under wins below it. An equal digit satisfies neither prediction.</p>}
+
+    {mode === "over-under" && <section className={styles.ticketDigitFrequency} aria-label="Digit frequency">
+      <div className={styles.ticketDigitFrequencyHeading}>
+        <strong>Digit frequency</strong>
+        <span>{recentDigits.length} recent ticks</span>
+      </div>
+      <div className={styles.ticketDigitFrequencyGrid}>
+        {digitFrequencyCounts.map((count, digit) => <div className={styles.ticketDigitFrequencyItem} key={digit} aria-label={`Digit ${digit}: ${digitFrequencyPercent(count)}`}>
+          <span className={styles.ticketDigitCircle}>{digit}</span>
+          <span className={styles.ticketDigitPercent}>{digitFrequencyPercent(count)}</span>
+        </div>)}
+      </div>
+    </section>}
 
     {mode === "matches-differs" && <p className={styles.compactControlsHint}>Target digit: <strong>{target}</strong>. Matches wins on that digit; Differs wins on any other digit.</p>}
     <div className={styles.compactInputsGrid}>
