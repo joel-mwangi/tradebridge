@@ -69,11 +69,13 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
   assert.doesNotMatch(chartView, /Automated bot execution|Open Bot Workspace/);
 });
 
-test("chart includes compact digit frequency circles calculated from recent real ticks", () => {
-  assert.match(chart, /Digit frequency/);
-  assert.match(chart, /point\.lastDigit/);
-  assert.match(chart, /digitFrequency\.counts\.map/);
-  assert.match(chart, /digitFrequency\.total \? \(count \/ digitFrequency\.total \* 100\)/);
-  assert.match(workspaceCss, /\.chartDigitFrequencyGrid \{ display: grid; grid-template-columns: repeat\(10, minmax\(0, 1fr\)\)/);
-  assert.match(workspaceCss, /\.chartDigitCircle \{[^}]*aspect-ratio: 1/);
+test("Buy ticket includes compact digit frequency circles calculated from recent real ticks", () => {
+  assert.match(ticket, /Digit frequency/);
+  assert.match(ticket, /point\\.lastDigit/);
+  assert.match(ticket, /digitFrequencyCounts\\.map/);
+  assert.match(ticket, /digitFrequencyPercent\\(count\\)/);
+  assert.match(ticket, /mode === "over-under" && <section className=\\{styles\\.ticketDigitFrequency\\}/);
+  assert.match(workspaceCss, /\\.ticketDigitFrequencyGrid \\{ display: grid; grid-template-columns: repeat\\(10, minmax\\(0, 1fr\\)\\)/);
+  assert.match(workspaceCss, /\\.ticketDigitCircle \\{[^}]*aspect-ratio: 1/);
+  assert.doesNotMatch(read("src/components/trading/PriceChart.tsx"), /Digit frequency/);
 });
