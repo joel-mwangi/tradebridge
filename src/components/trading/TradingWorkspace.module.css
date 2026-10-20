@@ -1230,9 +1230,10 @@
 }
 
 
-/* Plain inline frequency summary under Over/Under prediction; intentionally no card/container styling. */
-.overUnderStats { display: grid; gap: 4px; margin: 6px 0 2px; color: var(--ink); font-size: 10px; line-height: 1.45; }
-.overUnderStats > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; }
-.overUnderStats strong { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.overUnderStats small, .overUnderStats p { color: var(--muted); font-size: 9px; }
-.overUnderStats p { margin: 0; }
+/* Put live frequency percentages inside the existing Over/Under buttons. */
+.overUnderDirectionField .callButton,
+.overUnderDirectionField .callSelected,
+.overUnderDirectionField .putButton,
+.overUnderDirectionField .putSelected { flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 68px; text-align: center; }
+.overUnderDirectionField .predictionOptionLabel { display: block; width: auto; height: auto; padding: 0; border-radius: 0; background: transparent !important; color: var(--ink) !important; font-size: 12px; font-weight: 750; }
+.overUnderDirectionField .predictionPercentage { display: block; color: var(--ink); font-size: 18px; line-height: 1.1; font-weight: 850; font-variant-numeric: tabular-nums; }
