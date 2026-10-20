@@ -71,11 +71,11 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
 
 test("Buy ticket includes compact digit frequency circles calculated from recent real ticks", () => {
   assert.match(ticket, /Digit frequency/);
-  assert.match(ticket, /point\\.lastDigit/);
-  assert.match(ticket, /digitFrequencyCounts\\.map/);
+  assert.match(ticket, /point\.lastDigit/);
+  assert.match(ticket, /digitFrequencyCounts\.map/);
   assert.match(ticket, /digitFrequencyPercent\\(count\\)/);
-  assert.match(ticket, /mode === "over-under" && <section className=\\{styles\\.ticketDigitFrequency\\}/);
-  assert.match(workspaceCss, /\\.ticketDigitFrequencyGrid \\{ display: grid; grid-template-columns: repeat\\(10, minmax\\(0, 1fr\\)\\)/);
-  assert.match(workspaceCss, /\\.ticketDigitCircle \\{[^}]*aspect-ratio: 1/);
+  assert.match(ticket, /mode === "over-under" && <section className=\\{styles\.ticketDigitFrequency\\}/);
+  assert.match(workspaceCss, /\.ticketDigitFrequencyGrid \\{ display: grid; grid-template-columns: repeat\\(10, minmax\\(0, 1fr\\)\\)/);
+  assert.match(workspaceCss, /\.ticketDigitCircle \\{[^}]*aspect-ratio: 1/);
   assert.doesNotMatch(read("src/components/trading/PriceChart.tsx"), /Digit frequency/);
 });
