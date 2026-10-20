@@ -56,3 +56,14 @@ test("market discovery and market labels are aligned with digit trading", () => 
   assert.doesNotMatch(marketWatch, /eligible instruments for CALL\/PUT contracts|chart and trade ticket/);
   assert.doesNotMatch(workspace, /analyse its price action/);
 });
+
+test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
+  const chartStart = workspace.indexOf('{tradeView === "charts" && (');
+  const chartEnd = workspace.indexOf('{page === "portfolio"', chartStart);
+  assert.notEqual(chartStart, -1);
+  assert.notEqual(chartEnd, -1);
+  const chartView = workspace.slice(chartStart, chartEnd);
+  assert.ok(chartView.indexOf("<PriceChart") < chartView.indexOf("<DemoTradeTicket"));
+  assert.match(chartView, /<TradingActivity[\\s\\S]*?positionsOnly/);
+  assert.doesNotMatch(chartView, /Automated bot execution|Open Bot Workspace/);
+});
