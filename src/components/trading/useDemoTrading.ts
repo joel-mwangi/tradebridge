@@ -440,7 +440,7 @@ export function useTradingSession(
               receivedAt: Date.now(),
             });
             setBusy(false);
-            setStatus("Fresh quote received from Deriv. Review the price and potential payout, then confirm the " + (isRealAccount ? "real-money order" : "demo order") + ".");
+            setStatus("Fresh Deriv quote received. Submitting the " + (isRealAccount ? "real-money order" : "demo order") + " automatically…");
             return;
           }
 
@@ -706,7 +706,7 @@ export function useTradingSession(
     buyRequestRef.current = reqId;
     if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "pending");
     setBusy(true);
-    setStatus("Submitting the confirmed " + (isRealAccount ? "real-money" : "demo") + " order to Deriv…");
+    setStatus("Submitting the " + (isRealAccount ? "real-money" : "demo") + " order to Deriv…");
     activeSocket.send(JSON.stringify({ buy: quote.id, price: quote.askPrice, req_id: reqId }));
     setQuote(null);
     timeoutRef.current = setTimeout(() => {
