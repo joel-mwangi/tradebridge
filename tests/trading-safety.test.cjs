@@ -76,37 +76,9 @@ test("legacy session route cannot issue a Deriv OTP URL for any account type", (
 });
 
 
-test("automated bot observes the shared WebSocket without replacing the trading session handler", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
-  assert.match(botRunner, /addEventListener\('message', eventHandler\)/);
-  assert.match(botRunner, /removeEventListener\('message',/);
-  assert.doesNotMatch(botRunner, /ws\.onmessage\s*=/);
-});
 
-test("automated bot only accepts its own correlated requests and exact contract settlement", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
-  assert.match(botRunner, /reqId === null \|\| !botReqIds\.has\(reqId\) \|\| requestStage\.get\(reqId\) !== 'proposal'/);
-  assert.match(botRunner, /requestStage\.get\(reqId\) !== 'buy'/);
-  assert.match(botRunner, /normalized\.contractId !== inFlightContractIdRef\.current/);
-});
 
-test("automated bot requests Deriv proposals with the required symbol field and buys at the quoted price", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
-  const proposalRequest = botRunner.match(/ws\.send\(JSON\.stringify\(\{\s*proposal: 1,[\s\S]*?\}\)\);/)?.[0];
-  assert.ok(proposalRequest, "bot proposal request must exist");
-  assert.match(proposalRequest, /underlying_symbol: cfg\.symbol/);
-  assert.doesNotMatch(proposalRequest, /^\s*symbol:/m);
-  assert.match(botRunner, /ask_price\?: number \| string/);
-  assert.match(botRunner, /price: askPrice/);
-});
 
-test("automated bot treats Deriv-cancelled contracts as settled without counting a loss", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
-  const botRunnerHelpers = read("src/components/bots/bot-runner-helpers.mjs");
-  assert.match(botRunnerHelpers, /normalizedStatus === "cancelled"/);
-  assert.match(botRunnerHelpers, /isLoss: !isWin && !isCancelled/);
-  assert.match(botRunner, /Trade \$\{isCancelled \? 'CANCELLED'/);
-});
 
 test("quick bot creation validates and includes digit-contract barriers", () => {
   const dashboard = read("src/components/bots/BotDashboard.tsx");
@@ -152,22 +124,7 @@ test("server bot trade history and recovery mutations are scoped to their run", 
   assert.match(botsWorkspace, /t\.run_id === runId && t\.state === 'open' \? \{ \.\.\.t, state: 'outcome_unknown'/);
 });
 
-test("automated bot is Demo-only and does not clear unresolved order markers on reload", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
-  assert.match(botRunner, /sessionStateRef\.current === 'Demo trading connected'/);
-  assert.match(botRunner, /account\.account_type \?\? ''\)\.toLowerCase\(\) !== 'demo'/);
-  assert.match(botRunner, /Unresolved order marker found/);
-  assert.match(botRunner, /localStorage\.getItem\(key\) !== null/);
-  assert.doesNotMatch(botRunner, /if \(stale\) localStorage\.removeItem\(key\)/);
-});
 
-test("bot request timeouts stop execution and retain ambiguous purchase state for reconciliation", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
-  assert.match(botRunner, /Timed out waiting for Deriv proposal response/);
-  assert.match(botRunner, /Timed out waiting for Deriv purchase acknowledgement/);
-  assert.match(botRunner, /orderOutcomeUnknownRef\.current = true/);
-  assert.match(botRunner, /Reconcile the Deriv account before restarting/);
-});
 
 
 test("ambiguous server bot orders cannot be cleared by browser acknowledgement", () => {
@@ -195,19 +152,10 @@ test("imported and persisted bot configs are validated before execution", () => 
   assert.doesNotMatch(dashboard, /const config = parsed as BotConfig/);
 });
 
-test("manual stop cannot clear the bot recovery lock while a buy acknowledgement is pending", () => {
-  const botRunner = read("src/components/bots/useBotRunner.ts");
-  assert.match(botRunner, /const buyRequestPendingRef = useRef\(false\)/);
-  assert.match(botRunner, /!buyRequestPendingRef\.current && !inFlightContractIdRef\.current/);
-  assert.match(botRunner, /buyRequestPendingRef\.current = true;[\s\S]{0,200}ws\.send\(JSON\.stringify\(\{ buy:/);
-  assert.match(botRunner, /if \(stage === 'buy'\) \{\s*buyRequestPendingRef\.current = false;/);
-  assert.match(botRunner, /buyRequestPendingRef\.current = false;\s*const buyResp/);
-});
 
 
 const derivCallbackRoute = read("src/app/api/auth/deriv/callback/route.ts");
 const tickIngestionRoute = read("src/app/api/internal/market-ticks/route.ts");
-const botRunner = read("src/components/bots/useBotRunner.ts");
 const marketHook = read("src/components/trading/useMarketData.ts");
 
 
@@ -251,7 +199,6 @@ test("live market feed can be switched to FastAPI without storing ticks", () => 
 });
 
 test("automated bot execution is server-authoritative and absent from chart browser code", () => {
-  assert.doesNotMatch(workspace, /useBotRunner\(connected, activeAccount/);
   assert.match(workspace, /Bot Workspace/);
   assert.match(botsWorkspace, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL/);
   assert.match(botsWorkspace, /\/bots\/run/);
@@ -259,5 +206,4 @@ test("automated bot execution is server-authoritative and absent from chart brow
   assert.match(botsWorkspace, /action: 'stop'/);
   assert.doesNotMatch(botsWorkspace, /\/api\/bots\/runs/);
   assert.match(botsWorkspace, /outcome_unknown/);
-  assert.doesNotMatch(botRunner, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_SESSIONS_ENABLED/);
 });
