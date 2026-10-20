@@ -16,6 +16,11 @@ begin
 end;
 $$;
 
+-- Also retire legacy queue tables if they exist from an earlier deployment.
+drop table if exists public.bot_worker_heartbeats;
+drop table if exists public.bot_trades;
+drop table if exists public.bot_runs;
+
 drop table if exists public.digit_strategy_trades;
 drop table if exists public.bot_trade_ledger;
 drop table if exists public.bot_runner_leases;
