@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
-import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument } from "./types";
+import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
 
 const PREDICTIONS: Record<DigitContractMode, Array<{ label: string; value: DigitPrediction }>> = {
   "over-under": [{ label: "Over", value: "OVER" }, { label: "Under", value: "UNDER" }],
@@ -37,6 +37,8 @@ type Props = {
   orderResolutionRequired: boolean;
   acknowledgeOrderResolution: () => void;
   market: MarketInstrument | null;
+  snapshot?: MarketSnapshot;
+  windowSize: number;
   mode: DigitContractMode;
   prediction: DigitPrediction;
   onPredictionChange: (prediction: DigitPrediction) => void;
@@ -53,7 +55,7 @@ type Props = {
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
   orderResolutionRequired, acknowledgeOrderResolution,
-  market, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote, dismissQuote,
+  market, snapshot, windowSize, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote, dismissQuote,
 }: Props) {
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("5");
@@ -72,6 +74,10 @@ export default function DemoTradeTicket({
     : predictionOptions[0].value;
   const contractType = getContractType(mode, activePrediction);
   const requiresTarget = mode !== "even-odd";
+  const observedDigits = (snapshot?.points ?? []).slice(-windowSize).map((point) => point.lastDigit).filter((digit): digit is number => Number.isInteger(digit) && digit! >= 0 && digit! <= 9);
+  const aboveCount = observedDigits.filter((digit) => digit > target).length;
+  const belowCount = observedDigits.filter((digit) => digit < target).length;
+  const percent = (count: number) => observedDigits.length ? (count / observedDigits.length * 100).toFixed(1) + "%" : "—";
 
   useEffect(() => {
     setDuration("5");
@@ -163,6 +169,12 @@ export default function DemoTradeTicket({
       </div>
     </fieldset>
     {mode === "over-under" && <p className={styles.compactControlsHint}>Barrier digit: <strong>{target}</strong>. Over wins above the barrier; Under wins below it. An equal digit satisfies neither prediction.</p>}
+    {mode === "over-under" && <div className={styles.overUnderStats} aria-label="Observed ticks above and below the barrier">
+      <div><span>Above {target}</span> <strong>{percent(aboveCount)}</strong> <small>{aboveCount} observed ticks</small></div>
+      <div><span>Below {target}</span> <strong>{percent(belowCount)}</strong> <small>{belowCount} observed ticks</small></div>
+      <p>Digits equal to the barrier are excluded from both groups.</p>
+    </div>}
+
     {mode === "matches-differs" && <p className={styles.compactControlsHint}>Target digit: <strong>{target}</strong>. Matches wins on that digit; Differs wins on any other digit.</p>}
     <div className={styles.compactInputsGrid}>
       <div className={styles.compactFieldGroup}>

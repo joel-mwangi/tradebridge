@@ -124,6 +124,7 @@ export default function TradingWorkspace() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [tradeView, setTradeView] = useState<"analyse" | "charts">("analyse");
+  const [digitWindowSize, setDigitWindowSize] = useState(100);
 
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
@@ -583,6 +584,8 @@ export default function TradingWorkspace() {
                         <DigitAnalysis
                           market={selectedMarket}
                           snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+                          windowSize={digitWindowSize}
+                          onWindowSizeChange={setDigitWindowSize}
                           mode={digitMode}
                           onModeChange={setDigitMode}
                           prediction={digitPrediction}
@@ -602,6 +605,8 @@ export default function TradingWorkspace() {
                           orderResolutionRequired={trading.orderResolutionRequired}
                           acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
                           market={selectedMarket}
+                          snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+                          windowSize={digitWindowSize}
                           mode={digitMode}
                           prediction={digitPrediction}
                           onPredictionChange={setPredictionAndValidateTarget}

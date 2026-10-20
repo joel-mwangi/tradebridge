@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { DigitContractMode, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
 import styles from "./DigitAnalysis.module.css";
 
@@ -8,6 +8,8 @@ const DIGITS = Array.from({ length: 10 }, (_, i) => i);
 
 export default function DigitAnalysis({
   snapshot,
+  windowSize,
+  onWindowSizeChange,
   mode,
   onModeChange,
   prediction,
@@ -16,6 +18,8 @@ export default function DigitAnalysis({
 }: {
   market: MarketInstrument | null;
   snapshot?: MarketSnapshot;
+  windowSize: number;
+  onWindowSizeChange: (size: number) => void;
   mode: DigitContractMode;
   onModeChange: (mode: DigitContractMode) => void;
   prediction: DigitPrediction;
@@ -23,7 +27,6 @@ export default function DigitAnalysis({
   target: number;
   onTargetChange: (target: number) => void;
 }) {
-  const [windowSize, setWindowSize] = useState(100);
   const validTargets = mode === "over-under"
     ? DIGITS.filter((digit) => prediction === "UNDER" ? digit >= 1 : digit <= 8)
     : DIGITS;
@@ -51,7 +54,7 @@ export default function DigitAnalysis({
       <label className={styles.control}><span>Contract type</span><select value={mode} onChange={(e) => onModeChange(e.target.value as DigitContractMode)}>
         <option value="over-under">Over / Under</option><option value="even-odd">Even / Odd</option><option value="matches-differs">Matches / Differs</option>
       </select></label>
-      <label className={styles.control}><span>Tick window</span><select value={windowSize} onChange={(e) => setWindowSize(Number(e.target.value))}>
+      <label className={styles.control}><span>Tick window</span><select value={windowSize} onChange={(e) => onWindowSizeChange(Number(e.target.value))}>
         {[50,100,250,500,1000].map((n) => <option key={n} value={n}>{n.toLocaleString()} ticks</option>)}
       </select></label>
       {mode !== "even-odd" && <label className={styles.control}>
@@ -60,21 +63,6 @@ export default function DigitAnalysis({
           {validTargets.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
       </label>}
-    </div>
-    <div className={styles.modeSummary}>
-      {mode === "over-under" ? <>
-        <div><span>Above {target}</span><strong>{percent(above)}</strong><small>{above} observed ticks</small></div>
-        <div><span>Below {target}</span><strong>{percent(below)}</strong><small>{below} observed ticks</small></div>
-        <p>Digits equal to the barrier are excluded from both groups.</p>
-      </> : mode === "even-odd" ? <>
-        <div><span>Even digits</span><strong>{percent(even)}</strong><small>{even} observed ticks</small></div>
-        <div><span>Odd digits</span><strong>{percent(odd)}</strong><small>{odd} observed ticks</small></div>
-        <p>Even/odd distribution for the selected window.</p>
-      </> : <>
-        <div><span>Matches {target}</span><strong>{percent(matches)}</strong><small>{matches} matches</small></div>
-        <div><span>Differs from {target}</span><strong>{percent(differs)}</strong><small>{differs} other digits</small></div>
-        <p>Historical match rate does not predict the next tick.</p>
-      </>}
     </div>
     <section className={styles.panel}>
       <div className={styles.panelTitle}><div><h3>Digit frequency</h3><p>Final digits · {total} valid ticks in selected window</p></div></div>
