@@ -97,20 +97,3 @@ export interface BackendDigitFrequency {
   windows: Record<string, BackendDigitFrequencyWindow>;
   warning: string;
 }
-
-
-export interface BackendDigitFrequencyWindow {
-  window_size: number;
-  sample_size: number;
-  counts: Record<string, number>;
-  percentages: Record<string, number | null>;
-}
-
-export interface BackendDigitFrequency {
-  source: string;
-  symbol: string;
-  calculated_at: number | null;
-  latest_tick_epoch: number | null;
-  windows: Record<string, BackendDigitFrequencyWindow>;
-  warning: string;
-}
