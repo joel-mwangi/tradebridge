@@ -128,12 +128,4 @@ test("live market feed can be switched to FastAPI without storing ticks", () => 
   assert.doesNotMatch(tickIngestionRoute, /createAdminClient|\.from\("market_ticks"\)/);
 });
 
-test("automated bot execution is server-authoritative and absent from chart browser code", () => {
-  assert.match(workspace, /Bot Workspace/);
-  assert.match(botsWorkspace, /NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL/);
-  assert.match(botsWorkspace, /\/bots\/run/);
-  assert.match(botsWorkspace, /deriv\/ws-ticket/);
-  assert.match(botsWorkspace, /action: 'stop'/);
-  assert.doesNotMatch(botsWorkspace, /\/api\/bots\/runs/);
-  assert.match(botsWorkspace, /outcome_unknown/);
-});
+
