@@ -1235,5 +1235,8 @@
 .overUnderDirectionField .callSelected,
 .overUnderDirectionField .putButton,
 .overUnderDirectionField .putSelected { flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 68px; text-align: center; }
-.overUnderDirectionField .predictionOptionLabel { display: block; width: auto; height: auto; padding: 0; border-radius: 0; background: transparent !important; color: var(--ink) !important; font-size: 12px; font-weight: 750; }
+.overUnderDirectionField .callButton>span:first-child,
+.overUnderDirectionField .callSelected>span:first-child,
+.overUnderDirectionField .putButton>span:first-child,
+.overUnderDirectionField .putSelected>span:first-child { display: block; width: auto; height: auto; padding: 0; border-radius: 0; background: transparent !important; color: var(--ink) !important; font-size: 12px; font-weight: 750; }
 .overUnderDirectionField .predictionPercentage { display: block; color: var(--ink); font-size: 18px; line-height: 1.1; font-weight: 850; font-variant-numeric: tabular-nums; }
