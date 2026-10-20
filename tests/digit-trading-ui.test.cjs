@@ -8,7 +8,6 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const ticket = read("src/components/trading/DemoTradeTicket.tsx");
 const analysis = read("src/components/trading/DigitAnalysis.tsx");
-const chart = read("src/components/trading/PriceChart.tsx");
 const workspaceCss = read("src/components/trading/TradingWorkspace.module.css");
 const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
