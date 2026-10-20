@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
-import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
+import type { BackendDigitFrequencyWindow, DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
 
 const PREDICTIONS: Record<DigitContractMode, Array<{ label: string; value: DigitPrediction }>> = {
   "over-under": [{ label: "Over", value: "OVER" }, { label: "Under", value: "UNDER" }],
@@ -79,15 +79,18 @@ export default function DemoTradeTicket({
     : predictionOptions[0].value;
   const contractType = getContractType(mode, activePrediction);
   const requiresTarget = mode !== "even-odd";
+  const frequency = snapshot?.digitFrequency?.windows?.[String(windowSize)];
+  const recentFrequency = snapshot?.digitFrequency?.windows?.["100"];
   const observedDigits = (snapshot?.points ?? []).slice(-windowSize).map((point) => point.lastDigit).filter((digit): digit is number => Number.isInteger(digit) && digit! >= 0 && digit! <= 9);
+  // Keep the prediction summaries based on the observed digit stream, but all per-digit frequency percentages use backend values.
   const aboveCount = observedDigits.filter((digit) => digit > target).length;
   const belowCount = observedDigits.filter((digit) => digit < target).length;
   const percent = (count: number) => observedDigits.length ? (count / observedDigits.length * 100).toFixed(1) + "%" : "—";
-  const recentDigits = (snapshot?.points ?? []).slice(-100)
-    .map((point) => point.lastDigit)
-    .filter((digit): digit is number => Number.isInteger(digit) && digit! >= 0 && digit! <= 9);
-  const digitFrequencyCounts = Array.from({ length: 10 }, (_, digit) => recentDigits.filter((value) => value === digit).length);
-  const digitFrequencyPercent = (count: number) => recentDigits.length ? (count / recentDigits.length * 100).toFixed(1) + "%" : "—";
+  const digitFrequencyCounts = Array.from({ length: 10 }, (_, digit) => recentFrequency?.counts[String(digit)] ?? 0);
+  const digitFrequencyPercent = (digit: number) => {
+    const value = recentFrequency?.percentages[String(digit)];
+    return typeof value === "number" ? value.toFixed(1) + "%" : "—";
+  };
 
   useEffect(() => {
     setDuration("5");
@@ -175,12 +178,12 @@ export default function DemoTradeTicket({
     {mode === "over-under" && <section className={styles.ticketDigitFrequency} aria-label="Digit frequency">
       <div className={styles.ticketDigitFrequencyHeading}>
         <strong>Digit frequency</strong>
-        <span>{recentDigits.length} recent ticks</span>
+        <span>{recentFrequency ? `${recentFrequency.sample_size} recent ticks` : "Waiting for backend"}</span>
       </div>
       <div className={styles.ticketDigitFrequencyGrid}>
-        {digitFrequencyCounts.map((count, digit) => <div className={styles.ticketDigitFrequencyItem} key={digit} aria-label={`Digit ${digit}: ${digitFrequencyPercent(count)}`}>
+        {digitFrequencyCounts.map((_count, digit) => <div className={styles.ticketDigitFrequencyItem} key={digit} aria-label={`Digit ${digit}: ${digitFrequencyPercent(digit)}`}>
           <span className={styles.ticketDigitCircle}>{digit}</span>
-          <span className={styles.ticketDigitPercent}>{digitFrequencyPercent(count)}</span>
+          <span className={styles.ticketDigitPercent}>{digitFrequencyPercent(digit)}</span>
         </div>)}
       </div>
     </section>}
