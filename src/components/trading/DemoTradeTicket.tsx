@@ -65,6 +65,11 @@ export default function DemoTradeTicket({
   const isRealAccount = accountType === "real";
   const canTrade = connected && (isDemo || (isRealAccount && realTradingEnabled));
   const expectedSessionState = isRealAccount ? "Real trading connected" : "Demo trading connected";
+  const visibleStatus = status
+    && status !== "Connected to your selected Deriv demo account. Quotes and balances come from Deriv."
+    && status !== "Connected to your selected real Deriv account. Live orders use real funds; review every order carefully."
+    ? status
+    : "";
   const dailyLossReached = isRealAccount && realizedProfit !== null && realizedProfit <= -maxDailyLoss;
   const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached && !orderResolutionRequired;
   const maxStake = isRealAccount ? maxRealStake : 1000;
@@ -185,13 +190,12 @@ export default function DemoTradeTicket({
         </div>
       </div>
     </div>
-    {status && <p className={styles.inlineHint} role="status">{status}</p>}
+    {visibleStatus && <p className={styles.inlineHint} role="status">{visibleStatus}</p>}
     <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
       {busy ? "Processing…" : "Buy"}
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv to enable Buy.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an account to continue.</p>}
-    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Real-account trading is disabled. Select a Demo account.</p>}
     {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Waiting for verified daily P/L before enabling live orders.</p>}
   </section>;
 }
