@@ -13,7 +13,6 @@ import { useMarketData } from "./useMarketData";
 import PriceChart from "./PriceChart";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { MostTradedMarkets } from "./MostTradedMarkets";
-import { BotsWorkspace } from "../bots/BotsWorkspace";
 import { logger } from "../../lib/logger.mjs";
 import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/client";
 
@@ -32,14 +31,13 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "bots" | "settings";
+type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "settings";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "dashboard", label: "Home", icon: "▦" },
   { id: "markets", label: "Markets", icon: "⌁" },
   { id: "trade", label: "Trade", icon: "↗" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
-  { id: "bots", label: "Bots", icon: "⚡" },
   { id: "settings", label: "Settings", icon: "⚙" },
 ];
 
@@ -48,7 +46,6 @@ const PAGE_TITLES: Record<WorkspacePage, string> = {
   markets: "Markets",
   trade: "Trade",
   portfolio: "Portfolio & History",
-  bots: "Automated Bots",
   settings: "Settings",
 };
 
@@ -677,18 +674,7 @@ export default function TradingWorkspace() {
                 />
               </section>
             )}
-
-            {page === "bots" && (
-              <BotsWorkspace
-                connected={connected}
-                account={activeAccount}
-                sharedSocketRef={trading.sharedSocketRef}
-                nextSharedSeqId={trading.nextSharedSeqId}
-                sessionState={trading.sessionState}
-              />
-            )}
-
-            {page === "settings" && (
+{page === "settings" && (
               <section className={styles.workspaceSection} aria-label="Settings">
                 <div className={styles.intro}>
                   <div className={styles.introMain}>

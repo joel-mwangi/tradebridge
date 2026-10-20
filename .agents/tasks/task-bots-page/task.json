@@ -1,7 +1,0 @@
-{
-  "task_id": "task-bots-page",
-  "task_description": "Add a /bots page to TradeBridge (Next.js 15) that mirrors Deriv Bot: two inner tabs (Dashboard | Bot Builder), full Blockly visual drag-and-drop in Bot Builder, shared Run/Stop panel (Summary/Transactions/Journal) between both tabs, and all required type/storage/hook infrastructure.",
-  "status": "pending",
-  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
-  "blocked_reason": null
-}

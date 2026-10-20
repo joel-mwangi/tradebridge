@@ -55,22 +55,6 @@ docker compose up --build
 The app is available at http://localhost:3000. Compose checks `/api/health` and restarts the app if its process exits. Do not commit `.env` or pass service-role credentials as `NEXT_PUBLIC_*` variables.
 
 
-## AI Lab market analysis
-
-The Bots workspace includes an AI Lab Market Analysis view. The browser calls the authenticated TradeBridge route `/api/ai-lab/market-analysis`; that route verifies the current Supabase user and proxies to the Python research API using a server-only bearer token. The Python service queries the server-side `public.market_ticks` table and returns descriptive last-digit statistics. The browser never receives `TRADEBRIDGE_API_TOKEN` or the Supabase service-role key.
-
-Configure these variables in the **TradeBridge** deployment:
-- `TRADEBRIDGE_AI_URL`: base URL of the deployed Python research API (for example, `https://ai-tradingbridge.vercel.app`).
-- `TRADEBRIDGE_API_TOKEN`: a strong random token matching `TRADEBRIDGE_API_TOKEN` in the Python service deployment. Keep it server-only; do not use a `NEXT_PUBLIC_*` name.
-
-Configure these server-only variables in the **Python AI service** deployment:
-- `TRADEBRIDGE_API_TOKEN`: the same high-entropy shared token as the TradeBridge deployment.
-- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`: the TradeBridge Supabase project that stores ticks. The service-role key must never be exposed to the browser.
-
-Before expecting results, apply `supabase/migrations/20261016100000_market_ticks.sql` to the intended TradeBridge Supabase project and confirm the trusted tick collector is writing rows for the selected symbol. The UI reports missing history or configuration as an error instead of inventing data. If the migration or collector has not been deployed, no real history will be available.
-
-The analysis is descriptive only. Digit frequency and chi-square statistics do not establish a predictive edge or constitute a trading signal.
-
 ## Configure Deriv OAuth
 
 1. Register an OAuth 2.0 application in Deriv.
@@ -133,7 +117,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included. The coverage command enforces at least 50% line coverage across the strategy engine, order-resolution storage, and statement/position parsers. Dependency updates are proposed weekly by Dependabot. CI runs the dependency audit through the repository's scoped audit checker so the single documented upstream `braces` advisory does not mask or suppress unrelated high/critical findings.
+The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included. The coverage command enforces at least 50% line coverage across order-resolution storage and statement/position parsers. Dependency updates are proposed weekly by Dependabot. CI runs the dependency audit through the repository's scoped audit checker so the single documented upstream `braces` advisory does not mask or suppress unrelated high/critical findings.
 
 Build success does not replace live-provider verification. Test Demo ownership, quotes, order confirmation, order-timeout reconciliation, live P/L updates, early sale, statement refresh, and disconnection. Test Real accounts in read-only mode; do not add a Real order socket until server-side policy enforcement is deployed.
 
