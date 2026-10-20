@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import styles from "./TradingWorkspace.module.css";
 import type { AccountActivity, OpenPosition } from "./types";
 
@@ -48,7 +47,6 @@ export default function TradingActivity({
   positionsOnly = false, positions, activity, currency, accountType, accountDataUnavailable = false, busy, activityLoading, activityHasMore,
   onSell, onRefresh, onLoadMore,
 }: Props) {
-  const [pendingSellId, setPendingSellId] = useState<string | null>(null);
   const liveAccount = accountType === "real";
   const canClosePositions = accountType === "demo";
 
@@ -83,12 +81,7 @@ export default function TradingActivity({
           <div className={styles.positionLead}><span className={styles.positionSymbol}>{position.contractType.toLowerCase().includes("put") || position.contractType.toLowerCase().includes("lower") ? "↘" : "↗"}</span><div><strong>{position.symbol} · {position.contractType}</strong><small>Contract #{position.contractId} · {position.status}</small>{position.longcode && <small className={styles.positionDescription}>{position.longcode}</small>}{position.currentSpot !== null && <small>Current spot: {position.currentSpot}</small>}</div></div>
           <div className={styles.positionManage}>
             <div className={styles.positionNumbers}><span><small>Stake</small><strong>{money(position.buyPrice, position.currency)}</strong></span><span><small>Potential payout</small><strong>{money(position.payout, position.currency)}</strong></span><span><small>Current P/L</small><strong className={position.profit === null ? "" : position.profit >= 0 ? styles.positive : styles.negative}>{money(position.profit, position.currency)}</strong></span></div>
-            {canClosePositions && <button type="button" className={styles.sellPositionButton} onClick={() => setPendingSellId((current) => current === position.contractId ? null : position.contractId)} disabled={busy}>{pendingSellId === position.contractId ? "Cancel sale" : "Sell at market"}</button>}
-            {pendingSellId === position.contractId && <div className={styles.sellConfirm} role="group" aria-label={"Confirm sale of contract " + position.contractId}>
-              <strong>{liveAccount ? "Close this REAL-money position?" : "Close this demo position?"}</strong>
-              <p>Deriv will attempt a market sale. Early-sale proceeds may be lower than the original stake and the final amount is determined by Deriv.</p>
-              <div><button type="button" className={styles.sellConfirmButton} disabled={busy} onClick={() => { onSell(position.contractId); setPendingSellId(null); }}>Confirm sale</button><button type="button" className={styles.secondaryButton} disabled={busy} onClick={() => setPendingSellId(null)}>Keep position</button></div>
-            </div>}
+            {canClosePositions && <button type="button" className={styles.sellPositionButton} onClick={() => onSell(position.contractId)} disabled={busy} aria-label={"Sell contract " + position.contractId + " at market"}>Sell at market</button>}
           </div>
         </article>)}
       </div>}
