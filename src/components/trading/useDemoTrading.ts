@@ -294,6 +294,14 @@ export function useTradingSession(
           }
 
           if (message.error) {
+            const errorMessage = message.error.message ?? "";
+            // Profit-table is a background account summary. Do not surface provider
+            // rate-limit details in the trade ticket; keep live trading gated until
+            // a fresh daily P/L value can be verified.
+            if (/rate.?limit|profit_table/i.test(errorMessage)) {
+              setRealizedProfit(null);
+              return;
+            }
             const requestId = message.req_id;
             if (statementRequestRef.current && requestId === statementRequestRef.current.id) {
               statementRequestRef.current = null;
