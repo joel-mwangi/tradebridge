@@ -10,7 +10,6 @@ const consentMigration = read("supabase/migrations/20261009140000_add_real_tradi
 const consentRoute = read("src/app/api/auth/deriv/live-consent/route.ts");
 const tradeSessionRoute = read("src/app/api/auth/deriv/trade-session/route.ts");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
-const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
 const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const orderResolution = read("src/components/trading/order-resolution.mjs");
 const activityHelpers = read("src/components/trading/activity-helpers.mjs");
@@ -80,79 +79,10 @@ test("legacy session route cannot issue a Deriv OTP URL for any account type", (
 
 
 
-test("quick bot creation validates and includes digit-contract barriers", () => {
-  const dashboard = read("src/components/bots/BotDashboard.tsx");
-  assert.match(dashboard, /const requiresBarrier = \['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'\]/);
-  assert.match(dashboard, /Digit Over barriers must be from 0 to 8/);
-  assert.match(dashboard, /Digit Under barriers must be from 1 to 9/);
-  assert.match(dashboard, /const stake = Number\(fields\.stake\)/);
-  assert.match(dashboard, /Number\.isFinite\(stake\)/);
-  assert.match(dashboard, /\.\.\.\(requiresBarrier \? \{ barrier \} : \{\}\)/);
+test("automated bot UI is removed while core trading workspace remains", () => {
+  assert.doesNotMatch(workspace, /BotsWorkspace|Automated Bots|label: "Bots"|page === "bots"/);
+  assert.doesNotMatch(workspace, /\/bots\/run|tradebridge:bots:/);
 });
-
-test("bot dashboard can search and filter run history and explain saved errors", () => {
-  const dashboard = read("src/components/bots/BotDashboard.tsx");
-  assert.match(dashboard, /runFilter === 'all' \|\| run\.status === runFilter/);
-  assert.match(dashboard, /run\.botName\.toLowerCase\(\)\.includes/);
-  assert.match(dashboard, /run\.error \|\| 'No error details were saved/);
-  assert.match(dashboard, /onClick=\{\(\) => botsListRef\.current\?\.scrollIntoView/);
-});
-
-test("bot run metadata persists in localStorage and reloads conservatively", () => {
-  const workspace = read("src/components/bots/BotsWorkspace.tsx");
-  assert.match(workspace, /tradebridge:bots:server-history:v1/);
-  assert.match(workspace, /window\.localStorage\.setItem\(BOT_RUN_HISTORY_KEY/);
-  assert.match(workspace, /loadStoredBotHistory\(\)/);
-  assert.match(workspace, /The browser session was reloaded/);
-  assert.match(workspace, /outcome_unknown/);
-  assert.match(workspace, /Deriv remains the source of truth for contract and account history/);
-  assert.doesNotMatch(workspace, /\/api\/bots\/runs/);
-});
-
-test("unexpected bot socket close cannot downgrade reconciliation or failure status", () => {
-  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
-  const closeHandler = botsWorkspace.match(/socket\.onclose = \(event\) => \{([\s\S]*?)\n      \};/)?.[1];
-  assert.ok(closeHandler, "bot socket close handler must exist");
-  assert.match(closeHandler, /\['reconciliation_required', 'failed'\]\.includes\(run\.status\)/);
-  assert.match(closeHandler, /status: 'interrupted'/);
-});
-
-test("server bot trade history and recovery mutations are scoped to their run", () => {
-  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
-  assert.match(botsWorkspace, /serverTrades\.filter\(\(trade\) => trade\.run_id === activeServerRun\.id\)/);
-  assert.match(botsWorkspace, /t\.run_id === runId && String\(t\.contract_id\) === id && t\.state === 'open'/);
-  assert.match(botsWorkspace, /t\.run_id === runId && t\.state === 'open' \? \{ \.\.\.t, state: 'outcome_unknown'/);
-});
-
-
-
-
-test("ambiguous server bot orders cannot be cleared by browser acknowledgement", () => {
-  const botsWorkspace = read("src/components/bots/BotsWorkspace.tsx");
-  const runPanel = read("src/components/bots/RunPanel.tsx");
-  assert.match(botsWorkspace, /reconciliation_required/);
-  assert.match(runPanel, /orderRecoveryRequired/);
-  assert.match(runPanel, /cannot be cleared by a browser acknowledgement/);
-  assert.doesNotMatch(runPanel, /I checked Deriv — clear recovery lock/);
-});
-
-test("imported and persisted bot configs are validated before execution", () => {
-  const types = read("src/components/bots/bot-types.ts");
-  const storage = read("src/components/bots/bot-storage.ts");
-  const dashboard = read("src/components/bots/BotDashboard.tsx");
-  assert.match(types, /export function isBotConfig\(value: unknown\): value is BotConfig/);
-  assert.match(types, /BOT_CONTRACT_TYPES/);
-  assert.match(types, /config\.durationUnit !== 't'/);
-  assert.match(types, /config\.duration > 10/);
-  assert.match(types, /config\.contractType === 'DIGITOVER' && barrier > 8/);
-  assert.match(types, /config\.contractType === 'DIGITUNDER' && barrier < 1/);
-  assert.match(types, /!isPositiveFinite\(stake\.amount\)/);
-  assert.match(storage, /Array\.isArray\(parsed\) \? parsed\.filter\(isBotConfig\) : \[\]/);
-  assert.match(dashboard, /if \(!isBotConfig\(parsed\)\)/);
-  assert.doesNotMatch(dashboard, /const config = parsed as BotConfig/);
-});
-
-
 
 const derivCallbackRoute = read("src/app/api/auth/deriv/callback/route.ts");
 const tickIngestionRoute = read("src/app/api/internal/market-ticks/route.ts");
