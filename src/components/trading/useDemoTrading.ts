@@ -658,6 +658,12 @@ export function useTradingSession(
     }, 15_000);
   }
 
+  function dismissQuote() {
+    if (busy || buyRequestRef.current !== null) return;
+    setQuote(null);
+    setStatus("Quote dismissed. Your account has not been charged.");
+  }
+
   function confirmQuote() {
     const persistedResolution = readOrderResolution(orderResolutionKey);
     if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
@@ -805,6 +811,6 @@ export function useTradingSession(
     sessionState, status, busy, quote, positions, activity, balance, realizedProfit,
     orderResolutionRequired, acknowledgeOrderResolution,
     activityHasMore, activityLoading, loadMoreActivity,
-    requestQuote, confirmQuote, sellPosition, refreshAccount: refreshAccountNow,
+    requestQuote, confirmQuote, dismissQuote, sellPosition, refreshAccount: refreshAccountNow,
   };
 }
