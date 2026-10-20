@@ -70,12 +70,12 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
 });
 
 test("Buy ticket includes compact digit frequency circles calculated from recent real ticks", () => {
-  assert.match(ticket, /Digit frequency/);
-  assert.match(ticket, /point\.lastDigit/);
-  assert.match(ticket, /digitFrequencyCounts\.map/);
-  assert.match(ticket, /digitFrequencyPercent\\(count\\)/);
-  assert.match(ticket, /mode === "over-under" && <section className=\\{styles\.ticketDigitFrequency\\}/);
-  assert.match(workspaceCss, /\.ticketDigitFrequencyGrid \\{ display: grid; grid-template-columns: repeat\\(10, minmax\\(0, 1fr\\)\\)/);
-  assert.match(workspaceCss, /\.ticketDigitCircle \\{[^}]*aspect-ratio: 1/);
-  assert.doesNotMatch(read("src/components/trading/PriceChart.tsx"), /Digit frequency/);
+  assert.ok(ticket.includes("Digit frequency"));
+  assert.ok(ticket.includes("point.lastDigit"));
+  assert.ok(ticket.includes("digitFrequencyCounts.map"));
+  assert.ok(ticket.includes("digitFrequencyPercent(count)"));
+  assert.ok(ticket.includes('mode === "over-under" && <section className={styles.ticketDigitFrequency}'));
+  assert.ok(workspaceCss.includes(".ticketDigitFrequencyGrid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr))"));
+  assert.ok(workspaceCss.includes(".ticketDigitCircle { display: grid; place-items: center; width: min(100%, 27px); aspect-ratio: 1"));
+  assert.ok(!read("src/components/trading/PriceChart.tsx").includes("Digit frequency"));
 });
