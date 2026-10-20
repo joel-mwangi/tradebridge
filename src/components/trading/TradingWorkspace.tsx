@@ -332,23 +332,24 @@ export default function TradingWorkspace() {
           </div>
         </header>
 
-        <div className={styles.tabNavWrap}>
-          <nav className={styles.workspaceTabs} aria-label="Primary navigation">
-            {PRIMARY_NAV.map((item) => (
-              <Link
-                className={page === item.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
-                href={"/" + item.id}
-                aria-current={page === item.id ? "page" : undefined}
-                key={item.id}
-              >
-                <span className={styles.workspaceTabIcon} aria-hidden="true">{item.icon}</span>
-                <span>{item.label}</span>
-              </Link>
-            ))}
-          </nav>
-        </div>
+        <div className={page === "trade" ? styles.workspaceBody + " " + styles.workspaceBodyTrade : styles.workspaceBody}>
+          <aside className={styles.tabNavWrap} aria-label="Workspace sidebar">
+            <nav className={styles.workspaceTabs} aria-label="Primary navigation">
+              {PRIMARY_NAV.map((item) => (
+                <Link
+                  className={page === item.id ? styles.workspaceTab + " " + styles.workspaceTabActive : styles.workspaceTab}
+                  href={"/" + item.id}
+                  aria-current={page === item.id ? "page" : undefined}
+                  key={item.id}
+                >
+                  <span className={styles.workspaceTabIcon} aria-hidden="true">{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </nav>
+          </aside>
 
-        <div className={styles.content}>
+          <div className={styles.content}>
           {connected && accounts.length === 0 && (
             <section className={styles.accountEmpty}>
               <div>
@@ -748,6 +749,7 @@ export default function TradingWorkspace() {
             <span>TradeBridge · Professional Trading Terminal</span>
             <span>{activeAccountIsDemo ? "Demo account selected" : activeAccountIsReal ? "Real accounts read-only for order entry" : "Connect a broker to unlock account data"}</span>
           </footer>
+          </div>
         </div>
       </section>
     </main>
