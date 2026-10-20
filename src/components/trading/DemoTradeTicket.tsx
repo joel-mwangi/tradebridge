@@ -121,12 +121,8 @@ export default function DemoTradeTicket({
   return <section className={styles.ticketPanel + " " + styles.ticketPanelCompact} id="ticket">
     <div className={styles.panelHeading}>
       <div>
-        <p className={styles.eyebrow}>ORDER ENTRY</p>
-        <h2>{isRealAccount ? "Real account · read-only" : "Demo trade ticket"}</h2>
+        <h2>{isRealAccount ? "Real account · read-only" : "Buy"}</h2>
       </div>
-      <span className={isRealAccount ? (realTradingEnabled ? styles.realLock : styles.realModeLocked) : styles.demoLock}>
-        {isRealAccount ? (realTradingEnabled ? "REAL MONEY" : "LOCKED") : "DEMO ONLY"}
-      </span>
     </div>
 
     {isRealAccount && <div className={styles.accountModeNotice} role="note">
@@ -145,12 +141,7 @@ export default function DemoTradeTicket({
       <span>Today&apos;s reported realized P/L is {realizedProfit} {account?.currency ?? ""}. TradeBridge is blocking new live entries at your configured stop of {maxDailyLoss} {account?.currency ?? ""}.</span>
     </div>}
 
-    <div className={styles.tradeMarket}>
-      <span className={styles.tradeMarketIcon}>0–9</span>
-      <div><strong>{market?.name ?? "Select a market"}</strong><small>{market?.symbol ?? "No active market selected"}</small></div>
-    </div>
-
-    <fieldset className={styles.directionField + (mode === "over-under" ? " " + styles.overUnderDirectionField : "")} disabled={!ready || busy}>
+     <fieldset className={styles.directionField + (mode === "over-under" ? " " + styles.overUnderDirectionField : "")} disabled={!ready || busy}>
       <legend>{mode === "over-under" ? "Over / Under prediction" : mode === "even-odd" ? "Even / Odd prediction" : "Matches / Differs prediction"}</legend>
       <div className={styles.directionChoices}>
         {predictionOptions.map((option, index) => {
@@ -194,18 +185,13 @@ export default function DemoTradeTicket({
         </div>
       </div>
     </div>
-    <p className={styles.compactControlsHint} id="ticket-inputs-note">{isRealAccount ? "Read-only: real-money order entry is disabled." : "Demo funds only · quotes expire after 30 seconds."}</p>
-
-    <div className={styles.ticketStatus} role="status">
-      <span className={sessionState === expectedSessionState ? styles.statusDotConnected : styles.statusDot} />
-      <div><strong>{sessionState}</strong>{status && <p>{status}</p>}</div>
-    </div>
+    {status && <p className={styles.inlineHint} role="status">{status}</p>}
     <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
       {busy ? "Processing…" : "Buy"}
     </button>
-    {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
-    {connected && !account && <p className={styles.inlineHint}>Select an account before requesting a quote.</p>}
-    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Real account order entry is read-only and disabled until server-side risk controls are available. Select a Demo account to place trades.</p>}
-    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Live entry waits until Deriv&apos;s daily realized P/L has loaded.</p>}
+    {!connected && <p className={styles.inlineHint}>Connect Deriv to enable Buy.</p>}
+    {connected && !account && <p className={styles.inlineHint}>Select an account to continue.</p>}
+    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Real-account trading is disabled. Select a Demo account.</p>}
+    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Waiting for verified daily P/L before enabling live orders.</p>}
   </section>;
 }
