@@ -53,7 +53,7 @@ type Props = {
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
   orderResolutionRequired, acknowledgeOrderResolution,
-  market, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote,
+  market, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote, dismissQuote,
 }: Props) {
   const [stake, setStake] = useState("1");
   const [duration, setDuration] = useState("5");
