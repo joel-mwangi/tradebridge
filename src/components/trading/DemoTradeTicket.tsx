@@ -65,6 +65,11 @@ export default function DemoTradeTicket({
   const isRealAccount = accountType === "real";
   const canTrade = connected && (isDemo || (isRealAccount && realTradingEnabled));
   const expectedSessionState = isRealAccount ? "Real trading connected" : "Demo trading connected";
+  const visibleStatus = status
+    && status !== "Connected to your selected Deriv demo account. Quotes and balances come from Deriv."
+    && status !== "Connected to your selected real Deriv account. Live orders use real funds; review every order carefully."
+    ? status
+    : "";
   const dailyLossReached = isRealAccount && realizedProfit !== null && realizedProfit <= -maxDailyLoss;
   const ready = canTrade && sessionState === expectedSessionState && Boolean(market) && !dailyLossReached && !orderResolutionRequired;
   const maxStake = isRealAccount ? maxRealStake : 1000;
@@ -121,12 +126,8 @@ export default function DemoTradeTicket({
   return <section className={styles.ticketPanel + " " + styles.ticketPanelCompact} id="ticket">
     <div className={styles.panelHeading}>
       <div>
-        <p className={styles.eyebrow}>ORDER ENTRY</p>
-        <h2>{isRealAccount ? "Real account · read-only" : "Demo trade ticket"}</h2>
+        <h2>{isRealAccount ? "Real account · read-only" : "Buy"}</h2>
       </div>
-      <span className={isRealAccount ? (realTradingEnabled ? styles.realLock : styles.realModeLocked) : styles.demoLock}>
-        {isRealAccount ? (realTradingEnabled ? "REAL MONEY" : "LOCKED") : "DEMO ONLY"}
-      </span>
     </div>
 
     {isRealAccount && <div className={styles.accountModeNotice} role="note">
@@ -145,12 +146,7 @@ export default function DemoTradeTicket({
       <span>Today&apos;s reported realized P/L is {realizedProfit} {account?.currency ?? ""}. TradeBridge is blocking new live entries at your configured stop of {maxDailyLoss} {account?.currency ?? ""}.</span>
     </div>}
 
-    <div className={styles.tradeMarket}>
-      <span className={styles.tradeMarketIcon}>0–9</span>
-      <div><strong>{market?.name ?? "Select a market"}</strong><small>{market?.symbol ?? "No active market selected"}</small></div>
-    </div>
-
-    <fieldset className={styles.directionField + (mode === "over-under" ? " " + styles.overUnderDirectionField : "")} disabled={!ready || busy}>
+     <fieldset className={styles.directionField + (mode === "over-under" ? " " + styles.overUnderDirectionField : "")} disabled={!ready || busy}>
       <legend>{mode === "over-under" ? "Over / Under prediction" : mode === "even-odd" ? "Even / Odd prediction" : "Matches / Differs prediction"}</legend>
       <div className={styles.directionChoices}>
         {predictionOptions.map((option, index) => {
@@ -177,7 +173,7 @@ export default function DemoTradeTicket({
         <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake</label>
         <div className={styles.inputShell}>
           <span>{account?.currency ?? "—"}</span>
-          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} disabled={!ready || busy} />
         </div>
         <div className={styles.presets + " " + styles.compactPresets} aria-label="Stake presets">
           {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value}</button>)}
@@ -186,7 +182,7 @@ export default function DemoTradeTicket({
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Duration</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} aria-describedby="ticket-inputs-note" disabled={!ready || busy} />
+          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} disabled={!ready || busy} />
           <span>ticks</span>
         </div>
         <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
@@ -194,18 +190,12 @@ export default function DemoTradeTicket({
         </div>
       </div>
     </div>
-    <p className={styles.compactControlsHint} id="ticket-inputs-note">{isRealAccount ? "Read-only: real-money order entry is disabled." : "Demo funds only · quotes expire after 30 seconds."}</p>
-
-    <div className={styles.ticketStatus} role="status">
-      <span className={sessionState === expectedSessionState ? styles.statusDotConnected : styles.statusDot} />
-      <div><strong>{sessionState}</strong>{status && <p>{status}</p>}</div>
-    </div>
+    {visibleStatus && <p className={styles.inlineHint} role="status">{visibleStatus}</p>}
     <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
       {busy ? "Processing…" : "Buy"}
     </button>
-    {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
-    {connected && !account && <p className={styles.inlineHint}>Select an account before requesting a quote.</p>}
-    {connected && isRealAccount && !realTradingEnabled && <p className={styles.inlineHint}>Real account order entry is read-only and disabled until server-side risk controls are available. Select a Demo account to place trades.</p>}
-    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Live entry waits until Deriv&apos;s daily realized P/L has loaded.</p>}
+    {!connected && <p className={styles.inlineHint}>Connect Deriv to enable Buy.</p>}
+    {connected && !account && <p className={styles.inlineHint}>Select an account to continue.</p>}
+    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Waiting for verified daily P/L before enabling live orders.</p>}
   </section>;
 }
