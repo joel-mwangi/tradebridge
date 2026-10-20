@@ -1091,3 +1091,140 @@
     margin-bottom: 8px;
   }
 }
+
+
+/* Collapsible desktop sidebar: expanded state overlays the workspace instead of resizing it. */
+.workspaceBody {
+  grid-template-columns: minmax(0, 1fr);
+  position: relative;
+}
+.workspaceBody .tabNavWrap {
+  position: fixed;
+  top: 70px;
+  left: 0;
+  z-index: 60;
+  width: 68px;
+  height: calc(100vh - 70px);
+  padding: 12px 8px;
+  overflow-x: hidden;
+  transition: width .18s ease, box-shadow .18s ease;
+}
+.workspaceBody .tabNavExpanded {
+  width: 224px;
+  padding: 12px;
+  box-shadow: 12px 0 30px rgba(0, 0, 0, .2);
+}
+.workspaceBody .tabNavCollapsed {
+  width: 68px;
+}
+.workspaceBody .sidebarToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  margin: 0 0 12px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+.workspaceBody .sidebarToggle > span:first-child {
+  flex: 0 0 auto;
+  font-size: 24px;
+  line-height: 1;
+}
+.workspaceBody .tabNavCollapsed .sidebarToggle {
+  padding: 0;
+}
+.workspaceBody .workspaceTabs {
+  min-width: 0;
+}
+.workspaceBody .tabNavExpanded .workspaceTab {
+  justify-content: flex-start;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.workspaceBody .tabNavExpanded .workspaceTab span:first-child {
+  flex: 0 0 22px;
+  font-size: 17px;
+}
+.workspaceBody .tabNavExpanded .workspaceTab span:last-child {
+  display: inline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspaceBody .tabNavCollapsed .workspaceTab {
+  justify-content: center;
+  padding: 0;
+  font-size: 0;
+}
+.workspaceBody .tabNavCollapsed .workspaceTab span:first-child {
+  font-size: 17px;
+}
+.workspaceBody .tabNavCollapsed .workspaceTab span:last-child {
+  display: none;
+}
+.workspaceBody .content {
+  grid-column: 1;
+  width: auto;
+  margin-left: 68px;
+  min-width: 0;
+}
+@media (max-width: 1020px) and (min-width: 721px) {
+  .workspaceBody .tabNavExpanded { width: 224px; }
+  .workspaceBody .content { margin-left: 68px; }
+}
+@media (max-width: 720px) {
+  .workspaceBody .tabNavWrap,
+  .workspaceBody .tabNavExpanded,
+  .workspaceBody .tabNavCollapsed {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    width: auto;
+    height: auto;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    overflow: visible;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, .15);
+  }
+  .workspaceBody .sidebarToggle { display: none; }
+  .workspaceBody .content {
+    width: auto;
+    margin-left: 0;
+  }
+  .workspaceBody .workspaceTabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .workspaceBody .workspaceTab,
+  .workspaceBody .tabNavExpanded .workspaceTab {
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 2px;
+    font-size: 9px;
+  }
+  .workspaceBody .workspaceTab span:first-child,
+  .workspaceBody .tabNavExpanded .workspaceTab span:first-child {
+    flex: initial;
+    font-size: 16px;
+  }
+  .workspaceBody .workspaceTab span:last-child,
+  .workspaceBody .tabNavExpanded .workspaceTab span:last-child {
+    display: inline;
+    white-space: normal;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspaceBody .tabNavWrap { transition: none; }
+}

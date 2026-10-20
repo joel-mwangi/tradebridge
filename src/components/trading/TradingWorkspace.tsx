@@ -121,6 +121,7 @@ export default function TradingWorkspace() {
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [marketPanelOpen, setMarketPanelOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [tradeView, setTradeView] = useState<"analyse" | "charts">("analyse");
 
@@ -333,7 +334,21 @@ export default function TradingWorkspace() {
         </header>
 
         <div className={page === "trade" ? styles.workspaceBody + " " + styles.workspaceBodyTrade : styles.workspaceBody}>
-          <aside className={styles.tabNavWrap} aria-label="Workspace sidebar">
+          <aside
+            className={sidebarExpanded ? styles.tabNavWrap + " " + styles.tabNavExpanded : styles.tabNavWrap + " " + styles.tabNavCollapsed}
+            aria-label="Workspace sidebar"
+          >
+            <button
+              className={styles.sidebarToggle}
+              type="button"
+              onClick={() => setSidebarExpanded((expanded) => !expanded)}
+              aria-expanded={sidebarExpanded}
+              aria-label={sidebarExpanded ? "Collapse navigation" : "Expand navigation"}
+              title={sidebarExpanded ? "Collapse navigation" : "Expand navigation"}
+            >
+              <span aria-hidden="true">{sidebarExpanded ? "‹" : "›"}</span>
+              {sidebarExpanded && <span>Collapse</span>}
+            </button>
             <nav className={styles.workspaceTabs} aria-label="Primary navigation">
               {PRIMARY_NAV.map((item) => (
                 <Link
