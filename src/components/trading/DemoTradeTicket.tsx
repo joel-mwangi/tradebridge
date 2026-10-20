@@ -150,7 +150,7 @@ export default function DemoTradeTicket({
       <div><strong>{market?.name ?? "Select a market"}</strong><small>{market?.symbol ?? "No active market selected"}</small></div>
     </div>
 
-    <fieldset className={styles.directionField} disabled={!ready || busy}>
+    <fieldset className={styles.directionField + (mode === "over-under" ? " " + styles.overUnderDirectionField : "")} disabled={!ready || busy}>
       <legend>{mode === "over-under" ? "Over / Under prediction" : mode === "even-odd" ? "Even / Odd prediction" : "Matches / Differs prediction"}</legend>
       <div className={styles.directionChoices}>
         {predictionOptions.map((option, index) => {
@@ -163,17 +163,13 @@ export default function DemoTradeTicket({
             onClick={() => onPredictionChange(option.value)}
             aria-pressed={selected}
           >
-            <span>{option.label}</span>
+            <span className={mode === "over-under" ? styles.predictionOptionLabel : undefined}>{option.label}</span>
+            {mode === "over-under" && <strong className={styles.predictionPercentage}>{percent(option.value === "OVER" ? aboveCount : belowCount)}</strong>}
           </button>;
         })}
       </div>
     </fieldset>
     {mode === "over-under" && <p className={styles.compactControlsHint}>Barrier digit: <strong>{target}</strong>. Over wins above the barrier; Under wins below it. An equal digit satisfies neither prediction.</p>}
-    {mode === "over-under" && <div className={styles.overUnderStats} aria-label="Observed ticks above and below the barrier">
-      <div><span>Above {target}</span> <strong>{percent(aboveCount)}</strong> <small>{aboveCount} observed ticks</small></div>
-      <div><span>Below {target}</span> <strong>{percent(belowCount)}</strong> <small>{belowCount} observed ticks</small></div>
-      <p>Digits equal to the barrier are excluded from both groups.</p>
-    </div>}
 
     {mode === "matches-differs" && <p className={styles.compactControlsHint}>Target digit: <strong>{target}</strong>. Matches wins on that digit; Differs wins on any other digit.</p>}
     <div className={styles.compactInputsGrid}>
