@@ -47,6 +47,7 @@ type Props = {
   quote: DemoQuote | null;
   requestQuote: (input: { symbol: string; contractType: DigitContractType; stake: number; duration: number; durationUnit: "t"; barrier?: string }) => void;
   confirmQuote: () => void;
+  dismissQuote: () => void;
 };
 
 export default function DemoTradeTicket({
@@ -175,28 +176,34 @@ export default function DemoTradeTicket({
     </div>
     <p className={styles.compactControlsHint} id="ticket-inputs-note">{isRealAccount ? "Read-only: real-money order entry is disabled." : "Demo funds only · quotes expire after 30 seconds."}</p>
 
-    {quote && quoteMatchesForm && <div className={isRealAccount ? styles.liveQuoteCard : styles.quoteCard} role="status">
-      <div className={styles.quoteCardHeader}><span>LIVE QUOTE</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
-      <div className={styles.quoteMetrics}>
-        <div><small>Stake</small><strong>{quote.stake.toLocaleString()} {quote.currency}</strong></div>
-        <div><small>Purchase price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
-        <div><small>Potential payout</small><strong>{quote.payout === null ? "Not returned" : quote.payout.toLocaleString() + " " + quote.currency}</strong></div>
-      </div>
-      <p>{getContractLabel(quote.contractType, quote.barrier)} · {quote.symbol} · {quote.duration} ticks</p>
-      <button type="button" className={isRealAccount ? styles.confirmLiveButton : styles.confirmButton} onClick={confirmQuote} disabled={!ready || busy || quoteExpired}>
-        {isRealAccount ? "Confirm real-money trade" : "Confirm demo trade"} <span>→</span>
-      </button>
-      <small className={styles.quoteWarning}>{isRealAccount
-        ? "This action sends a live order and can immediately lose real money. Review the quoted stake and potential payout. Confirmation cannot guarantee a profit."
-        : "Confirmation sends an order to your demo account and updates your virtual balance."}</small>
+    {quote && quoteMatchesForm && <div className={styles.buyConfirmOverlay} role="presentation">
+      <section className={isRealAccount ? styles.liveQuoteCard : styles.quoteCard} role="dialog" aria-modal="true" aria-labelledby="buy-confirm-title">
+        <div className={styles.quoteCardHeader}><span>REVIEW YOUR BUY</span><strong>{quoteExpired ? "Expired" : quoteSecondsRemaining + "s remaining"}</strong></div>
+        <h3 id="buy-confirm-title" className={styles.buyConfirmTitle}>Confirm {getContractLabel(quote.contractType, quote.barrier)}</h3>
+        <div className={styles.quoteMetrics}>
+          <div><small>Stake</small><strong>{quote.stake.toLocaleString()} {quote.currency}</strong></div>
+          <div><small>Purchase price</small><strong>{quote.askPrice.toLocaleString()} {quote.currency}</strong></div>
+          <div><small>Potential payout</small><strong>{quote.payout === null ? "Not returned" : quote.payout.toLocaleString() + " " + quote.currency}</strong></div>
+        </div>
+        <p>{getContractLabel(quote.contractType, quote.barrier)} · {quote.symbol} · {quote.duration} ticks</p>
+        <div className={styles.buyConfirmActions}>
+          <button type="button" className={styles.cancelBuyButton} onClick={dismissQuote} disabled={busy}>Cancel</button>
+          <button type="button" className={styles.confirmButton} onClick={confirmQuote} disabled={!ready || busy || quoteExpired}>
+            {busy ? "Submitting…" : "Confirm Buy"} <span>→</span>
+          </button>
+        </div>
+        <small className={styles.quoteWarning}>{isRealAccount
+          ? "This action sends a live order and can immediately lose real money. Review the quoted stake and potential payout. Confirmation cannot guarantee a profit."
+          : "This confirms a purchase on your Demo account using virtual funds. Review the stake and potential payout before proceeding."}</small>
+      </section>
     </div>}
 
     <div className={styles.ticketStatus} role="status">
       <span className={sessionState === expectedSessionState ? styles.statusDotConnected : styles.statusDot} />
       <div><strong>{sessionState}</strong>{status && <p>{status}</p>}</div>
     </div>
-    <button type="button" className={isRealAccount ? styles.getLiveQuoteButton : styles.getQuoteButton} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10}>
-      {busy ? "Waiting for Deriv…" : quoteMatchesForm && !quoteExpired ? "Request a new quote" : isRealAccount ? "Get live quote" : "Get demo quote"}
+    <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
+      {busy ? "Processing…" : "Buy"}
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv above to activate trading.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an account before requesting a quote.</p>}

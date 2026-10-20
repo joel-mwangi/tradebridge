@@ -596,6 +596,7 @@ export default function TradingWorkspace() {
                           quote={trading.quote}
                           requestQuote={trading.requestQuote}
                           confirmQuote={trading.confirmQuote}
+                          dismissQuote={trading.dismissQuote}
                         />
                       </div>
                     </div>
