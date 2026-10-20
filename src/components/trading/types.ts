@@ -23,6 +23,7 @@ export interface MarketSnapshot {
   quote: number;
   updatedAt: number;
   points: PricePoint[];
+  digitFrequency?: BackendDigitFrequency;
 }
 
 export interface MarketCandle {
