@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MarketCandle, MarketInstrument, MarketSnapshot, PricePoint } from "./types";
+import type { BackendDigitFrequency, MarketCandle, MarketInstrument, MarketSnapshot, PricePoint } from "./types";
 
 const PUBLIC_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const PREFERRED_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "R_100", "R_50", "frxEURUSD", "frxGBPUSD", "frxXAUUSD"];
@@ -20,6 +20,7 @@ type PublicMessage = {
     market?: string;
     is_trading_suspended?: number;
   }>;
+  digit_frequency?: BackendDigitFrequency;
   tick?: {
     underlying_symbol?: string;
     symbol?: string;
@@ -141,7 +142,7 @@ export function useMarketData() {
       }, 30_000);
     };
 
-    const mergePoints = (symbol: string, incoming: PricePoint[]) => {
+    const mergePoints = (symbol: string, incoming: PricePoint[], digitFrequency?: BackendDigitFrequency) => {
       if (!alive || !symbol || incoming.length === 0) return;
       setSnapshots((current) => {
         const previous = current[symbol];
@@ -157,6 +158,9 @@ export function useMarketData() {
             quote: last?.price ?? previous?.quote ?? 0,
             updatedAt: last?.time ? last.time * 1000 : previous?.updatedAt ?? Date.now(),
             points,
+            digitFrequency: digitFrequency && (digitFrequency.calculated_at ?? 0) >= (previous?.digitFrequency?.calculated_at ?? 0)
+              ? digitFrequency
+              : previous?.digitFrequency,
           },
         };
       });
@@ -303,7 +307,7 @@ export function useMarketData() {
               ? [{ price: value, time, lastDigit: extractLastDigit(price, pipSize) }]
               : [];
           });
-          mergePoints(symbol, points);
+          mergePoints(symbol, points, message.digit_frequency);
           return;
         }
 
@@ -320,7 +324,7 @@ export function useMarketData() {
             price,
             time,
             lastDigit: extractLastDigit(message.tick.quote ?? price, tickPipSize),
-          }]);
+          }], message.digit_frequency);
           setConnection("Live prices");
         }
       } catch {
