@@ -117,7 +117,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included. The coverage command enforces at least 50% line coverage across the strategy engine, order-resolution storage, and statement/position parsers. Dependency updates are proposed weekly by Dependabot. CI runs the dependency audit through the repository's scoped audit checker so the single documented upstream `braces` advisory does not mask or suppress unrelated high/critical findings.
+The test command uses Node.js test auto-discovery, so every `*.test.cjs` suite is included. The coverage command enforces at least 50% line coverage across order-resolution storage and statement/position parsers. Dependency updates are proposed weekly by Dependabot. CI runs the dependency audit through the repository's scoped audit checker so the single documented upstream `braces` advisory does not mask or suppress unrelated high/critical findings.
 
 Build success does not replace live-provider verification. Test Demo ownership, quotes, order confirmation, order-timeout reconciliation, live P/L updates, early sale, statement refresh, and disconnection. Test Real accounts in read-only mode; do not add a Real order socket until server-side policy enforcement is deployed.
 
