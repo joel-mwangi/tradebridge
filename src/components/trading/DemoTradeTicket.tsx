@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
-import type { BackendDigitFrequencyWindow, DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
+import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
 
 const PREDICTIONS: Record<DigitContractMode, Array<{ label: string; value: DigitPrediction }>> = {
   "over-under": [{ label: "Over", value: "OVER" }, { label: "Under", value: "UNDER" }],
@@ -79,7 +79,6 @@ export default function DemoTradeTicket({
     : predictionOptions[0].value;
   const contractType = getContractType(mode, activePrediction);
   const requiresTarget = mode !== "even-odd";
-  const frequency = snapshot?.digitFrequency?.windows?.[String(windowSize)];
   const recentFrequency = snapshot?.digitFrequency?.windows?.["100"];
   const observedDigits = (snapshot?.points ?? []).slice(-windowSize).map((point) => point.lastDigit).filter((digit): digit is number => Number.isInteger(digit) && digit! >= 0 && digit! <= 9);
   // Keep the prediction summaries based on the observed digit stream, but all per-digit frequency percentages use backend values.
