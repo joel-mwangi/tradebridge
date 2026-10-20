@@ -42,7 +42,7 @@ export default function DigitAnalysis({
   const localTotal = digits.length;
   // Frequency rank and newest tick are independent signals.
   const latestDigit = digits.length ? digits[digits.length - 1].digit : null;
-  const ranking = useMemo(() => [...DIGITS].sort((a, b) => counts[b] - counts[a] || a - b), [frequency]);
+  const ranking = useMemo(() => [...DIGITS].sort((a, b) => counts[b] - counts[a] || a - b), [counts]);
   const rank = (d: number) => total ? ranking.indexOf(d) + 1 : 0;
   const even = digits.filter((p) => p.digit % 2 === 0).length;
   const odd = localTotal - even;
