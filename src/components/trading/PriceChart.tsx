@@ -45,13 +45,6 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   const [showSma, setShowSma] = useState(false);
   const gradientId = useId().replace(/:/g, "");
   const allPoints = snapshot?.points ?? [];
-  const digitFrequency = useMemo(() => {
-    const recentDigits = allPoints.slice(-100)
-      .map((point) => point.lastDigit)
-      .filter((digit): digit is number => Number.isInteger(digit) && digit! >= 0 && digit! <= 9);
-    const counts = Array.from({ length: 10 }, (_, digit) => recentDigits.filter((value) => value === digit).length);
-    return { total: recentDigits.length, counts };
-  }, [allPoints]);
   const allCandles = market ? candlesByKey[`${market.symbol}:${granularity}`] ?? [] : [];
 
 
@@ -249,20 +242,6 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
         : allPoints.length === 0 ? "The chart appears when Deriv returns historical or live ticks. No sample prices are drawn." : "At least two real price points are needed to draw a line chart."}</p>
       {view === "candles" && <button type="button" className={styles.panelActionButton} onClick={() => onLoadCandles(market.symbol, granularity, true)}>Retry candle history</button>}
     </div>}
-    <section className={styles.chartDigitFrequency} aria-label="Digit frequency">
-      <div className={styles.chartDigitFrequencyHeading}>
-        <strong>Digit frequency</strong>
-        <span>{digitFrequency.total} recent ticks</span>
-      </div>
-      <div className={styles.chartDigitFrequencyGrid}>
-        {digitFrequency.counts.map((count, digit) => (
-          <div className={styles.chartDigitFrequencyItem} key={digit} aria-label={`Digit ${digit}: ${digitFrequency.total ? (count / digitFrequency.total * 100).toFixed(1) : "0.0"} percent`}>
-            <span className={styles.chartDigitCircle}>{digit}</span>
-            <span className={styles.chartDigitPercent}>{digitFrequency.total ? (count / digitFrequency.total * 100).toFixed(1) + "%" : "—"}</span>
-          </div>
-        ))}
-      </div>
-    </section>
     <p className={styles.chartFootnote}>{view === "candles"
       ? "Candlesticks show open, high, low, and close prices returned by Deriv. The quote above is the separate live tick feed."
       : "Chart values are sourced from Deriv tick history and live ticks. They are not simulated or predictive."}</p>

@@ -8,7 +8,6 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const ticket = read("src/components/trading/DemoTradeTicket.tsx");
 const analysis = read("src/components/trading/DigitAnalysis.tsx");
-const chart = read("src/components/trading/PriceChart.tsx");
 const workspaceCss = read("src/components/trading/TradingWorkspace.module.css");
 const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
@@ -70,11 +69,13 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
   assert.doesNotMatch(chartView, /Automated bot execution|Open Bot Workspace/);
 });
 
-test("chart includes compact digit frequency circles calculated from recent real ticks", () => {
-  assert.match(chart, /Digit frequency/);
-  assert.match(chart, /point\.lastDigit/);
-  assert.match(chart, /digitFrequency\.counts\.map/);
-  assert.match(chart, /digitFrequency\.total \? \(count \/ digitFrequency\.total \* 100\)/);
-  assert.match(workspaceCss, /\.chartDigitFrequencyGrid \{ display: grid; grid-template-columns: repeat\(10, minmax\(0, 1fr\)\)/);
-  assert.match(workspaceCss, /\.chartDigitCircle \{[^}]*aspect-ratio: 1/);
+test("Buy ticket includes compact digit frequency circles calculated from recent real ticks", () => {
+  assert.ok(ticket.includes("Digit frequency"));
+  assert.ok(ticket.includes("point.lastDigit"));
+  assert.ok(ticket.includes("digitFrequencyCounts.map"));
+  assert.ok(ticket.includes("digitFrequencyPercent(count)"));
+  assert.ok(ticket.includes('mode === "over-under" && <section className={styles.ticketDigitFrequency}'));
+  assert.ok(workspaceCss.includes(".ticketDigitFrequencyGrid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr))"));
+  assert.ok(workspaceCss.includes(".ticketDigitCircle { display: grid; place-items: center; width: min(100%, 27px); aspect-ratio: 1"));
+  assert.ok(!read("src/components/trading/PriceChart.tsx").includes("Digit frequency"));
 });
