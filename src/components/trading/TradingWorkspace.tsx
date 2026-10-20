@@ -639,32 +639,58 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeView === "charts" && (
-                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: "20px", alignItems: "start" }}>
-                    {/* Left: full price chart */}
-                    <PriceChart
-                      market={selectedMarket}
-                      snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
-                      candlesByKey={candlesByKey}
-                      onLoadCandles={requestCandles}
+                  <>
+                    <div className={styles.marketGrid}>
+                      <div className={styles.marketColumn}>
+                        <PriceChart
+                          market={selectedMarket}
+                          snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+                          candlesByKey={candlesByKey}
+                          onLoadCandles={requestCandles}
+                        />
+                      </div>
+                      <div className={styles.marketColumn}>
+                        <DemoTradeTicket
+                          connected={connected}
+                          account={activeAccount}
+                          realTradingEnabled={effectiveLiveTradingEnabled}
+                          maxRealStake={maxRealStake}
+                          maxDailyLoss={maxDailyLoss}
+                          realizedProfit={trading.realizedProfit}
+                          orderResolutionRequired={trading.orderResolutionRequired}
+                          acknowledgeOrderResolution={trading.acknowledgeOrderResolution}
+                          market={selectedMarket}
+                          snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined}
+                          windowSize={digitWindowSize}
+                          mode={digitMode}
+                          prediction={digitPrediction}
+                          onPredictionChange={setPredictionAndValidateTarget}
+                          target={digitTarget}
+                          sessionState={trading.sessionState}
+                          status={trading.status}
+                          busy={trading.busy}
+                          quote={trading.quote}
+                          requestQuote={trading.requestQuote}
+                          confirmQuote={trading.confirmQuote}
+                          dismissQuote={trading.dismissQuote}
+                        />
+                      </div>
+                    </div>
+                    <TradingActivity
+                      positionsOnly
+                      positions={trading.positions}
+                      activity={trading.activity}
+                      currency={currency}
+                      accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                      accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                      busy={trading.busy}
+                      activityLoading={trading.activityLoading}
+                      activityHasMore={trading.activityHasMore}
+                      onSell={trading.sellPosition}
+                      onRefresh={trading.refreshAccount}
+                      onLoadMore={trading.loadMoreActivity}
                     />
-
-                    {/* Automated execution is server-owned; the chart never submits bot orders. */}
-                    <aside style={{
-                      border: "1px solid var(--line)", borderRadius: "14px",
-                      background: "var(--panel)", boxShadow: "var(--card-shadow)",
-                      padding: "18px", display: "grid", alignContent: "start", gap: "10px",
-                    }}>
-                      <strong style={{ fontSize: "14px" }}>Automated bot execution</strong>
-                      <p style={{ margin: 0, color: "var(--muted)", fontSize: "12px", lineHeight: 1.6 }}>
-                        Bot runs, stop requests, trade history, and recovery status are controlled by the server. The chart does not submit automated orders from your browser.
-                      </p>
-                      <button type="button" onClick={() => router.push("/bots")} style={{
-                        minHeight: "36px", border: "none", borderRadius: "8px",
-                        background: "var(--teal)", color: "#0b1320", fontWeight: 800,
-                        cursor: "pointer",
-                      }}>Open Bot Workspace</button>
-                    </aside>
-                  </div>
+                  </>
                 )}
               </section>
             )}
