@@ -26,6 +26,7 @@ type StrategyStatus = {
     over_stability_passes?: boolean;
   } | null;
   execution_enabled?: boolean;
+  digit_window_size?: number;
 };
 
 const STATE_LABELS: Record<string, string> = {
@@ -37,7 +38,7 @@ const STATE_LABELS: Record<string, string> = {
   stopped: "Stopped",
 };
 
-export default function DigitStrategyPanel({ symbol }: { symbol: string }) {
+export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: string; windowSize: number }) {
   const socketRef = useRef<WebSocket | null>(null);
   const [transport, setTransport] = useState("Connecting strategy feed…");
   const [status, setStatus] = useState<StrategyStatus | null>(null);
@@ -100,6 +101,17 @@ export default function DigitStrategyPanel({ symbol }: { symbol: string }) {
     };
   }, []);
 
+  useEffect(() => {
+    const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(status.state ?? ""));
+    if (!active || !symbol || !Number.isInteger(windowSize)) return;
+    if (status?.symbol === symbol && status?.digit_window_size === windowSize) return;
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    setBusy(true);
+    setTransport(`Applying selected ${windowSize}-tick window…`);
+    socket.send(JSON.stringify({ strategy: { action: "start", symbol, window_size: windowSize } }));
+  }, [symbol, windowSize, status?.state, status?.symbol, status?.digit_window_size]);
+
   function send(action: "start" | "stop" | "status") {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -112,7 +124,7 @@ export default function DigitStrategyPanel({ symbol }: { symbol: string }) {
     }
     setBusy(true);
     socket.send(JSON.stringify({
-      strategy: action === "start" ? { action, symbol } : { action },
+      strategy: action === "start" ? { action, symbol, window_size: windowSize } : { action },
     }));
     if (action === "start") setTransport("Start requested · waiting for backend status");
     if (action === "stop") setTransport("Stop requested · waiting for backend status");
@@ -128,7 +140,7 @@ export default function DigitStrategyPanel({ symbol }: { symbol: string }) {
         <div>
           <p style={{ margin: "0 0 4px", color: "var(--muted)", fontSize: 10, fontWeight: 800, letterSpacing: ".12em" }}>OBSERVATION ONLY</p>
           <h2 style={{ margin: 0, color: "var(--ink)", fontSize: 16, fontWeight: 850 }}>Digit strategy</h2>
-          <p style={{ margin: "5px 0 0", color: "var(--muted)", fontSize: 11 }}>Market: {symbol || "Select a market"} · Source: TradeBridge observed-tick frequencies (1000-tick window)</p>
+          <p style={{ margin: "5px 0 0", color: "var(--muted)", fontSize: 11 }}>Market: {symbol || "Select a market"} · Source: TradeBridge observed-tick frequencies ({windowSize.toLocaleString()}-tick window)</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" onClick={() => send("start")} disabled={!canStart} style={{ minHeight: 36, padding: "0 13px", border: 0, borderRadius: 8, background: canStart ? "var(--teal)" : "var(--line)", color: canStart ? "#fff" : "var(--muted)", fontWeight: 800, cursor: canStart ? "pointer" : "not-allowed" }}>Start</button>
@@ -151,7 +163,7 @@ export default function DigitStrategyPanel({ symbol }: { symbol: string }) {
           <Qualification label="Over (5–9)" qualifies={status.qualification.over_qualifies} threshold={status.qualification.over_threshold_passes} stability={status.qualification.over_stability_passes} />
         </div>
       )}
-      <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 10, lineHeight: 1.5 }}>Percentages are calculated from observed market ticks. They are not official Deriv Digit Analytics percentages or predictions. This panel never places trades.</p>
+      <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 10, lineHeight: 1.5 }}>Strategy frequency window follows the Tick window selected in Digit Analysis ({windowSize.toLocaleString()} ticks). Percentages are calculated from observed market ticks. They are not official Deriv Digit Analytics percentages or predictions. This panel never places trades.</p>
     </section>
   );
 }

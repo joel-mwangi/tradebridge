@@ -451,7 +451,7 @@ export default function TradingWorkspace() {
 
             {page === "trade" && (
               <section className={styles.workspaceSection} aria-label="Trading workspace">
-                <DigitStrategyPanel symbol={selectedSymbol} />
+                <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} />
                 {/* ── Market switcher header ── */}
                 <div className={styles.tradeTabHeader}>
                   <div className={styles.tradeTabMarketInfo}>
