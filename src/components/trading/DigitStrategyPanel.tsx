@@ -120,7 +120,7 @@ export default function DigitStrategyPanel({ symbol }: { symbol: string }) {
 
   const state = status?.state ?? "idle";
   const isActive = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(state));
-  const canStart = Boolean(symbol) && !busy && !isActive && state !== "blocked";
+  const canStart = Boolean(symbol) && !busy && !isActive;
 
   return (
     <section aria-label="Digit strategy session" style={{ border: "1px solid var(--line)", borderRadius: 14, padding: 16, background: "var(--surface)", marginBottom: 16 }}>
