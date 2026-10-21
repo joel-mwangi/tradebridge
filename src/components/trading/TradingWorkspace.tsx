@@ -124,7 +124,7 @@ export default function TradingWorkspace() {
   const [marketPanelOpen, setMarketPanelOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
-  const [tradeView, setTradeView] = useState<"analyse" | "charts">("analyse");
+  const [tradeView, setTradeView] = useState<"analyse" | "charts" | "strategy">("analyse");
   const [digitWindowSize, setDigitWindowSize] = useState(100);
 
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
@@ -451,7 +451,6 @@ export default function TradingWorkspace() {
 
             {page === "trade" && (
               <section className={styles.workspaceSection} aria-label="Trading workspace">
-                <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} />
                 {/* ── Market switcher header ── */}
                 <div className={styles.tradeTabHeader}>
                   <div className={styles.tradeTabMarketInfo}>
@@ -487,6 +486,18 @@ export default function TradingWorkspace() {
                         }}
                         aria-pressed={tradeView === "charts"}
                       >↗ Charts</button>
+                      <button
+                        type="button"
+                        onClick={() => setTradeView("strategy")}
+                        style={{
+                          minHeight: "34px", padding: "0 14px", border: "none",
+                          borderLeft: "1px solid var(--border)",
+                          background: tradeView === "strategy" ? "var(--teal)" : "var(--surface)",
+                          color: tradeView === "strategy" ? "#0b1320" : "var(--muted)",
+                          fontSize: "11px", fontWeight: 700, cursor: "pointer", transition: "all .15s",
+                        }}
+                        aria-pressed={tradeView === "strategy"}
+                      >⌘ Strategy</button>
                     </div>
                     <button
                       type="button"
@@ -638,6 +649,10 @@ export default function TradingWorkspace() {
                       onLoadMore={trading.loadMoreActivity}
                     />
                   </>
+                )}
+
+                {tradeView === "strategy" && (
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} />
                 )}
 
                 {tradeView === "charts" && (
