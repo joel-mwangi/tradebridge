@@ -6,6 +6,7 @@ const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?
 
 type StrategyStatus = {
   type?: string;
+  error?: { message?: string };
   symbol?: string | null;
   state?: string;
   reason?: string;
