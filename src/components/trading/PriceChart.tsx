@@ -223,8 +223,12 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
         </>}
 
         {view === "candles" && filteredCandles.map((candle, index) => {
-          const x = left + ((index + 0.5) / filteredCandles.length) * plotWidth;
-          const candleWidth = Math.max(2, Math.min(9, (plotWidth / filteredCandles.length) * 0.58));
+          const x = range > 0 && windowStart !== undefined && windowEnd !== undefined && windowEnd > windowStart
+            ? left + ((candle.epoch + granularity / 2 - windowStart) / (windowEnd - windowStart)) * plotWidth
+            : left + ((index + 0.5) / filteredCandles.length) * plotWidth;
+          const candleWidth = range > 0
+            ? Math.max(1, Math.min(9, (granularity / range) * plotWidth * 0.72))
+            : Math.max(2, Math.min(9, (plotWidth / filteredCandles.length) * 0.58));
           const openY = yForPrice(candle.open);
           const closeY = yForPrice(candle.close);
           const highY = yForPrice(candle.high);
