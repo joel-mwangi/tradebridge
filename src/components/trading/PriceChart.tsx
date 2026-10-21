@@ -52,22 +52,21 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
     if (view === "candles" && market) onLoadCandles(market.symbol, granularity);
   }, [view, market?.symbol, granularity, onLoadCandles]);
 
+  const latestTickTime = allPoints[allPoints.length - 1]?.time;
+  const windowEnd = range === 0 ? latestTickTime : (latestTickTime ?? allCandles[allCandles.length - 1]?.epoch);
+  const windowStart = windowEnd !== undefined && range > 0 ? windowEnd - range : undefined;
+
   const filteredPoints = useMemo(() => {
     if (range === 0) return allPoints;
-    const latest = allPoints[allPoints.length - 1]?.time;
-    if (latest === undefined) return [];
-    const windowStart = latest - range;
-    return allPoints.filter((point) => point.time >= windowStart && point.time <= latest);
-  }, [allPoints, range]);
-
+    if (windowStart === undefined || windowEnd === undefined) return [];
+    return allPoints.filter((point) => point.time >= windowStart && point.time <= windowEnd);
+  }, [allPoints, range, windowStart, windowEnd]);
 
   const filteredCandles = useMemo(() => {
     if (range === 0) return allCandles;
-    const latest = allCandles[allCandles.length - 1]?.epoch;
-    if (latest === undefined) return [];
-    const windowStart = latest - range;
-    return allCandles.filter((candle) => candle.epoch >= windowStart && candle.epoch <= latest);
-  }, [allCandles, range]);
+    if (windowStart === undefined || windowEnd === undefined) return [];
+    return allCandles.filter((candle) => candle.epoch >= windowStart && candle.epoch <= windowEnd);
+  }, [allCandles, range, windowStart, windowEnd]);
 
   const firstValue = view === "candles" ? filteredCandles[0]?.open : filteredPoints[0]?.price;
   const latestValue = view === "candles"
@@ -128,7 +127,9 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   const smaPath = smaPoints.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(2) + "," + p.y.toFixed(2)).join(" ");
 
   const coords = filteredPoints.map((point, index) => ({
-    x: left + (filteredPoints.length < 2 ? 0 : index / (filteredPoints.length - 1)) * plotWidth,
+    x: range > 0 && windowStart !== undefined && windowEnd !== undefined && windowEnd > windowStart
+      ? left + ((point.time - windowStart) / (windowEnd - windowStart)) * plotWidth
+      : left + (filteredPoints.length < 2 ? 0 : index / (filteredPoints.length - 1)) * plotWidth,
     y: yForPrice(point.price),
     point,
   }));
@@ -140,6 +141,9 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   const visibleLength = view === "candles" ? filteredCandles.length : filteredPoints.length;
   const xLabelIndexes = [...new Set([0, Math.floor((visibleLength - 1) / 2), visibleLength - 1])]
     .filter((index) => index >= 0 && index < visibleLength);
+  const timeAxisLabels = range > 0 && windowStart !== undefined && windowEnd !== undefined
+    ? [windowStart, windowStart + range / 2, windowEnd]
+    : null;
   const hasChartData = view === "candles" ? filteredCandles.length > 0 : coords.length > 1;
 
   if (!market) {
@@ -242,15 +246,20 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
           </g>;
         })}
 
-        {xLabelIndexes.map((index) => {
-          const item = view === "candles" ? filteredCandles[index] : coords[index]?.point;
-          if (!item) return null;
-          const x = view === "candles"
-            ? left + ((index + 0.5) / filteredCandles.length) * plotWidth
-            : coords[index].x;
-          const time = view === "candles" ? (item as MarketCandle).epoch : (item as PricePoint).time;
-          return <text key={index} x={x} y={height - 9} textAnchor={index === 0 ? "start" : index === visibleLength - 1 ? "end" : "middle"} fill="#8593a3" fontSize="12">{formatTime(time, range)}</text>;
-        })}
+        {timeAxisLabels
+          ? timeAxisLabels.map((time, index) => {
+              const x = left + (index / 2) * plotWidth;
+              return <text key={time} x={x} y={height - 9} textAnchor={index === 0 ? "start" : index === 2 ? "end" : "middle"} fill="#8593a3" fontSize="12">{formatTime(time, range)}</text>;
+            })
+          : xLabelIndexes.map((index) => {
+              const item = view === "candles" ? filteredCandles[index] : coords[index]?.point;
+              if (!item) return null;
+              const x = view === "candles"
+                ? left + ((index + 0.5) / filteredCandles.length) * plotWidth
+                : coords[index].x;
+              const time = view === "candles" ? (item as MarketCandle).epoch : (item as PricePoint).time;
+              return <text key={index} x={x} y={height - 9} textAnchor={index === 0 ? "start" : index === visibleLength - 1 ? "end" : "middle"} fill="#8593a3" fontSize="12">{formatTime(time, range)}</text>;
+            })}
       </svg>
     </div> : <div className={styles.chartEmpty}>
       <span className={styles.loadingMark}>{view === "candles" ? "▥" : "⌁"}</span>
