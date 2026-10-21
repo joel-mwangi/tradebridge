@@ -1262,3 +1262,15 @@
 .svgChart { overflow:hidden; }
 .svgChart svg { width:100%; height:auto; min-height:300px; display:block; }
 @media (max-width:640px) { .svgChart svg { min-height:250px; } .chartPanel { padding:14px; } .chartTop { gap:10px; } .chartQuote strong { font-size:20px; } }
+
+/* Tighten the chart canvas so the plotted market occupies more of the panel. */
+.chartPanel .chartTools { margin-bottom: 8px; }
+.chartPanel .chartTop { margin-bottom: 14px; }
+.chartPanel .svgChart { min-height: 0; margin-top: 2px; }
+.chartPanel .svgChart svg { min-height: 0; height: auto; overflow: visible; }
+.chartPanel .chartQuote { min-width: 0; }
+.chartPanel .tickMoveUp, .chartPanel .tickMoveDown, .chartPanel .tickMoveNeutral { display: block; white-space: nowrap; }
+@media (max-width: 640px) {
+  .chartPanel .chartQuote { max-width: 55%; }
+  .chartPanel .tickMoveUp, .chartPanel .tickMoveDown, .chartPanel .tickMoveNeutral { white-space: normal; }
+}
