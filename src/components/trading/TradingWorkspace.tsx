@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import styles from "./TradingWorkspace.module.css";
 import MarketWatch from "./MarketWatch";
 import DigitAnalysis from "./DigitAnalysis";
+import DigitStrategyPanel from "./DigitStrategyPanel";
 import DemoTradeTicket from "./DemoTradeTicket";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
@@ -450,6 +451,7 @@ export default function TradingWorkspace() {
 
             {page === "trade" && (
               <section className={styles.workspaceSection} aria-label="Trading workspace">
+                <DigitStrategyPanel symbol={selectedSymbol} />
                 {/* ── Market switcher header ── */}
                 <div className={styles.tradeTabHeader}>
                   <div className={styles.tradeTabMarketInfo}>
