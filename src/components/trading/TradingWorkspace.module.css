@@ -1248,3 +1248,17 @@
 .overUnderDirectionField .putButton>span:first-child,
 .overUnderDirectionField .putSelected>span:first-child { display: block; width: auto; height: auto; padding: 0; border-radius: 0; background: transparent !important; color: var(--ink) !important; font-size: 12px; font-weight: 750; }
 .overUnderDirectionField .predictionPercentage { display: block; color: var(--ink); font-size: 18px; line-height: 1.1; font-weight: 850; font-variant-numeric: tabular-nums; }
+
+/* Live tick chart refinements */
+.liveQuoteDigits { font-variant-numeric: tabular-nums; }
+.lastDigitUp, .lastDigitDown, .lastDigitNeutral { display:inline-flex; align-items:center; justify-content:center; min-width:.72em; margin-left:1px; padding:0 2px; border-radius:4px; transition:color .12s ease, background-color .12s ease; }
+.lastDigitUp { color:#16c784; background:rgba(22,199,132,.14); }
+.lastDigitDown { color:#ea3943; background:rgba(234,57,67,.14); }
+.lastDigitNeutral { color:var(--muted); background:var(--surface); }
+.tickMoveUp, .tickMoveDown, .tickMoveNeutral { font-size:11px; font-weight:750; font-variant-numeric:tabular-nums; }
+.tickMoveUp { color:#16c784 !important; }
+.tickMoveDown { color:#ea3943 !important; }
+.tickMoveNeutral { color:var(--muted) !important; }
+.svgChart { overflow:hidden; }
+.svgChart svg { width:100%; height:auto; min-height:300px; display:block; }
+@media (max-width:640px) { .svgChart svg { min-height:250px; } .chartPanel { padding:14px; } .chartTop { gap:10px; } .chartQuote strong { font-size:20px; } }
