@@ -5,7 +5,8 @@ import type { BackendDigitFrequency, MarketCandle, MarketInstrument, MarketSnaps
 
 const PUBLIC_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const PREFERRED_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "R_100", "R_50", "frxEURUSD", "frxGBPUSD", "frxXAUUSD"];
-const MAX_POINTS = 1000;
+// Keep enough real ticks to cover the full 1-hour view on 1Hz synthetic markets.
+const MAX_POINTS = 5000;
 
 type PublicMessage = {
   msg_type?: string;
@@ -85,7 +86,7 @@ export function useMarketData() {
     activeSocket.send(JSON.stringify({
       ticks_history: symbol,
       end: "latest",
-      count: 1000,
+      count: 5000,
       style: "ticks",
       req_id: historyReqId,
     }));
