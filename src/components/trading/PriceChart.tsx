@@ -53,18 +53,20 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   }, [view, market?.symbol, granularity, onLoadCandles]);
 
   const filteredPoints = useMemo(() => {
-    if (range === 0 || allPoints.length < 2) return allPoints;
-    const latest = allPoints[allPoints.length - 1]?.time ?? Math.floor(Date.now() / 1000);
-    const filtered = allPoints.filter((point) => point.time >= latest - range);
-    return filtered.length > 1 ? filtered : allPoints;
+    if (range === 0) return allPoints;
+    const latest = allPoints[allPoints.length - 1]?.time;
+    if (latest === undefined) return [];
+    const windowStart = latest - range;
+    return allPoints.filter((point) => point.time >= windowStart && point.time <= latest);
   }, [allPoints, range]);
 
 
   const filteredCandles = useMemo(() => {
-    if (range === 0 || allCandles.length < 2) return allCandles;
-    const latest = allCandles[allCandles.length - 1]?.epoch ?? Math.floor(Date.now() / 1000);
-    const filtered = allCandles.filter((candle) => candle.epoch >= latest - range);
-    return filtered.length > 0 ? filtered : allCandles;
+    if (range === 0) return allCandles;
+    const latest = allCandles[allCandles.length - 1]?.epoch;
+    if (latest === undefined) return [];
+    const windowStart = latest - range;
+    return allCandles.filter((candle) => candle.epoch >= windowStart && candle.epoch <= latest);
   }, [allCandles, range]);
 
   const firstValue = view === "candles" ? filteredCandles[0]?.open : filteredPoints[0]?.price;
