@@ -76,11 +76,14 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
     : null;
   const latestPoint = filteredPoints[filteredPoints.length - 1];
   const previousPoint = filteredPoints.length > 1 ? filteredPoints[filteredPoints.length - 2] : undefined;
-  const tickMovement = latestPoint && previousPoint ? latestPoint.price - previousPoint.price : null;
+  const liveQuote = snapshot?.quote ?? latestPoint?.price ?? null;
+  const tickMovement = liveQuote !== null && previousPoint ? liveQuote - previousPoint.price : null;
   const tickDirection = tickMovement === null || tickMovement === 0 ? "neutral" : tickMovement > 0 ? "up" : "down";
   const isUp = movement === null || movement >= 0;
-  const quoteText = snapshot?.quote ? formatPrice(snapshot.quote, market?.symbol ?? "") : "";
+  const quoteText = liveQuote !== null ? formatPrice(liveQuote, market?.symbol ?? "") : "";
   const finalDigit = quoteText.replace(/[^0-9]/g, "").slice(-1);
+  const quoteDecimals = (quoteText.split(".")[1] ?? "").length;
+  const movementText = tickMovement === null ? "" : Math.abs(tickMovement).toFixed(quoteDecimals);
 
   const prices = view === "candles"
     ? filteredCandles.flatMap((candle) => [candle.high, candle.low])
@@ -148,7 +151,7 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
       </div>
       <div className={styles.chartQuote}>
         <strong className={styles.liveQuoteDigits}>{snapshot && snapshot.quote ? <>{quoteText.slice(0, -1)}<span className={tickDirection === "up" ? styles.lastDigitUp : tickDirection === "down" ? styles.lastDigitDown : styles.lastDigitNeutral}>{finalDigit}</span></> : "Waiting for ticks"}</strong>
-        {tickMovement !== null && <span className={tickDirection === "up" ? styles.tickMoveUp : tickDirection === "down" ? styles.tickMoveDown : styles.tickMoveNeutral}>{tickDirection === "up" ? "↑" : tickDirection === "down" ? "↓" : "↔"} {tickMovement > 0 ? "+" : ""}{tickMovement.toFixed(4)} quote units / tick</span>}
+        {tickMovement !== null && <span className={tickDirection === "up" ? styles.tickMoveUp : tickDirection === "down" ? styles.tickMoveDown : styles.tickMoveNeutral}>{tickDirection === "up" ? "↑" : tickDirection === "down" ? "↓" : "↔"} {tickMovement > 0 ? "+" : tickMovement < 0 ? "−" : ""}{movementText} quote units / tick</span>}
         {movement !== null && <span className={isUp ? styles.positive : styles.negative}>{movement >= 0 ? "+" : ""}{movement.toFixed(2)}% in view</span>}
       </div>
     </div>
@@ -202,7 +205,7 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
           {last && <g>
             <circle cx={last.x} cy={last.y} r="5" fill={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#94a3b8"} stroke="#fff" strokeWidth="2" />
             <line x1={last.x} y1={last.y} x2={width - right + 5} y2={last.y} stroke={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#94a3b8"} strokeDasharray="4 4" opacity=".75" />
-            <text x={width - right + 12} y={last.y - 5} textAnchor="middle" fill={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#94a3b8"} fontSize="18" fontWeight="800">{tickDirection === "up" ? "↗" : tickDirection === "down" ? "↘" : "→"}</text>
+            <text x={width - right + 12} y={last.y + 5} textAnchor="middle" fill={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#94a3b8"} fontSize="18" fontWeight="800">{tickDirection === "up" ? "↑" : tickDirection === "down" ? "↓" : "→"}</text>
             <rect x={width - right + 24} y={last.y - 11} width="78" height="22" rx="5" fill={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#64748b"} />
             <text x={width - right + 63} y={last.y + 4} textAnchor="middle" fill="#fff" fontSize="10" fontWeight="700">{formatPrice(latestPoint?.price ?? 0, market.symbol)}</text>
           </g>}
