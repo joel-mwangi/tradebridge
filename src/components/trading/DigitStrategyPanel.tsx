@@ -135,7 +135,7 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
         setTape((current) => [...current, { digit, key, time }].slice(-MAX_TAPE));
         setLastTickAt(time);
         setTransport("connected");
-        setEvents((current) => [{ key, kind: "tick", time, digit }, ...current].slice(0, 12));
+        setEvents((current) => [{ key, kind: "tick" as const, time, digit }, ...current].slice(0, 12));
       } catch {
         // Ignore non-JSON and unrelated frames without inventing a visual tick.
       }
