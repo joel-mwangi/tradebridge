@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -59,7 +60,7 @@ function lastDigit(quote: number | string, pipSize?: number): number | null {
 }
 
 function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal" | "shield" | "pulse" | "clock" | "check" | "alert" | "eye"; size?: number }) {
-  const paths: Record<string, React.ReactNode> = {
+  const paths: Record<string, ReactNode> = {
     play: <path d="m8 5 11 7-11 7z" fill="currentColor" stroke="none" />,
     stop: <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />,
     refresh: <><path d="M20 7v5h-5" /><path d="M4.8 10a7.5 7.5 0 0 1 12.7-3L20 12M4 17v-5h5" /><path d="M19.2 14a7.5 7.5 0 0 1-12.7 3L4 12" /></>,
@@ -186,7 +187,7 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
   const latest = tape[tape.length - 1];
   const qualification = status?.qualification;
   const groupState = (value?: boolean) => value === true ? "#35d6a0" : value === false ? "#f06f79" : "var(--muted)";
-  const panel: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 18, padding: 16, background: "var(--surface)", marginBottom: 16, overflow: "hidden" };
+  const panel: CSSProperties = { border: "1px solid var(--line)", borderRadius: 18, padding: 16, background: "var(--surface)", marginBottom: 16, overflow: "hidden" };
   const tile: React.CSSProperties = { minWidth: 0, flex: "1 1 0", display: "grid", placeItems: "center", borderRadius: 10, minHeight: 45, border: "1px solid var(--line)", background: "var(--surface-2, var(--sidebar-bg))", color: "var(--ink)", fontSize: 17, fontWeight: 850, transition: "transform .18s ease, border-color .18s ease" };
 
   return (
@@ -246,9 +247,9 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
           const count = counts[digit];
           const height = Math.max(5, (count / maxCount) * 35);
           const chosen = selectedDigit === digit;
-          return <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={`Select digit ${digit}, observed ${count} times in the visible tape`} style={{ border: `1px solid ${chosen ? "var(--teal)" : "var(--line)"}`, borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "var(--teal)14" : "transparent", color: "var(--ink)", minWidth: 0, cursor: "pointer" }}>
+          return <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={`Select digit ${digit}, observed ${count} times in the visible tape`} style={{ border: `1px solid ${chosen ? "var(--teal)" : "var(--line)"}`, borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "color-mix(in srgb, var(--teal) 8%, transparent)" : "transparent", color: "var(--ink)", minWidth: 0, cursor: "pointer" }}>
             <span style={{ display: "block", fontSize: 11, fontWeight: 800 }}>{digit}</span>
-            <span style={{ height: 38, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}><span style={{ width: "58%", maxWidth: 16, height, borderRadius: 4, background: chosen ? "var(--teal)" : count ? "var(--teal)99" : "var(--line)", transition: "height .18s ease" }} /></span>
+            <span style={{ height: 38, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}><span style={{ width: "58%", maxWidth: 16, height, borderRadius: 4, background: chosen ? "var(--teal)" : count ? "color-mix(in srgb, var(--teal) 60%, transparent)" : "var(--line)", transition: "height .18s ease" }} /></span>
             <span style={{ display: "block", fontSize: 9, color: "var(--muted)" }}>{count}</span>
           </button>;
         })}
