@@ -39,7 +39,7 @@ function formatTime(time: number, rangeSeconds: number) {
 }
 
 export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandles }: Props) {
-  const [range, setRange] = useState(3600);
+  const [range, setRange] = useState(300);
   const [view, setView] = useState<"line" | "candles">("line");
   const [granularity, setGranularity] = useState(300);
   const [showSma, setShowSma] = useState(false);
@@ -74,20 +74,26 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   const movement = firstValue !== undefined && latestValue !== undefined && firstValue !== 0
     ? ((latestValue - firstValue) / firstValue) * 100
     : null;
+  const latestPoint = filteredPoints[filteredPoints.length - 1];
+  const previousPoint = filteredPoints.length > 1 ? filteredPoints[filteredPoints.length - 2] : undefined;
+  const tickMovement = latestPoint && previousPoint ? latestPoint.price - previousPoint.price : null;
+  const tickDirection = tickMovement === null || tickMovement === 0 ? "neutral" : tickMovement > 0 ? "up" : "down";
   const isUp = movement === null || movement >= 0;
+  const quoteText = snapshot?.quote ? formatPrice(snapshot.quote, market?.symbol ?? "") : "";
+  const finalDigit = quoteText.replace(/[^0-9]/g, "").slice(-1);
 
   const prices = view === "candles"
     ? filteredCandles.flatMap((candle) => [candle.high, candle.low])
     : filteredPoints.map((point: PricePoint) => point.price);
   const minRaw = prices.length ? Math.min(...prices) : 0;
   const maxRaw = prices.length ? Math.max(...prices) : 1;
-  const padding = maxRaw === minRaw ? Math.max(Math.abs(maxRaw) * 0.0005, 0.00001) : (maxRaw - minRaw) * 0.12;
+  const padding = maxRaw === minRaw ? Math.max(Math.abs(maxRaw) * 0.00025, 0.00001) : (maxRaw - minRaw) * 0.055;
   const min = minRaw - padding;
   const max = maxRaw + padding;
   const width = 900;
   const height = 295;
   const left = 72;
-  const right = 18;
+  const right = 112;
   const top = 18;
   const bottom = 38;
   const plotWidth = width - left - right;
@@ -141,7 +147,8 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
         <span className={styles.symbolText}>{market.symbol} <span className={styles.liveBadge}><i /> Live feed</span></span>
       </div>
       <div className={styles.chartQuote}>
-        <strong>{snapshot && snapshot.quote ? formatPrice(snapshot.quote, market.symbol) : "Waiting for ticks"}</strong>
+        <strong className={styles.liveQuoteDigits}>{snapshot && snapshot.quote ? <>{quoteText.slice(0, -1)}<span className={tickDirection === "up" ? styles.lastDigitUp : tickDirection === "down" ? styles.lastDigitDown : styles.lastDigitNeutral}>{finalDigit}</span></> : "Waiting for ticks"}</strong>
+        {tickMovement !== null && <span className={tickDirection === "up" ? styles.tickMoveUp : tickDirection === "down" ? styles.tickMoveDown : styles.tickMoveNeutral}>{tickDirection === "up" ? "↑" : tickDirection === "down" ? "↓" : "↔"} {tickMovement > 0 ? "+" : ""}{tickMovement.toFixed(4)} quote units / tick</span>}
         {movement !== null && <span className={isUp ? styles.positive : styles.negative}>{movement >= 0 ? "+" : ""}{movement.toFixed(2)}% in view</span>}
       </div>
     </div>
@@ -193,8 +200,11 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
           <path d={linePath} fill="none" stroke={isUp ? "#159a7d" : "#dc6470"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           {showSma && smaPath && <path d={smaPath} fill="none" stroke="#e67e22" strokeWidth="2" strokeDasharray="3 3" />}
           {last && <g>
-            <circle cx={last.x} cy={last.y} r="6" fill={isUp ? "#159a7d" : "#dc6470"} stroke="#fff" strokeWidth="3" />
-            <line x1={last.x} y1={last.y} x2={width - right} y2={last.y} stroke={isUp ? "#159a7d" : "#dc6470"} strokeDasharray="4 4" opacity=".5" />
+            <circle cx={last.x} cy={last.y} r="5" fill={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#94a3b8"} stroke="#fff" strokeWidth="2" />
+            <line x1={last.x} y1={last.y} x2={width - right + 5} y2={last.y} stroke={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#94a3b8"} strokeDasharray="4 4" opacity=".75" />
+            <text x={width - right + 12} y={last.y - 5} textAnchor="middle" fill={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#94a3b8"} fontSize="18" fontWeight="800">{tickDirection === "up" ? "↗" : tickDirection === "down" ? "↘" : "→"}</text>
+            <rect x={width - right + 24} y={last.y - 11} width="78" height="22" rx="5" fill={tickDirection === "up" ? "#16c784" : tickDirection === "down" ? "#ea3943" : "#64748b"} />
+            <text x={width - right + 63} y={last.y + 4} textAnchor="middle" fill="#fff" fontSize="10" fontWeight="700">{formatPrice(latestPoint?.price ?? 0, market.symbol)}</text>
           </g>}
         </>}
 
