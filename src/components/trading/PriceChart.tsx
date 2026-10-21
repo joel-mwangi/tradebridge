@@ -77,7 +77,12 @@ export default function PriceChart({ market, snapshot, candlesByKey, onLoadCandl
   const latestPoint = filteredPoints[filteredPoints.length - 1];
   const previousPoint = filteredPoints.length > 1 ? filteredPoints[filteredPoints.length - 2] : undefined;
   const liveQuote = snapshot?.quote ?? latestPoint?.price ?? null;
-  const tickMovement = liveQuote !== null && previousPoint ? liveQuote - previousPoint.price : null;
+  const previousObservedPrice = latestPoint && liveQuote !== latestPoint.price
+    ? latestPoint.price
+    : previousPoint?.price;
+  const tickMovement = liveQuote !== null && previousObservedPrice !== undefined
+    ? liveQuote - previousObservedPrice
+    : null;
   const tickDirection = tickMovement === null || tickMovement === 0 ? "neutral" : tickMovement > 0 ? "up" : "down";
   const isUp = movement === null || movement >= 0;
   const quoteText = liveQuote !== null ? formatPrice(liveQuote, market?.symbol ?? "") : "";
