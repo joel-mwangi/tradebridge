@@ -260,15 +260,15 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
           { id: "under", icon: "↓", color: groupState(qualification?.under_qualifies), qualifies: qualification?.under_qualifies, threshold: qualification?.under_threshold_passes, stability: qualification?.under_stability_passes },
           { id: "over", icon: "↑", color: groupState(qualification?.over_qualifies), qualifies: qualification?.over_qualifies, threshold: qualification?.over_threshold_passes, stability: qualification?.over_stability_passes },
         ].map((group) => (
-          <div key={group.id} style={{ border: `1px solid ${group.color}55`, borderRadius: 12, padding: 11, background: `${group.color}0b` }}>
+          <div key={group.id} style={{ border: `1px solid ${group.color}55`, borderRadius: 12, padding: 11, background: `color-mix(in srgb, ${group.color} 5%, transparent)` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 17, color: group.color }}>{group.icon}</span>
               <span style={{ display: "flex", gap: 4, alignItems: "center" }} aria-label={group.qualifies === true ? "Qualified" : group.qualifies === false ? "Not qualified" : "Pending"}>
                 {[group.threshold, group.stability, group.qualifies].map((passed, index) => <span key={index} style={{ width: 8, height: 8, borderRadius: 99, background: passed === true ? "#35d6a0" : passed === false ? "#f06f79" : "var(--line)" }} />)}
               </span>
             </div>
-            <div style={{ display: "flex", gap: 3, marginTop: 10, height: 24, alignItems: "end" }}>
-              {Array.from({ length: 8 }, (_, index) => <span key={index} style={{ flex: 1, height: 5 + ((index * 11 + (group.qualifies ? 15 : 3)) % 18), borderRadius: 3, background: group.color, opacity: group.qualifies ? .95 : .25 }} />)}
+            <div style={{ display: "flex", gap: 5, marginTop: 12 }}>
+              {[group.threshold, group.stability, group.qualifies].map((passed, index) => <span key={index} style={{ flex: 1, height: 5, borderRadius: 4, background: passed === true ? "#35d6a0" : passed === false ? "#f06f79" : "var(--line)" }} />)}
             </div>
           </div>
         ))}
