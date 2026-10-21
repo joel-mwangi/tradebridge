@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
@@ -85,6 +85,99 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
   const [lastTickAt, setLastTickAt] = useState<number | null>(null);
   const [selectedDigit, setSelectedDigit] = useState<number | null>(null);
   const [events, setEvents] = useState<Array<{ key: string; kind: "tick" | "status" | "warning"; time: number; digit?: number }>>([]);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundVolume, setSoundVolume] = useState(0.35);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const previousTransportRef = useRef<typeof transport | null>(null);
+  const previousStrategyStateRef = useRef<string | null>(null);
+  const previousUnderQualifiedRef = useRef<boolean | undefined>(undefined);
+  const previousOverQualifiedRef = useRef<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    try {
+      setSoundEnabled(localStorage.getItem("tradebridge_strategy_sounds") === "on");
+      const savedVolume = Number(localStorage.getItem("tradebridge_strategy_sound_volume"));
+      if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) setSoundVolume(savedVolume);
+    } catch {
+      // Audio preferences remain session-only when storage is unavailable.
+    }
+  }, []);
+
+  const playCue = useCallback((kind: "start" | "connected" | "disconnected" | "qualify" | "clear" | "stop" | "error" | "test") => {
+    if (!soundEnabled && kind !== "test") return;
+    try {
+      const AudioContextClass = window.AudioContext;
+      if (!AudioContextClass) return;
+      const context = audioContextRef.current ?? new AudioContextClass();
+      audioContextRef.current = context;
+      if (context.state === "suspended") void context.resume();
+      const patterns: Record<typeof kind, number[]> = {
+        start: [660], connected: [660, 880], disconnected: [330], qualify: [784, 988],
+        clear: [523, 392], stop: [523, 392], error: [330, 330], test: [660, 880],
+      };
+      const notes = patterns[kind];
+      const now = context.currentTime;
+      notes.forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const startAt = now + index * 0.13;
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, startAt);
+        gain.gain.setValueAtTime(0.0001, startAt);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, soundVolume * 0.12), startAt + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.11);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(startAt);
+        oscillator.stop(startAt + 0.12);
+      });
+    } catch {
+      // Audio is optional and must never interrupt market observation.
+    }
+  }, [soundEnabled, soundVolume]);
+
+  function toggleSounds() {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    try { localStorage.setItem("tradebridge_strategy_sounds", next ? "on" : "off"); } catch { /* ignore */ }
+    if (next) playCue("test");
+  }
+
+  function changeSoundVolume(value: number) {
+    setSoundVolume(value);
+    try { localStorage.setItem("tradebridge_strategy_sound_volume", String(value)); } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    const previous = previousTransportRef.current;
+    if (previous !== null && previous !== transport) {
+      if (transport === "connected") playCue("connected");
+      else if (transport === "disconnected" || transport === "stale" || transport === "unconfigured") playCue("disconnected");
+    }
+    previousTransportRef.current = transport;
+  }, [transport, playCue]);
+
+  useEffect(() => {
+    const nextState = status?.state ?? null;
+    const previous = previousStrategyStateRef.current;
+    if (nextState && previous !== null && nextState !== previous) {
+      if (["observing", "waiting_for_more_data", "selected"].includes(nextState)
+        && !["observing", "waiting_for_more_data", "selected"].includes(previous)) playCue("start");
+      else if (["idle", "stopped", "paused"].includes(nextState)
+        && !["idle", "stopped", "paused"].includes(previous)) playCue("stop");
+      else if (nextState === "blocked" || nextState === "error") playCue("error");
+    }
+    previousStrategyStateRef.current = nextState;
+
+    const under = status?.qualification?.under_qualifies;
+    const over = status?.qualification?.over_qualifies;
+    const priorUnder = previousUnderQualifiedRef.current;
+    const priorOver = previousOverQualifiedRef.current;
+    if ((under === true && priorUnder !== true) || (over === true && priorOver !== true)) playCue("qualify");
+    else if ((priorUnder === true && under === false) || (priorOver === true && over === false)) playCue("clear");
+    previousUnderQualifiedRef.current = under;
+    previousOverQualifiedRef.current = over;
+  }, [status, playCue]);
 
   useEffect(() => {
     if (!MARKET_SOCKET) {
@@ -224,6 +317,21 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
           <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
           <button type="button" onClick={() => send("stop")} disabled={busy || !active} aria-label="Stop observation" title="Stop" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy || !active ? .4 : 1, cursor: "pointer" }}><Icon name="stop" /></button>
           <button type="button" onClick={() => send("status")} disabled={busy} aria-label="Refresh status" title="Refresh" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy ? .5 : 1, cursor: "pointer" }}><Icon name="refresh" /></button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 12, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
+        <div style={{ display: "grid", gap: 3 }}>
+          <span style={{ color: "var(--ink)", fontSize: 11, fontWeight: 800 }}>Audio cues</span>
+          <span style={{ color: "var(--muted)", fontSize: 10 }}>Important events only · no sound per tick</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--muted)", fontSize: 10 }}>
+            Volume
+            <input aria-label="Strategy sound volume" type="range" min="0" max="100" step="5" value={Math.round(soundVolume * 100)} onChange={(event) => changeSoundVolume(Number(event.target.value) / 100)} style={{ width: 74, accentColor: "var(--teal)" }} />
+          </label>
+          <button type="button" onClick={toggleSounds} aria-pressed={soundEnabled} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "7px 10px", background: soundEnabled ? "var(--teal)" : "transparent", color: soundEnabled ? "#fff" : "var(--ink)", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>{soundEnabled ? "Sounds on" : "Enable sounds"}</button>
+          <button type="button" onClick={() => playCue("test")} aria-label="Test strategy sound" title="Test sound" style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "7px 9px", background: "transparent", color: "var(--ink)", fontSize: 10, cursor: "pointer" }}>Test</button>
         </div>
       </div>
 
