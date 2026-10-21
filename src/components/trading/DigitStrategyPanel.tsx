@@ -113,12 +113,12 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
           setStatus(message);
           setBusy(false);
           setTransport("connected");
-          setEvents((current) => [{ key: "status-" + Date.now(), kind: "status", time: Date.now() }, ...current].slice(0, 12));
+          setEvents((current) => [{ key: "status-" + Date.now(), kind: "status" as const, time: Date.now() }, ...current].slice(0, 12));
           return;
         }
         if (message.error?.message) {
           setBusy(false);
-          setEvents((current) => [{ key: "warning-" + Date.now(), kind: "warning", time: Date.now() }, ...current].slice(0, 12));
+          setEvents((current) => [{ key: "warning-" + Date.now(), kind: "warning" as const, time: Date.now() }, ...current].slice(0, 12));
           return;
         }
         const tick = message.tick;
