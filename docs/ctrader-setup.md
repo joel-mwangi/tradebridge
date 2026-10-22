@@ -2,6 +2,16 @@
 
 TradeBridge's Forex Analyst can link a Deriv cTrader account using cTrader Open API. This is separate from the existing Deriv Options connection and does not place orders in MT5. The chart remains an analysis feed; the trade ticket uses cTrader's account-specific Forex symbol catalogue and fetches a bid/ask snapshot from the linked account.
 
+## Simple connection flow
+
+The Forex Analyst connection panel provides two clear paths:
+
+1. **Already have Deriv cTrader:** choose **Connect existing account**, sign in/authorize on cTrader, and approve the requested permissions. Select a Demo account first for testing.
+2. **Need to activate it:** follow [Deriv's official activation guide](https://deriv.com/help-centre-question/how-do-i-activate-a-deriv-ctrader-account), open the CFDs section, select cTrader, and activate it with the existing Deriv profile. Return to TradeBridge and connect.
+3. **After authorization:** TradeBridge retrieves the accounts available to that user and defaults to Demo when available. If account linking fails, use the visible error message, confirm activation and app approval, then retry.
+
+TradeBridge never asks users to provide their Deriv password in its own UI. OAuth client credentials are operator configuration, not end-user setup. The cTrader Open API app must be approved and its callback URI registered before end-to-end linking can work.
+
 ## Required cTrader setup
 
 1. Register a cTrader Open API application with Spotware and wait for approval.
@@ -12,6 +22,8 @@ TradeBridge's Forex Analyst can link a Deriv cTrader account using cTrader Open 
 4. Apply `supabase/migrations/20261022120000_add_ctrader_gateway.sql` and `supabase/migrations/20261022150000_add_ctrader_position_actions.sql` to the TradeBridge Supabase project.
 
 ## Environment variables
+
+The cTrader app is still awaiting approval. Keep all cTrader values blank/unconfigured until approval is granted and the exact callback URI is registered. This change intentionally adds no credentials or production secret values. Once approved, set the variables in the server/platform environment dashboards using the names below; never commit secret values to Git.
 
 ### FastAPI backend
 
