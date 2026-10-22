@@ -161,7 +161,6 @@ export default function ForexAnalyst() {
   const selectedSymbolRef = useRef(selectedSymbol);
   const timeframeRef = useRef(timeframe);
   const latestTickRef = useRef<{ symbol: string; quote: LiveQuote } | null>(null);
-  const pairsRef = useRef<ForexPair[]>([]);
 
   selectedSymbolRef.current = selectedSymbol;
   timeframeRef.current = timeframe;
@@ -273,7 +272,6 @@ export default function ForexAnalyst() {
           return ar - br || a.name.localeCompare(b.name);
         });
 
-        pairsRef.current = available;
         setPairs(available);
         if (!available.length) {
           setFeedReady(false);
@@ -412,10 +410,9 @@ export default function ForexAnalyst() {
     return { width, height, left, right, top, bottom, plotWidth, plotHeight, min, max, yFor, barWidth, xForIndex };
   }, [visibleCandles]);
 
-  const patternByEpoch = new Map(analysis.patterns.map((pattern) => [pattern.epoch, pattern]));
+  const patternByEpoch = new Map<number, CandlePattern>(analysis.patterns.map((pattern): [number, CandlePattern] => [pattern.epoch, pattern]));
   const swingPoints = useMemo(() => findSwingPoints(closedCandles, 2), [closedCandles]);
   const swingLabels = useMemo(() => buildSwingLabels(swingPoints, analysis.atr), [swingPoints, analysis.atr]);
-  const candleIndexByEpoch = new Map(visibleCandles.map((candle, index) => [candle.epoch, index]));
   const statusIsLive = liveQuote && Date.now() - liveQuote.epoch * 1000 < 60_000;
   const quoteAgeText = liveQuote
     ? Date.now() - liveQuote.epoch * 1000 > 0
