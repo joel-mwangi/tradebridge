@@ -69,13 +69,12 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
     const { data, error } = await supabase.auth.getSession();
     const accessToken = data.session?.access_token;
     if (error || !accessToken) throw new Error("Sign in to TradeBridge before connecting a cTrader account.");
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${accessToken}`);
+    if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
     const response = await fetch(apiBase + path, {
       ...init,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...init.headers,
-      },
+      headers,
       cache: "no-store",
     });
     let payload: unknown = {};
@@ -83,31 +82,6 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
     if (!response.ok) throw new Error(displayError(payload, response.status));
     return payload as Record<string, unknown>;
   }, [apiBase]);
-
-  const refreshConnection = useCallback(async (showProgress = false) => {
-    if (showProgress) setLoading(true);
-    try {
-      const payload = await authenticatedFetch("/ctrader/session");
-      const loadedAccounts = Array.isArray(payload.accounts) ? payload.accounts as CTraderAccount[] : [];
-      setConnected(payload.connected === true && loadedAccounts.length > 0);
-      setAccounts(loadedAccounts);
-      setPermissionScope(payload.permission_scope === "trading" ? "trading" : "accounts");
-      setAccountId((current) => loadedAccounts.some((item) => item.account_id === current)
-        ? current
-        : loadedAccounts.find((item) => item.account_type === "demo")?.account_id ?? loadedAccounts[0]?.account_id ?? "");
-      setNotice(loadedAccounts.length ? "cTrader account connection verified." : "Connect your cTrader account to enable the demo ticket.");
-      setNoticeKind("info");
-    } catch (error) {
-      setConnected(false);
-      setAccounts([]);
-      setPermissionScope("accounts");
-      setAccountId("");
-      setNotice(error instanceof Error ? error.message : "Unable to verify cTrader connection.");
-      setNoticeKind("error");
-    } finally {
-      if (showProgress) setLoading(false);
-    }
-  }, [authenticatedFetch]);
 
   useEffect(() => {
     let active = true;
