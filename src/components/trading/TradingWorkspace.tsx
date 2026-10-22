@@ -12,6 +12,7 @@ import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
 import PriceChart from "./PriceChart";
+import ForexAnalyst from "./ForexAnalyst";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { MostTradedMarkets } from "./MostTradedMarkets";
 import { logger } from "../../lib/logger.mjs";
@@ -32,11 +33,12 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspacePage = "dashboard" | "markets" | "trade" | "portfolio" | "settings";
+type WorkspacePage = "dashboard" | "markets" | "forex-analyst" | "trade" | "portfolio" | "settings";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "dashboard", label: "Home", icon: "▦" },
   { id: "markets", label: "Markets", icon: "⌁" },
+  { id: "forex-analyst", label: "AI Analyst", icon: "✦" },
   { id: "trade", label: "Trade", icon: "↗" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
   { id: "settings", label: "Settings", icon: "⚙" },
@@ -45,6 +47,7 @@ const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
 const PAGE_TITLES: Record<WorkspacePage, string> = {
   dashboard: "Dashboard",
   markets: "Markets",
+  "forex-analyst": "Forex AI Analyst",
   trade: "Trade",
   portfolio: "Portfolio & History",
   settings: "Settings",
@@ -446,6 +449,12 @@ export default function TradingWorkspace() {
                   candlesByKey={candlesByKey}
                   onLoadCandles={requestCandles}
                 />
+              </section>
+            )}
+
+            {page === "forex-analyst" && (
+              <section className={styles.workspaceSection} aria-label="Forex AI chart analyst">
+                <ForexAnalyst />
               </section>
             )}
 
