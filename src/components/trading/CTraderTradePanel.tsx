@@ -12,7 +12,7 @@ type CTraderAccount = {
 };
 
 type CTraderSymbol = { symbol_id: number; symbol_name: string };
-type CTraderQuote = { bid: number; ask: number; spread: number; spread_pips: number; digits: number; pip_position: number; received_at: string };
+type CTraderQuote = { bid: number; ask: number; spread: number; spread_pips: number; digits: number; pip_position: number; received_at: string; quote_age_seconds: number | null; provider_quote_at: string | null };
 type OrderResult = {
   status?: string;
   message?: string;
@@ -187,6 +187,8 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           || typeof payload.spread !== "number" || typeof payload.spread_pips !== "number"
           || typeof payload.digits !== "number" || typeof payload.pip_position !== "number"
           || typeof payload.received_at !== "string"
+          || !(typeof payload.quote_age_seconds === "number" || payload.quote_age_seconds === null)
+          || !(typeof payload.provider_quote_at === "string" || payload.provider_quote_at === null)
         ) {
           throw new Error("cTrader returned an invalid bid/ask snapshot.");
         }
@@ -198,6 +200,8 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           digits: payload.digits,
           pip_position: payload.pip_position,
           received_at: payload.received_at,
+          quote_age_seconds: payload.quote_age_seconds,
+          provider_quote_at: payload.provider_quote_at,
         });
         setQuoteReceivedAt(Date.now());
       })
@@ -239,7 +243,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       setNoticeKind("error");
       return;
     }
-    if (!quote || quoteReceivedAt === null || Date.now() - quoteReceivedAt > 15_000) {
+    if (!quote || quoteReceivedAt === null || Date.now() - quoteReceivedAt > 15_000 || quote.quote_age_seconds === null || quote.quote_age_seconds > 15) {
       setNotice("Refresh the cTrader bid/ask quote, then confirm the order within 15 seconds.");
       setNoticeKind("error");
       setConfirmed(false);
@@ -409,7 +413,11 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
                 </div>
                 <div className={styles.quoteFoot}>
                   <span>Received {new Date(quote.received_at).toLocaleTimeString()}</span>
-                  <span>{quoteReceivedAt !== null && Date.now() - quoteReceivedAt > 15_000 ? "Quote stale · refresh before confirming" : "Use a fresh quote before confirming"}</span>
+                  <span>{quote.quote_age_seconds === null
+                    ? "Provider timestamp unavailable · refresh before confirming"
+                    : quote.quote_age_seconds > 15 || (quoteReceivedAt !== null && Date.now() - quoteReceivedAt > 15_000)
+                      ? "Stale quote · refresh before confirming"
+                      : "Provider quote age " + quote.quote_age_seconds.toFixed(1) + "s"}</span>
                 </div>
               </>
             ) : (
@@ -428,7 +436,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           </div>
 
           <label className={styles.confirmLine}>
-            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy || !selectedAccountIsDemo || permissionScope !== "trading" || !quote || quoteLoading} />
+            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy || !selectedAccountIsDemo || permissionScope !== "trading" || !quote || quoteLoading || quote.quote_age_seconds === null || quote.quote_age_seconds > 15 || (quoteReceivedAt !== null && Date.now() - quoteReceivedAt > 15_000)} />
             <span>I confirm this is a demo order for <strong>{activeSymbol?.symbol_name ?? "the selected Forex pair"}</strong>, <strong>{side}</strong>, volume <strong>{volume || "—"}</strong> units.</span>
           </label>
 
