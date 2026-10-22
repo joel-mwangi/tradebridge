@@ -50,6 +50,7 @@ type FeedMessage = {
     epoch?: number | string;
     pip_size?: number;
   };
+  subscription?: { id?: string };
   candles?: Array<{
     epoch?: number | string;
     open?: number | string;
@@ -158,6 +159,8 @@ export default function ForexAnalyst() {
   const requestSequenceRef = useRef(70_000);
   const pendingHistoryRef = useRef(new Map<number, PendingHistory>());
   const subscribedSymbolsRef = useRef(new Set<string>());
+  const subscriptionsBySymbolRef = useRef(new Map<string, string>());
+  const activeTickSymbolRef = useRef("");
   const selectedSymbolRef = useRef(selectedSymbol);
   const timeframeRef = useRef(timeframe);
   const latestTickRef = useRef<{ symbol: string; quote: LiveQuote } | null>(null);
@@ -190,6 +193,8 @@ export default function ForexAnalyst() {
 
     pendingHistoryRef.current.clear();
     subscribedSymbolsRef.current.clear();
+    subscriptionsBySymbolRef.current.clear();
+    activeTickSymbolRef.current = "";
     setFeedReady(false);
 
     if (!MARKET_SOCKET) {
@@ -317,6 +322,15 @@ export default function ForexAnalyst() {
 
       if (message.msg_type === "tick" && message.tick) {
         const symbol = message.tick.underlying_symbol ?? message.tick.symbol ?? "";
+        const subscriptionId = message.subscription?.id;
+        if (symbol && subscriptionId) {
+          subscriptionsBySymbolRef.current.set(symbol, subscriptionId);
+          if (symbol !== selectedSymbolRef.current && socket?.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ forget: subscriptionId }));
+            subscriptionsBySymbolRef.current.delete(symbol);
+            subscribedSymbolsRef.current.delete(symbol);
+          }
+        }
         const price = Number(message.tick.quote);
         const epoch = Number(message.tick.epoch);
         if (!symbol || !Number.isFinite(price) || price <= 0 || !Number.isFinite(epoch) || epoch <= 0) {
@@ -355,6 +369,8 @@ export default function ForexAnalyst() {
       if (socketRef.current === socket) socketRef.current = null;
       pendingHistoryRef.current.clear();
       subscribedSymbolsRef.current.clear();
+      subscriptionsBySymbolRef.current.clear();
+      activeTickSymbolRef.current = "";
       socket?.close();
     };
   }, [retryCount]);
@@ -364,10 +380,20 @@ export default function ForexAnalyst() {
         socketRef.current.readyState !== WebSocket.OPEN) return;
     const socket = socketRef.current;
 
+    const previousSymbol = activeTickSymbolRef.current;
+    if (previousSymbol && previousSymbol !== selectedSymbol) {
+      const previousSubscription = subscriptionsBySymbolRef.current.get(previousSymbol);
+      if (previousSubscription) socket.send(JSON.stringify({ forget: previousSubscription }));
+      subscriptionsBySymbolRef.current.delete(previousSymbol);
+      subscribedSymbolsRef.current.delete(previousSymbol);
+    }
+
     if (!subscribedSymbolsRef.current.has(selectedSymbol)) {
-      socket.send(JSON.stringify({ ticks: selectedSymbol, subscribe: 1 }));
+      const subscriptionReqId = ++requestSequenceRef.current;
+      socket.send(JSON.stringify({ ticks: selectedSymbol, subscribe: 1, req_id: subscriptionReqId }));
       subscribedSymbolsRef.current.add(selectedSymbol);
     }
+    activeTickSymbolRef.current = selectedSymbol;
     requestCandles(selectedSymbol, timeframe);
   }, [feedReady, selectedSymbol, timeframe, requestCandles]);
 
