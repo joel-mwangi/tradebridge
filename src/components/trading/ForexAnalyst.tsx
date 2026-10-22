@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
+import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs";
 import {
   analyzeForexCandles,
   findSwingPoints,
@@ -195,16 +196,11 @@ export default function ForexAnalyst() {
     }));
     setFeedStatus("Loading " + symbol + " candle history");
     const endEpoch = Math.floor(Date.now() / 1000);
-    socket.send(JSON.stringify({
-      ticks_history: symbol,
-      start: endEpoch - seconds * CANDLE_LIMIT,
-      end: "latest",
-      count: CANDLE_LIMIT,
-      style: "candles",
-      granularity: seconds,
-      subscribe: 0,
-      req_id: reqId,
-    }));
+    // Omit "subscribe" for this one-shot request to remain compatible with
+    // the market endpoint's validator; a live tick stream is managed separately.
+    socket.send(JSON.stringify(
+      buildForexCandleHistoryRequest(symbol, seconds, reqId, endEpoch, CANDLE_LIMIT),
+    ));
   }, []);
 
   useEffect(() => {
