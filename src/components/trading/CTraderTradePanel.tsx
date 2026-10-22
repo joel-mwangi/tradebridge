@@ -12,7 +12,7 @@ type CTraderAccount = {
 };
 
 type CTraderSymbol = { symbol_id: number; symbol_name: string };
-type CTraderQuote = { bid: number; ask: number; spread: number; spread_pips: number; received_at: string };
+type CTraderQuote = { bid: number; ask: number; spread: number; spread_pips: number; digits: number; pip_position: number; received_at: string };
 type OrderResult = {
   status?: string;
   message?: string;
@@ -185,6 +185,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
         if (
           typeof payload.bid !== "number" || typeof payload.ask !== "number"
           || typeof payload.spread !== "number" || typeof payload.spread_pips !== "number"
+          || typeof payload.digits !== "number" || typeof payload.pip_position !== "number"
           || typeof payload.received_at !== "string"
         ) {
           throw new Error("cTrader returned an invalid bid/ask snapshot.");
@@ -194,6 +195,8 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           ask: payload.ask,
           spread: payload.spread,
           spread_pips: payload.spread_pips,
+          digits: payload.digits,
+          pip_position: payload.pip_position,
           received_at: payload.received_at,
         });
         setQuoteReceivedAt(Date.now());
@@ -377,6 +380,45 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
             </label>
           </div>
 
+          <section className={styles.quoteCard} aria-label="Live cTrader bid and ask">
+            <div className={styles.quoteHeader}>
+              <div>
+                <strong>cTrader live quote</strong>
+                <span>Bid is the sell price · Ask is the buy price</span>
+              </div>
+              <button type="button" className={styles.textButton} onClick={() => setQuoteRevision((value) => value + 1)} disabled={busy || quoteLoading || !activeAccount || !activeSymbol}>
+                {quoteLoading ? "Refreshing…" : "Refresh quote"}
+              </button>
+            </div>
+            {quote ? (
+              <>
+                <div className={styles.quoteValues}>
+                  <div className={styles.quoteItem}>
+                    <span>BID · SELL</span>
+                    <strong>{quote.bid.toFixed(quote.digits)}</strong>
+                  </div>
+                  <div className={styles.quoteItem}>
+                    <span>ASK · BUY</span>
+                    <strong>{quote.ask.toFixed(quote.digits)}</strong>
+                  </div>
+                  <div className={styles.spreadItem}>
+                    <span>SPREAD</span>
+                    <strong>{quote.spread.toFixed(quote.digits)}</strong>
+                    <small>{quote.spread_pips.toFixed(2)} pips</small>
+                  </div>
+                </div>
+                <div className={styles.quoteFoot}>
+                  <span>Received {new Date(quote.received_at).toLocaleTimeString()}</span>
+                  <span>{quoteReceivedAt !== null && Date.now() - quoteReceivedAt > 15_000 ? "Quote stale · refresh before confirming" : "Use a fresh quote before confirming"}</span>
+                </div>
+              </>
+            ) : (
+              <div className={styles.quoteEmpty}>
+                <span>{quoteLoading ? "Requesting bid/ask from the linked cTrader account…" : "No cTrader quote available. Refresh before placing an order."}</span>
+              </div>
+            )}
+          </section>
+
           <div className={styles.orderNotice}>
             <span className={styles.marketIcon}>◎</span>
             <div>
@@ -386,7 +428,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           </div>
 
           <label className={styles.confirmLine}>
-            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy || !selectedAccountIsDemo || permissionScope !== "trading"} />
+            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy || !selectedAccountIsDemo || permissionScope !== "trading" || !quote || quoteLoading} />
             <span>I confirm this is a demo order for <strong>{activeSymbol?.symbol_name ?? "the selected Forex pair"}</strong>, <strong>{side}</strong>, volume <strong>{volume || "—"}</strong> units.</span>
           </label>
 
