@@ -15,11 +15,12 @@ export async function GET(request: NextRequest) {
   const returnedState = url.searchParams.get("state");
   const expectedState = request.cookies.get("tradebridge_ctrader_oauth_state")?.value;
 
-  const fail = (reason: string) => {
-    const response = redirectToAnalyst(appUrl, `ctrader_error=${encodeURIComponent(reason)}`);
+  const finish = (query: string) => {
+    const response = redirectToAnalyst(appUrl, query);
     response.cookies.delete("tradebridge_ctrader_oauth_state");
     return response;
   };
+  const fail = (reason: string) => finish(`ctrader_error=${encodeURIComponent(reason)}`);
 
   if (url.searchParams.has("error")) return fail("cancelled");
   if (!code || !returnedState || !expectedState || returnedState !== expectedState) {
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
     if (root.connected !== true || !Array.isArray(root.accounts) || root.accounts.length === 0) {
       return fail("account_verification_failed");
     }
-    return fail("connected");
+    return finish("ctrader=connected");
   } catch {
     return fail("token_exchange");
   }
