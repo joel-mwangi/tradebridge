@@ -13,6 +13,32 @@ type CTraderAccount = {
 
 type CTraderSymbol = { symbol_id: number; symbol_name: string };
 type CTraderQuote = { bid: number; ask: number; spread: number; spread_pips: number; digits: number; pip_position: number; received_at: string; quote_age_seconds: number | null; provider_quote_at: string | null };
+type CTraderPosition = {
+  position_id: string;
+  symbol_id: number;
+  symbol_name: string;
+  side: "BUY" | "SELL" | "UNKNOWN";
+  volume_units: number;
+  entry_price: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  net_unrealized_pnl: number | null;
+  pnl_currency_digits: number | null;
+  opened_at: number | string | null;
+  last_updated_at: number | string | null;
+  used_margin: number | string | null;
+};
+type CTraderPendingOrder = {
+  order_id: string;
+  symbol_id: number | null;
+  symbol_name: string;
+  side: "BUY" | "SELL";
+  volume_units: number | null;
+  order_type: number | string | null;
+  limit_price: number | string | null;
+  stop_price: number | string | null;
+};
+type PositionDraft = { stop_loss: string; take_profit: string; partial_close: string };
 type OrderResult = {
   status?: string;
   message?: string;
@@ -62,11 +88,40 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   const [lastOrderKey, setLastOrderKey] = useState("");
   const [lastOrder, setLastOrder] = useState<OrderResult | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [positions, setPositions] = useState<CTraderPosition[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<CTraderPendingOrder[]>([]);
+  const [positionsLoading, setPositionsLoading] = useState(false);
+  const [positionsRetrievedAt, setPositionsRetrievedAt] = useState("");
+  const [positionActionBusyId, setPositionActionBusyId] = useState<string | null>(null);
+  const [protectionDrafts, setProtectionDrafts] = useState<Record<string, PositionDraft>>({});
 
   const apiBase = useMemo(() => DEFAULT_HTTP_URL.replace(/\/$/, ""), []);
   const activeAccount = accounts.find((item) => item.account_id === accountId) ?? null;
   const activeSymbol = symbols.find((item) => item.symbol_id === symbolId) ?? null;
   const selectedAccountIsDemo = activeAccount?.account_type === "demo";
+
+  const refreshPositions = useCallback(async (quiet = false) => {
+    if (!connected || !accountId) {
+      setPositions([]);
+      setPendingOrders([]);
+      setPositionsRetrievedAt("");
+      return;
+    }
+    if (!quiet) setPositionsLoading(true);
+    try {
+      const payload = await authenticatedFetch("/ctrader/positions?account_id=" + encodeURIComponent(accountId));
+      setPositions(Array.isArray(payload.positions) ? payload.positions as CTraderPosition[] : []);
+      setPendingOrders(Array.isArray(payload.pending_orders) ? payload.pending_orders as CTraderPendingOrder[] : []);
+      setPositionsRetrievedAt(typeof payload.retrieved_at === "string" ? payload.retrieved_at : "");
+    } catch (error) {
+      if (!quiet) {
+        setNotice(error instanceof Error ? error.message : "Could not refresh cTrader positions.");
+        setNoticeKind("error");
+      }
+    } finally {
+      if (!quiet) setPositionsLoading(false);
+    }
+  }, [connected, accountId, authenticatedFetch]);
 
   const authenticatedFetch = useCallback(async (path: string, init: RequestInit = {}) => {
     if (!apiBase) throw new Error("FastAPI URL is not configured. Add NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL.");
@@ -215,6 +270,112 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       .finally(() => { if (active) setQuoteLoading(false); });
     return () => { active = false; };
   }, [connected, accountId, symbolId, quoteRevision, authenticatedFetch]);
+
+  useEffect(() => {
+    if (!connected || !accountId) {
+      setPositions([]);
+      setPendingOrders([]);
+      setPositionsRetrievedAt("");
+      return;
+    }
+    void refreshPositions(false);
+    const refreshTimer = window.setInterval(() => { void refreshPositions(true); }, 15_000);
+    return () => window.clearInterval(refreshTimer);
+  }, [connected, accountId, refreshPositions]);
+
+  function positionDraft(position: CTraderPosition): PositionDraft {
+    return protectionDrafts[position.position_id] ?? {
+      stop_loss: position.stop_loss === null ? "" : String(position.stop_loss),
+      take_profit: position.take_profit === null ? "" : String(position.take_profit),
+      partial_close: "",
+    };
+  }
+
+  function updatePositionDraft(positionId: string, field: keyof PositionDraft, value: string, position?: CTraderPosition) {
+    setProtectionDrafts((current) => {
+      const existing = current[positionId] ?? {
+        stop_loss: position?.stop_loss === null || position?.stop_loss === undefined ? "" : String(position.stop_loss),
+        take_profit: position?.take_profit === null || position?.take_profit === undefined ? "" : String(position.take_profit),
+        partial_close: "",
+      };
+      return { ...current, [positionId]: { ...existing, [field]: value } };
+    });
+  }
+
+  async function savePositionProtection(position: CTraderPosition) {
+    if (!selectedAccountIsDemo || permissionScope !== "trading") return;
+    const draft = positionDraft(position);
+    const stopLoss = draft.stop_loss.trim() === "" ? undefined : Number(draft.stop_loss);
+    const takeProfit = draft.take_profit.trim() === "" ? undefined : Number(draft.take_profit);
+    if ((stopLoss === undefined && takeProfit === undefined)
+      || (stopLoss !== undefined && (!Number.isFinite(stopLoss) || stopLoss <= 0))
+      || (takeProfit !== undefined && (!Number.isFinite(takeProfit) || takeProfit <= 0))) {
+      setNotice("Enter a valid positive stop-loss and/or take-profit price.");
+      setNoticeKind("error");
+      return;
+    }
+    const changes = [
+      stopLoss !== undefined ? "SL " + stopLoss : "",
+      takeProfit !== undefined ? "TP " + takeProfit : "",
+    ].filter(Boolean).join(" · ");
+    if (!window.confirm("Apply protection changes to " + position.symbol_name + " position #" + position.position_id + "?\n" + changes + "\nThe broker will validate the price levels.")) return;
+    setPositionActionBusyId(position.position_id);
+    try {
+      const payload = await authenticatedFetch("/ctrader/positions/" + encodeURIComponent(position.position_id) + "/protection", {
+        method: "POST",
+        body: JSON.stringify({
+          account_id: accountId,
+          idempotency_key: window.crypto.randomUUID().replace(/-/g, ""),
+          confirmed: true,
+          ...(stopLoss !== undefined ? { stop_loss: stopLoss } : {}),
+          ...(takeProfit !== undefined ? { take_profit: takeProfit } : {}),
+        }),
+      });
+      setNotice(typeof payload.message === "string" ? payload.message : "cTrader acknowledged the protection change.");
+      setNoticeKind("success");
+      await refreshPositions(false);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not change position protection.");
+      setNoticeKind("error");
+    } finally {
+      setPositionActionBusyId(null);
+    }
+  }
+
+  async function closePosition(position: CTraderPosition, partial: boolean) {
+    if (!selectedAccountIsDemo || permissionScope !== "trading") return;
+    const draft = positionDraft(position);
+    const closeVolume = partial ? Number(draft.partial_close) : undefined;
+    if (partial && (!Number.isFinite(closeVolume) || closeVolume <= 0 || closeVolume >= position.volume_units)) {
+      setNotice("Partial-close volume must be positive and smaller than the open position volume.");
+      setNoticeKind("error");
+      return;
+    }
+    const confirmation = partial
+      ? "Close " + closeVolume + " units of " + position.symbol_name + " position #" + position.position_id + "?"
+      : "Close the FULL " + position.symbol_name + " position #" + position.position_id + " (" + position.volume_units + " units) at the available market price?";
+    if (!window.confirm(confirmation + "\nThis submits a real provider action on the selected DEMO account only.")) return;
+    setPositionActionBusyId(position.position_id);
+    try {
+      const payload = await authenticatedFetch("/ctrader/positions/" + encodeURIComponent(position.position_id) + "/close", {
+        method: "POST",
+        body: JSON.stringify({
+          account_id: accountId,
+          idempotency_key: window.crypto.randomUUID().replace(/-/g, ""),
+          confirmed: true,
+          ...(partial ? { volume_units: closeVolume } : {}),
+        }),
+      });
+      setNotice(typeof payload.message === "string" ? payload.message : "cTrader acknowledged the close request.");
+      setNoticeKind("success");
+      await refreshPositions(false);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not close the position.");
+      setNoticeKind("error");
+    } finally {
+      setPositionActionBusyId(null);
+    }
+  }
 
   async function disconnect() {
     setBusy(true);
@@ -458,6 +619,102 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
               <button className={styles.textButton} type="button" disabled={statusLoading} onClick={checkOrderStatus}>{statusLoading ? "Checking…" : "Check status"}</button>
             </div>
           )}
+
+          <section className={styles.positionSection} aria-label="Open cTrader positions">
+            <header className={styles.positionHeader}>
+              <div>
+                <span className={styles.eyebrow}>POSITION MANAGEMENT</span>
+                <h3>Open positions</h3>
+                <p>Position data and P/L are retrieved from cTrader. The view refreshes every 15 seconds.</p>
+              </div>
+              <button className={styles.textButton} type="button" onClick={() => { void refreshPositions(false); }} disabled={positionsLoading || Boolean(positionActionBusyId)}>
+                {positionsLoading ? "Refreshing…" : "Refresh positions"}
+              </button>
+            </header>
+            {!selectedAccountIsDemo && (
+              <div className={styles.warning}>
+                <strong>Live account · view only</strong>
+                <span>Positions can be inspected, but all TradeBridge position-changing actions remain locked for live accounts.</span>
+              </div>
+            )}
+            {positionsLoading && positions.length === 0 ? (
+              <div className={styles.positionEmpty}>Loading positions from cTrader…</div>
+            ) : positions.length === 0 ? (
+              <div className={styles.positionEmpty}>
+                <strong>No open positions on this account</strong>
+                <span>Open a demo trade above to test position monitoring and management.</span>
+              </div>
+            ) : (
+              <div className={styles.positionList}>
+                {positions.map((position) => {
+                  const draft = positionDraft(position);
+                  const actionDisabled = !selectedAccountIsDemo || permissionScope !== "trading" || Boolean(positionActionBusyId);
+                  const priceDigits = position.symbol_name.toUpperCase().includes("JPY") ? 3 : 5;
+                  return (
+                    <article className={styles.positionCard} key={position.position_id}>
+                      <div className={styles.positionTop}>
+                        <div className={styles.positionIdentity}>
+                          <strong>{position.symbol_name}</strong>
+                          <span>#{position.position_id} · {position.side} · {position.volume_units.toLocaleString()} units</span>
+                        </div>
+                        <div className={styles.positionPnl}>
+                          <span>NET P/L · ACCOUNT CURRENCY</span>
+                          <strong data-negative={position.net_unrealized_pnl !== null && position.net_unrealized_pnl < 0}>
+                            {position.net_unrealized_pnl === null ? "—" : (position.net_unrealized_pnl > 0 ? "+" : "") + position.net_unrealized_pnl.toFixed(2)}
+                          </strong>
+                        </div>
+                      </div>
+                      <div className={styles.positionMetrics}>
+                        <div><span>ENTRY PRICE</span><strong>{position.entry_price === null ? "—" : position.entry_price.toFixed(priceDigits)}</strong></div>
+                        <div><span>STOP-LOSS</span><strong>{position.stop_loss === null ? "Not set" : position.stop_loss.toFixed(priceDigits)}</strong></div>
+                        <div><span>TAKE-PROFIT</span><strong>{position.take_profit === null ? "Not set" : position.take_profit.toFixed(priceDigits)}</strong></div>
+                      </div>
+                      <div className={styles.positionProtectionForm}>
+                        <label className={styles.field}>
+                          <span>NEW STOP-LOSS PRICE</span>
+                          <input type="number" inputMode="decimal" step="any" min="0.000001" placeholder="Leave blank to keep unchanged" value={draft.stop_loss} onChange={(event) => updatePositionDraft(position.position_id, "stop_loss", event.target.value, position)} disabled={Boolean(positionActionBusyId) || actionDisabled} />
+                        </label>
+                        <label className={styles.field}>
+                          <span>NEW TAKE-PROFIT PRICE</span>
+                          <input type="number" inputMode="decimal" step="any" min="0.000001" placeholder="Leave blank to keep unchanged" value={draft.take_profit} onChange={(event) => updatePositionDraft(position.position_id, "take_profit", event.target.value, position)} disabled={Boolean(positionActionBusyId) || actionDisabled} />
+                        </label>
+                        <button type="button" className={styles.primaryButton} onClick={() => { void savePositionProtection(position); }} disabled={actionDisabled || (!draft.stop_loss.trim() && !draft.take_profit.trim())}>
+                          {positionActionBusyId === position.position_id ? "Processing…" : "Apply protection"}
+                        </button>
+                      </div>
+                      <div className={styles.positionCloseRow}>
+                        <label className={styles.field}>
+                          <span>PARTIAL CLOSE · UNITS</span>
+                          <input type="number" inputMode="decimal" min="0.01" step="0.01" max={Math.max(0, position.volume_units - 0.01)} placeholder="Volume to close" value={draft.partial_close} onChange={(event) => updatePositionDraft(position.position_id, "partial_close", event.target.value, position)} disabled={actionDisabled} />
+                        </label>
+                        <button type="button" className={styles.textButton} onClick={() => { void closePosition(position, true); }} disabled={actionDisabled || !draft.partial_close.trim()}>
+                          Partial close
+                        </button>
+                        <button type="button" className={styles.dangerButton} onClick={() => { void closePosition(position, false); }} disabled={actionDisabled}>
+                          Close full position
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+            {pendingOrders.length > 0 && (
+              <div className={styles.pendingOrders}>
+                <strong>Pending orders · {pendingOrders.length}</strong>
+                {pendingOrders.map((order) => (
+                  <div className={styles.pendingOrder} key={order.order_id}>
+                    <span>{order.symbol_name} · {order.side} · {order.volume_units === null ? "—" : order.volume_units.toLocaleString()} units</span>
+                    <small>Order #{order.order_id}{order.limit_price ? " · Limit " + order.limit_price : ""}{order.stop_price ? " · Stop " + order.stop_price : ""}</small>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className={styles.positionFoot}>
+              <span>{positionsRetrievedAt ? "Broker data as of " + new Date(positionsRetrievedAt).toLocaleTimeString() : "Waiting for broker position data"}</span>
+              <span>{permissionScope === "trading" ? "Trading permission granted" : "View-only permission"}</span>
+            </div>
+          </section>
         </div>
       )}
 
