@@ -341,8 +341,9 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       setNotice(typeof payload.message === "string" ? payload.message : "cTrader acknowledged the protection change.");
       setNoticeKind("success");
       setProtectionDrafts((current) => {
-        const { [position.position_id]: _cleared, ...rest } = current;
-        return rest;
+        const next = { ...current };
+        delete next[position.position_id];
+        return next;
       });
       await refreshPositions(false);
     } catch (error) {
@@ -380,8 +381,9 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       setNotice(typeof payload.message === "string" ? payload.message : "cTrader acknowledged the close request.");
       setNoticeKind("success");
       setProtectionDrafts((current) => {
-        const { [position.position_id]: _cleared, ...rest } = current;
-        return rest;
+        const next = { ...current };
+        delete next[position.position_id];
+        return next;
       });
       await refreshPositions(false);
     } catch (error) {
