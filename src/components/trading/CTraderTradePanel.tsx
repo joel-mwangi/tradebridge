@@ -305,12 +305,18 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   async function savePositionProtection(position: CTraderPosition) {
     if (!selectedAccountIsDemo || permissionScope !== "trading") return;
     const draft = positionDraft(position);
-    const stopLoss = draft.stop_loss.trim() === "" ? undefined : Number(draft.stop_loss);
-    const takeProfit = draft.take_profit.trim() === "" ? undefined : Number(draft.take_profit);
+    const enteredStopLoss = draft.stop_loss.trim() === "" ? undefined : Number(draft.stop_loss);
+    const enteredTakeProfit = draft.take_profit.trim() === "" ? undefined : Number(draft.take_profit);
+    const stopLoss = enteredStopLoss !== undefined
+      && (position.stop_loss === null || enteredStopLoss !== position.stop_loss)
+      ? enteredStopLoss : undefined;
+    const takeProfit = enteredTakeProfit !== undefined
+      && (position.take_profit === null || enteredTakeProfit !== position.take_profit)
+      ? enteredTakeProfit : undefined;
     if ((stopLoss === undefined && takeProfit === undefined)
       || (stopLoss !== undefined && (!Number.isFinite(stopLoss) || stopLoss <= 0))
       || (takeProfit !== undefined && (!Number.isFinite(takeProfit) || takeProfit <= 0))) {
-      setNotice("Enter a valid positive stop-loss and/or take-profit price.");
+      setNotice("Enter a valid changed stop-loss and/or take-profit price. Do not clear a protection level in this version.");
       setNoticeKind("error");
       return;
     }
@@ -648,6 +654,8 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
               <div className={styles.positionList}>
                 {positions.map((position) => {
                   const draft = positionDraft(position);
+                  const protectionChanged = (draft.stop_loss.trim() !== "" && draft.stop_loss !== (position.stop_loss === null ? "" : String(position.stop_loss)))
+                    || (draft.take_profit.trim() !== "" && draft.take_profit !== (position.take_profit === null ? "" : String(position.take_profit)));
                   const actionDisabled = !selectedAccountIsDemo || permissionScope !== "trading" || Boolean(positionActionBusyId);
                   const priceDigits = position.symbol_name.toUpperCase().includes("JPY") ? 3 : 5;
                   return (
@@ -678,7 +686,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
                           <span>NEW TAKE-PROFIT PRICE</span>
                           <input type="number" inputMode="decimal" step="any" min="0.000001" placeholder="Leave blank to keep unchanged" value={draft.take_profit} onChange={(event) => updatePositionDraft(position.position_id, "take_profit", event.target.value, position)} disabled={Boolean(positionActionBusyId) || actionDisabled} />
                         </label>
-                        <button type="button" className={styles.primaryButton} onClick={() => { void savePositionProtection(position); }} disabled={actionDisabled || (!draft.stop_loss.trim() && !draft.take_profit.trim())}>
+                        <button type="button" className={styles.primaryButton} onClick={() => { void savePositionProtection(position); }} disabled={actionDisabled || !protectionChanged}>
                           {positionActionBusyId === position.position_id ? "Processing…" : "Apply protection"}
                         </button>
                       </div>
