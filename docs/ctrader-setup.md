@@ -1,6 +1,6 @@
 # Deriv cTrader account linking and demo execution
 
-TradeBridge's Forex Analyst can link a Deriv cTrader account using cTrader Open API. This is separate from the existing Deriv Options connection and does not place orders in MT5. The chart remains an analysis feed; the trade ticket uses cTrader's account-specific Forex symbol catalogue.
+TradeBridge's Forex Analyst can link a Deriv cTrader account using cTrader Open API. This is separate from the existing Deriv Options connection and does not place orders in MT5. The chart remains an analysis feed; the trade ticket uses cTrader's account-specific Forex symbol catalogue and fetches a bid/ask snapshot from the linked account.
 
 ## Required cTrader setup
 
@@ -22,6 +22,7 @@ Set these on the deployed FastAPI service:
 - `CTRADER_OAUTH_REDIRECT_URI`: exact public callback URL shown above.
 - `APP_URL`: frontend origin, e.g. `https://swigtrade.vercel.app`.
 - `TRADEBRIDGE_SESSION_BRIDGE_TOKEN`: the existing shared secret used by the Next.js callback.
+- `TRADEBRIDGE_ALLOWED_ORIGINS`: include `https://swigtrade.vercel.app` so the browser ticket can call FastAPI.
 - `TRADEBRIDGE_CREDENTIAL_ENCRYPTION_KEY`: a Fernet key used to encrypt cTrader access and refresh tokens.
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and the Supabase auth URL/key configuration already required by the backend.
 - `CTRADER_DEMO_ORDERS_ENABLED`: keep `false` while linking and validating the account.
