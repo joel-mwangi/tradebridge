@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
-import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs";
+import { buildForexCandleHistoryRequest, isForexMarket } from "../../lib/forex-market-data.mjs";
 import {
   analyzeForexCandles,
   findSwingPoints,
@@ -195,11 +195,10 @@ export default function ForexAnalyst() {
       [key]: { status: "loading", count: current[key]?.count ?? 0 },
     }));
     setFeedStatus("Loading " + symbol + " candle history");
-    const endEpoch = Math.floor(Date.now() / 1000);
-    // Omit "subscribe" for this one-shot request to remain compatible with
-    // the market endpoint's validator; a live tick stream is managed separately.
+    // Count-based history returns the latest candles. Live ticks are subscribed
+    // to separately; don't mix start/count or send subscribe=0 to the legacy endpoint.
     socket.send(JSON.stringify(
-      buildForexCandleHistoryRequest(symbol, seconds, reqId, endEpoch, CANDLE_LIMIT),
+      buildForexCandleHistoryRequest(symbol, seconds, reqId, CANDLE_LIMIT),
     ));
   }, []);
 
@@ -283,14 +282,15 @@ export default function ForexAnalyst() {
             return {
               symbol,
               name: item.underlying_symbol_name ?? item.display_name ?? symbol,
-              market: (item.market ?? "").toLowerCase(),
+              market: (item.market ?? "").trim().toLowerCase(),
+              marketDisplayName: (item.market_display_name ?? "").trim().toLowerCase(),
               isTradingSuspended: item.is_trading_suspended === 1,
             };
           })
           .filter((item) =>
             item.symbol &&
             !item.isTradingSuspended &&
-            (item.market === "forex" || item.symbol.toLowerCase().startsWith("frx"))
+            isForexMarket(item.market, item.marketDisplayName)
           );
 
         const bySymbol = new Map<string, ForexPair>();
