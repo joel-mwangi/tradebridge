@@ -1,6 +1,5 @@
 export type ForexCandleHistoryRequest = {
   ticks_history: string;
-  start: number;
   end: "latest";
   count: number;
   style: "candles";
@@ -12,6 +11,10 @@ export declare function buildForexCandleHistoryRequest(
   symbol: string,
   seconds: number,
   requestId: number,
-  endEpoch: number,
   count?: number,
 ): ForexCandleHistoryRequest;
+
+export declare function isForexMarket(
+  market?: string,
+  marketDisplayName?: string,
+): boolean;
