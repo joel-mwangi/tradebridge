@@ -100,6 +100,26 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   const activeSymbol = symbols.find((item) => item.symbol_id === symbolId) ?? null;
   const selectedAccountIsDemo = activeAccount?.account_type === "demo";
 
+  const authenticatedFetch = useCallback(async (path: string, init: RequestInit = {}) => {
+    if (!apiBase) throw new Error("FastAPI URL is not configured. Add NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL.");
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    if (error || !accessToken) throw new Error("Sign in to TradeBridge before connecting a cTrader account.");
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${accessToken}`);
+    if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    const response = await fetch(apiBase + path, {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+    let payload: unknown = {};
+    try { payload = await response.json(); } catch { /* Empty response is valid for disconnect. */ }
+    if (!response.ok) throw new Error(displayError(payload, response.status));
+    return payload as Record<string, unknown>;
+  }, [apiBase]);
+
   const refreshPositions = useCallback(async (quiet = false) => {
     if (!connected || !accountId) {
       setPositions([]);
@@ -122,26 +142,6 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       if (!quiet) setPositionsLoading(false);
     }
   }, [connected, accountId, authenticatedFetch]);
-
-  const authenticatedFetch = useCallback(async (path: string, init: RequestInit = {}) => {
-    if (!apiBase) throw new Error("FastAPI URL is not configured. Add NEXT_PUBLIC_TRADEBRIDGE_BACKEND_HTTP_URL.");
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.getSession();
-    const accessToken = data.session?.access_token;
-    if (error || !accessToken) throw new Error("Sign in to TradeBridge before connecting a cTrader account.");
-    const headers = new Headers(init.headers);
-    headers.set("Authorization", `Bearer ${accessToken}`);
-    if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-    const response = await fetch(apiBase + path, {
-      ...init,
-      headers,
-      cache: "no-store",
-    });
-    let payload: unknown = {};
-    try { payload = await response.json(); } catch { /* Empty response is valid for disconnect. */ }
-    if (!response.ok) throw new Error(displayError(payload, response.status));
-    return payload as Record<string, unknown>;
-  }, [apiBase]);
 
   useEffect(() => {
     let active = true;
@@ -363,7 +363,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           account_id: accountId,
           idempotency_key: window.crypto.randomUUID().replace(/-/g, ""),
           confirmed: true,
-          ...(partial ? { volume_units: closeVolume } : {}),
+          ...(partial && closeVolume !== undefined ? { volume_units: closeVolume } : {}),
         }),
       });
       setNotice(typeof payload.message === "string" ? payload.message : "cTrader acknowledged the close request.");
