@@ -1,15 +1,12 @@
 /**
- * Build a one-shot OHLC history request.
- *
- * Omit "subscribe" entirely: some Deriv API endpoints only accept subscribe=1,
- * so explicitly sending subscribe=0 can fail validation even for a one-shot
- * history request. With subscribe omitted, the request returns history once.
+ * Build a one-shot OHLC history request compatible with the legacy market
+ * WebSocket validator. Use count + end to request the latest bars; do not
+ * combine count with start or include subscribe=0 on this endpoint.
  */
 export function buildForexCandleHistoryRequest(
   symbol,
   seconds,
   requestId,
-  endEpoch,
   count = 180,
 ) {
   if (typeof symbol !== "string" || !symbol.trim()) {
@@ -21,20 +18,28 @@ export function buildForexCandleHistoryRequest(
   if (!Number.isSafeInteger(requestId) || requestId <= 0) {
     throw new TypeError("Request ID must be a positive safe integer.");
   }
-  if (!Number.isSafeInteger(endEpoch) || endEpoch <= 0) {
-    throw new TypeError("History end epoch must be a positive safe integer.");
-  }
   if (!Number.isSafeInteger(count) || count < 1 || count > 5000) {
     throw new TypeError("Candle count must be between 1 and 5000.");
   }
 
   return {
     ticks_history: symbol,
-    start: endEpoch - seconds * count,
     end: "latest",
     count,
     style: "candles",
     granularity: seconds,
     req_id: requestId,
   };
+}
+
+/**
+ * Match Forex using the provider's market metadata, not symbol prefixes.
+ * Some Deriv non-FX instruments also use symbols beginning with "frx".
+ */
+export function isForexMarket(market, marketDisplayName) {
+  const normalizedMarket = typeof market === "string" ? market.trim().toLowerCase() : "";
+  const normalizedDisplay = typeof marketDisplayName === "string"
+    ? marketDisplayName.trim().toLowerCase()
+    : "";
+  return normalizedMarket === "forex" || normalizedDisplay === "forex";
 }
