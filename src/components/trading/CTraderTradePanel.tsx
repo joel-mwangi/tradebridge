@@ -504,14 +504,46 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
 
       {!connected ? (
         <div className={styles.connectBody}>
-          <div className={styles.connectGlyph}>↗</div>
-          <div className={styles.connectCopy}>
-            <strong>Connect your Deriv cTrader account</strong>
-            <span>You&apos;ll authorize access on cTrader, then return here. TradeBridge never asks for your cTrader password.</span>
+          <div className={styles.connectGlyph} aria-hidden="true">↗</div>
+          <div className={styles.connectContent}>
+            <div className={styles.connectCopy}>
+              <strong>Connect your Deriv cTrader account</strong>
+              <span>Follow the steps below. TradeBridge never asks for your Deriv password; you authorize access on cTrader itself.</span>
+            </div>
+            <div className={styles.connectSteps}>
+              <article className={styles.connectStep}>
+                <span className={styles.connectStepBadge}>1</span>
+                <div className={styles.connectStepBody}>
+                  <strong>Already have a Deriv cTrader account?</strong>
+                  <span>Connect it and approve TradeBridge access. Choose Demo first while testing.</span>
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    disabled={loading || busy}
+                    onClick={() => { window.location.href = "/api/auth/ctrader/start"; }}
+                  >
+                    {loading ? "Checking connection…" : "Connect existing account"}
+                  </button>
+                </div>
+              </article>
+              <article className={styles.connectStep}>
+                <span className={styles.connectStepBadge}>2</span>
+                <div className={styles.connectStepBody}>
+                  <strong>Need to activate cTrader?</strong>
+                  <span>Open Deriv, go to CFDs, select cTrader, and choose Activate. It uses your existing Deriv login.</span>
+                  <a
+                    className={styles.secondaryLink}
+                    href="https://deriv.com/help-centre-question/how-do-i-activate-a-deriv-ctrader-account"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Follow Deriv&apos;s activation guide <span aria-hidden="true">↗</span>
+                  </a>
+                </div>
+              </article>
+            </div>
+            <p className={styles.connectHint}>After activation, return here and choose “Connect existing account”. You’ll select an account and approve the requested permissions on cTrader.</p>
           </div>
-          <button type="button" className={styles.primaryButton} disabled={loading || busy} onClick={() => { window.location.href = "/api/auth/ctrader/start"; }}>
-            {loading ? "Checking connection…" : "Connect cTrader"}
-          </button>
         </div>
       ) : (
         <div className={styles.tradeBody}>
