@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
+import CTraderTradePanel from "./CTraderTradePanel";
 import { buildForexCandleHistoryRequest, isForexMarket } from "../../lib/forex-market-data.mjs";
 import {
   analyzeForexCandles,
@@ -720,8 +721,10 @@ export default function ForexAnalyst() {
         )}
       </section>
 
+      <CTraderTradePanel currentSymbol={selectedSymbol} />
+
       <footer className={styles.disclaimer}>
-        <strong>Analysis, not a trading signal.</strong> Levels and pattern labels are deterministic interpretations of the received OHLC bars, not predictions. No orders are placed. Verify prices against your Deriv MT5 terminal before using this page for market decisions.
+        <strong>Analysis is not a trading signal.</strong> Candle patterns and price zones describe received chart data; they do not predict outcomes. Confirm the account, Forex symbol, direction and volume in the cTrader ticket. Demo order prices can move, and spread and slippage apply.
       </footer>
     </section>
   );
