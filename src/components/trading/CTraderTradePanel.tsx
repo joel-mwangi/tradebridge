@@ -277,6 +277,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   useEffect(() => {
     setProtectionDrafts({});
     if (!connected || !accountId) {
+      positionLoadSequence.current += 1;
       setPositions([]);
       setPendingOrders([]);
       setPositionsRetrievedAt("");
