@@ -336,7 +336,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           <div className={styles.accountRow}>
             <label className={styles.field}>
               <span>TRADING ACCOUNT</span>
-              <select value={accountId} onChange={(event) => setAccountId(event.target.value)} disabled={busy}>
+              <select value={accountId} onChange={(event) => { setAccountId(event.target.value); setConfirmed(false); setQuote(null); setQuoteReceivedAt(null); }} disabled={busy}>
                 {accounts.map((account) => (
                   <option key={account.account_id} value={account.account_id}>
                     {(account.account_type === "demo" ? "Demo" : "Real · read-only")}{account.broker_title_short ? " · " + account.broker_title_short : ""}{account.trader_login ? " · " + account.trader_login : ""}
@@ -367,20 +367,20 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           <div className={styles.orderGrid}>
             <label className={styles.field}>
               <span>FOREX SYMBOL · cTRADER CATALOGUE</span>
-              <select value={symbolId ?? ""} onChange={(event) => setSymbolId(Number(event.target.value))} disabled={!symbols.length || busy}>
+              <select value={symbolId ?? ""} onChange={(event) => { setSymbolId(Number(event.target.value)); setConfirmed(false); setQuote(null); setQuoteReceivedAt(null); }} disabled={!symbols.length || busy}>
                 {symbols.map((symbol) => <option key={symbol.symbol_id} value={symbol.symbol_id}>{symbol.symbol_name}</option>)}
               </select>
             </label>
             <div className={styles.field}>
               <span>ORDER SIDE</span>
               <div className={styles.sideButtons}>
-                <button className={side === "BUY" ? styles.buyActive : styles.buyButton} type="button" onClick={() => setSide("BUY")} aria-pressed={side === "BUY"} disabled={busy}>Buy</button>
-                <button className={side === "SELL" ? styles.sellActive : styles.sellButton} type="button" onClick={() => setSide("SELL")} aria-pressed={side === "SELL"} disabled={busy}>Sell</button>
+                <button className={side === "BUY" ? styles.buyActive : styles.buyButton} type="button" onClick={() => { setSide("BUY"); setConfirmed(false); }} aria-pressed={side === "BUY"} disabled={busy}>Buy</button>
+                <button className={side === "SELL" ? styles.sellActive : styles.sellButton} type="button" onClick={() => { setSide("SELL"); setConfirmed(false); }} aria-pressed={side === "SELL"} disabled={busy}>Sell</button>
               </div>
             </div>
             <label className={styles.field}>
               <span>VOLUME · BASE-CURRENCY UNITS</span>
-              <input type="number" min="0.01" step="0.01" value={volume} onChange={(event) => setVolume(event.target.value)} disabled={busy} inputMode="decimal" />
+              <input type="number" min="0.01" step="0.01" value={volume} onChange={(event) => { setVolume(event.target.value); setConfirmed(false); }} disabled={busy} inputMode="decimal" />
             </label>
           </div>
 
