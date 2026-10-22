@@ -37,6 +37,9 @@ test("Forex Analyst includes a distinct cTrader demo ticket", () => {
   assert.match(panel, /confirmed: true/);
   assert.match(panel, /\/ctrader\/quote/);
   assert.match(panel, /quote\.quote_age_seconds/);
+  assert.match(panel, /setSide\("BUY"\); setConfirmed\(false\)/);
+  assert.match(panel, /setSide\("SELL"\); setConfirmed\(false\)/);
+  assert.match(panel, /setVolume\(event\.target\.value\); setConfirmed\(false\)/);
   assert.match(panel, /Real-money orders are disabled/);
 });
 
