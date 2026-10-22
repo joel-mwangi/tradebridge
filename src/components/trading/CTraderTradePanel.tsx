@@ -12,6 +12,7 @@ type CTraderAccount = {
 };
 
 type CTraderSymbol = { symbol_id: number; symbol_name: string };
+type CTraderQuote = { bid: number; ask: number; spread: number; spread_pips: number; received_at: string };
 type OrderResult = {
   status?: string;
   message?: string;
@@ -49,6 +50,10 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   const [accountId, setAccountId] = useState("");
   const [symbols, setSymbols] = useState<CTraderSymbol[]>([]);
   const [symbolId, setSymbolId] = useState<number | null>(null);
+  const [quote, setQuote] = useState<CTraderQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteReceivedAt, setQuoteReceivedAt] = useState<number | null>(null);
+  const [quoteRevision, setQuoteRevision] = useState(0);
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [volume, setVolume] = useState("1000");
   const [confirmed, setConfirmed] = useState(false);
@@ -162,6 +167,48 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
     return () => { active = false; };
   }, [connected, accountId, currentSymbol, authenticatedFetch]);
 
+  useEffect(() => {
+    let active = true;
+    setQuote(null);
+    setQuoteReceivedAt(null);
+    setConfirmed(false);
+    if (!connected || !accountId || symbolId === null) {
+      setQuoteLoading(false);
+      return () => { active = false; };
+    }
+    setQuoteLoading(true);
+    authenticatedFetch(
+      "/ctrader/quote?account_id=" + encodeURIComponent(accountId) + "&symbol_id=" + encodeURIComponent(String(symbolId))
+    )
+      .then((payload) => {
+        if (!active) return;
+        if (
+          typeof payload.bid !== "number" || typeof payload.ask !== "number"
+          || typeof payload.spread !== "number" || typeof payload.spread_pips !== "number"
+          || typeof payload.received_at !== "string"
+        ) {
+          throw new Error("cTrader returned an invalid bid/ask snapshot.");
+        }
+        setQuote({
+          bid: payload.bid,
+          ask: payload.ask,
+          spread: payload.spread,
+          spread_pips: payload.spread_pips,
+          received_at: payload.received_at,
+        });
+        setQuoteReceivedAt(Date.now());
+      })
+      .catch((error) => {
+        if (active) {
+          setQuote(null);
+          setNotice(error instanceof Error ? error.message : "Could not load a cTrader quote.");
+          setNoticeKind("error");
+        }
+      })
+      .finally(() => { if (active) setQuoteLoading(false); });
+    return () => { active = false; };
+  }, [connected, accountId, symbolId, quoteRevision, authenticatedFetch]);
+
   async function disconnect() {
     setBusy(true);
     try {
@@ -171,6 +218,8 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       setAccountId("");
       setSymbols([]);
       setSymbolId(null);
+      setQuote(null);
+      setQuoteReceivedAt(null);
       setNotice("cTrader disconnected from TradeBridge. Revoke the app's access in cTrader as well to fully remove authorization.");
       setNoticeKind("success");
     } catch (error) {
@@ -185,6 +234,12 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
     if (!activeAccount || !activeSymbol || !selectedAccountIsDemo || permissionScope !== "trading") {
       setNotice("Select a linked cTrader Demo account with trading permission.");
       setNoticeKind("error");
+      return;
+    }
+    if (!quote || quoteReceivedAt === null || Date.now() - quoteReceivedAt > 15_000) {
+      setNotice("Refresh the cTrader bid/ask quote, then confirm the order within 15 seconds.");
+      setNoticeKind("error");
+      setConfirmed(false);
       return;
     }
     const parsedVolume = Number(volume);
