@@ -29,6 +29,7 @@ const VIEW_LIMIT = 100;
 type ForexPair = { symbol: string; name: string; pipSize?: number };
 type LiveQuote = { price: number; epoch: number; pipSize?: number };
 type PendingHistory = { key: string; symbol: string; seconds: number };
+type HistoryLoad = { status: "loading" | "loaded" | "insufficient" | "error"; count: number; message?: string };
 type FeedMessage = {
   msg_type?: string;
   req_id?: number;
@@ -151,6 +152,7 @@ export default function ForexAnalyst() {
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
   const [timeframe, setTimeframe] = useState<number>(900);
   const [candlesByKey, setCandlesByKey] = useState<Record<string, ForexCandle[]>>({});
+  const [historyByKey, setHistoryByKey] = useState<Record<string, HistoryLoad>>({});
   const [quotesBySymbol, setQuotesBySymbol] = useState<Record<string, LiveQuote>>({});
   const [feedStatus, setFeedStatus] = useState("Connecting to TradeBridge market gateway");
   const [feedReady, setFeedReady] = useState(false);
@@ -158,6 +160,7 @@ export default function ForexAnalyst() {
   const socketRef = useRef<WebSocket | null>(null);
   const requestSequenceRef = useRef(70_000);
   const pendingHistoryRef = useRef(new Map<number, PendingHistory>());
+  const historyTimeoutsRef = useRef(new Map<number, number>());
   const subscribedSymbolsRef = useRef(new Set<string>());
   const subscriptionsBySymbolRef = useRef(new Map<string, string>());
   const activeTickSymbolRef = useRef("");
@@ -174,9 +177,27 @@ export default function ForexAnalyst() {
     const reqId = ++requestSequenceRef.current;
     const key = keyFor(symbol, seconds);
     pendingHistoryRef.current.set(reqId, { key, symbol, seconds });
+    const timeoutId = window.setTimeout(() => {
+      const pending = pendingHistoryRef.current.get(reqId);
+      if (!pending) return;
+      pendingHistoryRef.current.delete(reqId);
+      historyTimeoutsRef.current.delete(reqId);
+      const reason = "No historical-candle response arrived within 12 seconds. Live ticks are not a substitute for history.";
+      setHistoryByKey((current) => ({
+        ...current,
+        [pending.key]: { status: "error", count: current[pending.key]?.count ?? 0, message: reason },
+      }));
+    }, 12_000);
+    historyTimeoutsRef.current.set(reqId, timeoutId);
+    setHistoryByKey((current) => ({
+      ...current,
+      [key]: { status: "loading", count: current[key]?.count ?? 0 },
+    }));
     setFeedStatus("Loading " + symbol + " candle history");
+    const endEpoch = Math.floor(Date.now() / 1000);
     socket.send(JSON.stringify({
       ticks_history: symbol,
+      start: endEpoch - seconds * CANDLE_LIMIT,
       end: "latest",
       count: CANDLE_LIMIT,
       style: "candles",
@@ -239,13 +260,22 @@ export default function ForexAnalyst() {
         const pending = message.req_id === undefined
           ? undefined
           : pendingHistoryRef.current.get(message.req_id);
-        if (message.req_id !== undefined) pendingHistoryRef.current.delete(message.req_id);
+        if (message.req_id !== undefined) {
+          pendingHistoryRef.current.delete(message.req_id);
+          const timeoutId = historyTimeoutsRef.current.get(message.req_id);
+          if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+          historyTimeoutsRef.current.delete(message.req_id);
+        }
         if (message.req_id === 1) {
           setFeedReady(false);
           setFeedStatus("Forex symbol discovery failed: " + (message.error.message ?? "provider error"));
         } else if (pending) {
-          setFeedStatus("Candle history unavailable for " + pending.symbol + ": " +
-            (message.error.message ?? "provider error"));
+          const reason = message.error.message ?? "provider error";
+          setHistoryByKey((current) => ({
+            ...current,
+            [pending.key]: { status: "error", count: current[pending.key]?.count ?? 0, message: reason },
+          }));
+          setFeedStatus("Candle history unavailable for " + pending.symbol + ": " + reason);
         }
         return;
       }
@@ -299,12 +329,28 @@ export default function ForexAnalyst() {
           : pendingHistoryRef.current.get(message.req_id);
         if (!request) return;
         pendingHistoryRef.current.delete(message.req_id as number);
+        const timeoutId = historyTimeoutsRef.current.get(message.req_id as number);
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        historyTimeoutsRef.current.delete(message.req_id as number);
         const history = normalizeFeedCandles(message.candles);
         if (!history.length) {
-          setFeedStatus("Provider returned no valid OHLC candles for " + request.symbol);
+          const reason = "The provider returned no valid OHLC candles. Live ticks are arriving separately.";
+          setHistoryByKey((current) => ({
+            ...current,
+            [request.key]: { status: "insufficient", count: 0, message: reason },
+          }));
+          setFeedStatus("No valid candle history received for " + request.symbol);
           return;
         }
 
+        const historyLoad: HistoryLoad = history.length >= 10
+          ? { status: "loaded", count: history.length }
+          : {
+              status: "insufficient",
+              count: history.length,
+              message: "Only " + history.length + " historical candle(s) arrived; at least 10 are required to draw a useful chart. Live ticks are not a substitute for history.",
+            };
+        setHistoryByKey((current) => ({ ...current, [request.key]: historyLoad }));
         setCandlesByKey((current) => {
           const key = request.key;
           const byEpoch = new Map<number, ForexCandle>();
@@ -368,6 +414,8 @@ export default function ForexAnalyst() {
       alive = false;
       if (socketRef.current === socket) socketRef.current = null;
       pendingHistoryRef.current.clear();
+      for (const timeoutId of historyTimeoutsRef.current.values()) window.clearTimeout(timeoutId);
+      historyTimeoutsRef.current.clear();
       subscribedSymbolsRef.current.clear();
       subscriptionsBySymbolRef.current.clear();
       activeTickSymbolRef.current = "";
@@ -399,7 +447,10 @@ export default function ForexAnalyst() {
 
   const activePair = pairs.find((pair) => pair.symbol === selectedSymbol) ?? null;
   const liveQuote = quotesBySymbol[selectedSymbol] ?? null;
-  const candles = candlesByKey[keyFor(selectedSymbol, timeframe)] ?? [];
+  const activeHistoryKey = keyFor(selectedSymbol, timeframe);
+  const candles = candlesByKey[activeHistoryKey] ?? [];
+  const historyLoad = historyByKey[activeHistoryKey];
+  const hasUsableHistory = historyLoad?.status === "loaded" && historyLoad.count >= 10;
   const currentBucket = Math.floor(Date.now() / 1000 / timeframe) * timeframe;
   const closedCandles = useMemo(
     () => candles.filter((candle) => candle.epoch + timeframe <= currentBucket),
@@ -518,7 +569,7 @@ export default function ForexAnalyst() {
           </div>
         </div>
 
-        {visibleCandles.length ? (
+        {hasUsableHistory && visibleCandles.length > 1 ? (
           <div className={styles.chartViewport}>
             <svg viewBox={"0 0 " + chart.width + " " + chart.height} role="img" aria-label={activePair?.name + " candlestick chart with automatic analysis"}>
               {[0, 1, 2, 3, 4].map((step) => {
@@ -608,9 +659,19 @@ export default function ForexAnalyst() {
         ) : (
           <div className={styles.emptyChart}>
             <span className={styles.emptyIcon}>⌁</span>
-            <strong>{feedReady ? "Loading real candle history" : "Waiting for market connection"}</strong>
-            <p>{feedReady ? "The chart will appear when the selected forex pair returns valid OHLC candles." : feedStatus}</p>
-            {feedReady && <button type="button" className={styles.retryButton} onClick={() => requestCandles(selectedSymbol, timeframe)}>Retry candle history</button>}
+            <strong>{!feedReady
+              ? "Waiting for market connection"
+              : historyLoad?.status === "error"
+                ? "Historical candles could not be loaded"
+                : historyLoad?.status === "insufficient"
+                  ? "Not enough historical candles"
+                  : "Loading real candle history"}</strong>
+            <p>{historyLoad?.message ?? (historyLoad?.status === "loading"
+              ? "Requesting " + CANDLE_LIMIT + " historical OHLC candles for the selected pair and timeframe."
+              : feedReady
+                ? "Live quotes are separate from OHLC history. The chart will appear after enough real historical candles arrive."
+                : feedStatus)}</p>
+            {feedReady && historyLoad?.status !== "loading" && <button type="button" className={styles.retryButton} onClick={() => requestCandles(selectedSymbol, timeframe)}>Retry candle history</button>}
           </div>
         )}
         <div className={styles.chartFooter}>
