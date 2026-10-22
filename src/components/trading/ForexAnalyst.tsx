@@ -218,13 +218,18 @@ export default function ForexAnalyst() {
       if (!alive) return;
       let message: FeedMessage;
       try {
-        message = JSON.parse(event.data) as FeedMessage;
+        const parsed: unknown = JSON.parse(event.data);
+        if (!parsed || typeof parsed !== "object") {
+          setFeedStatus("Received an unreadable market-data response");
+          return;
+        }
+        message = parsed as FeedMessage;
       } catch {
         setFeedStatus("Received an unreadable market-data response");
         return;
       }
 
-      if (message.msg_type === "ping" || ("ping" in (message as object))) return;
+      if (message.msg_type === "ping") return;
 
       if (message.error) {
         const pending = message.req_id === undefined
