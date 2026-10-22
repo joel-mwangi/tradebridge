@@ -32,11 +32,22 @@
 .connectedPill, .disconnectedPill { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 7px 9px; border: 1px solid var(--ct-border); border-radius: 999px; color: var(--ct-muted); font-size: 10px; font-weight: 800; white-space: nowrap; }
 .connectedPill i, .disconnectedPill i { width: 6px; height: 6px; border-radius: 50%; background: var(--ct-muted); }
 .connectedPill i { background: var(--teal, #10b981); }
-.connectBody { display: flex; align-items: center; gap: 14px; padding: 22px 20px; }
-.connectGlyph { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; border: 1px solid var(--ct-border); border-radius: 12px; background: var(--ct-surface); color: var(--teal, #10b981); font-size: 24px; }
-.connectCopy { display: grid; gap: 5px; flex: 1; min-width: 0; }
+.connectBody { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: start; gap: 14px; padding: 22px 20px; }
+.connectGlyph { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--ct-border); border-radius: 12px; background: var(--ct-surface); color: var(--teal, #10b981); font-size: 24px; }
+.connectContent { display: grid; gap: 16px; min-width: 0; }
+.connectCopy { display: grid; gap: 5px; min-width: 0; }
 .connectCopy strong { font-size: 13px; }
 .connectCopy span { color: var(--ct-muted); font-size: 11px; line-height: 1.55; }
+.connectSteps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.connectStep { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; gap: 10px; padding: 14px; border: 1px solid var(--ct-border); border-radius: 10px; background: var(--ct-surface); min-width: 0; }
+.connectStepBadge { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--ct-border); border-radius: 50%; color: var(--teal, #10b981); font-size: 11px; font-weight: 900; }
+.connectStepBody { display: grid; align-content: start; justify-items: start; gap: 8px; min-width: 0; }
+.connectStepBody > strong { font-size: 12px; line-height: 1.4; }
+.connectStepBody > span { color: var(--ct-muted); font-size: 10px; line-height: 1.55; }
+.connectStepBody .primaryButton { margin-top: 3px; white-space: normal; text-align: center; }
+.secondaryLink { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; color: var(--ct-ink); font-size: 10px; font-weight: 850; text-decoration: underline; text-decoration-color: var(--teal, #10b981); text-underline-offset: 4px; }
+.secondaryLink:hover { color: var(--teal, #10b981); }
+.connectHint { margin: 0; color: var(--ct-muted); font-size: 10px; line-height: 1.55; }
 .primaryButton, .dangerButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 15px; border: 1px solid transparent; border-radius: 8px; background: var(--teal, #10b981); color: #04150f; font-size: 11px; font-weight: 900; white-space: nowrap; }
 .primaryButton:hover:not(:disabled) { filter: brightness(1.07); }
 .dangerButton { background: #f87171; color: #2a0909; }
