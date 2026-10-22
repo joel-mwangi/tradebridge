@@ -272,6 +272,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   }, [connected, accountId, symbolId, quoteRevision, authenticatedFetch]);
 
   useEffect(() => {
+    setProtectionDrafts({});
     if (!connected || !accountId) {
       setPositions([]);
       setPendingOrders([]);
@@ -339,6 +340,10 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       });
       setNotice(typeof payload.message === "string" ? payload.message : "cTrader acknowledged the protection change.");
       setNoticeKind("success");
+      setProtectionDrafts((current) => {
+        const { [position.position_id]: _cleared, ...rest } = current;
+        return rest;
+      });
       await refreshPositions(false);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not change position protection.");
@@ -374,6 +379,10 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
       });
       setNotice(typeof payload.message === "string" ? payload.message : "cTrader acknowledged the close request.");
       setNoticeKind("success");
+      setProtectionDrafts((current) => {
+        const { [position.position_id]: _cleared, ...rest } = current;
+        return rest;
+      });
       await refreshPositions(false);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not close the position.");
