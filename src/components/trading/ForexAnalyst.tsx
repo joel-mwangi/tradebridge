@@ -160,6 +160,7 @@ export default function ForexAnalyst() {
   const socketRef = useRef<WebSocket | null>(null);
   const requestSequenceRef = useRef(70_000);
   const pendingHistoryRef = useRef(new Map<number, PendingHistory>());
+  const historyTimeoutsRef = useRef(new Map<number, number>());
   const subscribedSymbolsRef = useRef(new Set<string>());
   const subscriptionsBySymbolRef = useRef(new Map<string, string>());
   const activeTickSymbolRef = useRef("");
@@ -176,6 +177,18 @@ export default function ForexAnalyst() {
     const reqId = ++requestSequenceRef.current;
     const key = keyFor(symbol, seconds);
     pendingHistoryRef.current.set(reqId, { key, symbol, seconds });
+    const timeoutId = window.setTimeout(() => {
+      const pending = pendingHistoryRef.current.get(reqId);
+      if (!pending) return;
+      pendingHistoryRef.current.delete(reqId);
+      historyTimeoutsRef.current.delete(reqId);
+      const reason = "No historical-candle response arrived within 12 seconds. Live ticks are not a substitute for history.";
+      setHistoryByKey((current) => ({
+        ...current,
+        [pending.key]: { status: "error", count: current[pending.key]?.count ?? 0, message: reason },
+      }));
+    }, 12_000);
+    historyTimeoutsRef.current.set(reqId, timeoutId);
     setHistoryByKey((current) => ({
       ...current,
       [key]: { status: "loading", count: current[key]?.count ?? 0 },
@@ -247,7 +260,12 @@ export default function ForexAnalyst() {
         const pending = message.req_id === undefined
           ? undefined
           : pendingHistoryRef.current.get(message.req_id);
-        if (message.req_id !== undefined) pendingHistoryRef.current.delete(message.req_id);
+        if (message.req_id !== undefined) {
+          pendingHistoryRef.current.delete(message.req_id);
+          const timeoutId = historyTimeoutsRef.current.get(message.req_id);
+          if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+          historyTimeoutsRef.current.delete(message.req_id);
+        }
         if (message.req_id === 1) {
           setFeedReady(false);
           setFeedStatus("Forex symbol discovery failed: " + (message.error.message ?? "provider error"));
@@ -311,6 +329,9 @@ export default function ForexAnalyst() {
           : pendingHistoryRef.current.get(message.req_id);
         if (!request) return;
         pendingHistoryRef.current.delete(message.req_id as number);
+        const timeoutId = historyTimeoutsRef.current.get(message.req_id as number);
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        historyTimeoutsRef.current.delete(message.req_id as number);
         const history = normalizeFeedCandles(message.candles);
         if (!history.length) {
           const reason = "The provider returned no valid OHLC candles. Live ticks are arriving separately.";
@@ -393,6 +414,8 @@ export default function ForexAnalyst() {
       alive = false;
       if (socketRef.current === socket) socketRef.current = null;
       pendingHistoryRef.current.clear();
+      for (const timeoutId of historyTimeoutsRef.current.values()) window.clearTimeout(timeoutId);
+      historyTimeoutsRef.current.clear();
       subscribedSymbolsRef.current.clear();
       subscriptionsBySymbolRef.current.clear();
       activeTickSymbolRef.current = "";
