@@ -135,3 +135,18 @@
   .chartFooter { align-items: flex-start; flex-direction: column; }
   .panelCount { white-space: normal; }
 }
+
+.modeBadge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--fx-border);
+  border-radius: 5px;
+  padding: 3px 6px;
+  color: var(--fx-muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .55px;
+  vertical-align: middle;
+}
+.engineScope { margin-top: 7px !important; font-size: 10px !important; }
+.engineScope strong { color: var(--fx-ink); }
