@@ -40,7 +40,7 @@ create table if not exists public.ctrader_order_requests (
   side text not null check (side in ('BUY', 'SELL')),
   volume_cents bigint not null check (volume_cents > 0),
   request_hash text not null,
-  status text not null check (status in ('submitting', 'accepted', 'rejected', 'unknown')),
+  status text not null check (status in ('submitting', 'accepted', 'filled', 'partial', 'rejected', 'unknown')),
   provider_order_id text,
   provider_position_id text,
   provider_error_code text,
