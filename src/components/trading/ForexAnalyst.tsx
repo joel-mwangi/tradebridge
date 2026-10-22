@@ -497,7 +497,6 @@ export default function ForexAnalyst() {
     <section className={styles.page} aria-label="Forex AI analyst">
       <header className={styles.pageHeader}>
         <div className={styles.pageTitleBlock}>
-          <div className={styles.kicker}><span className={styles.kickerDot} /> FOREX INTELLIGENCE <span className={styles.modeBadge}>RULE-BASED V1</span></div>
           <h1>AI Chart Analyst</h1>
           <p>Live price action, candle recognition and automatically mapped support/resistance.</p>
         </div>
@@ -505,15 +504,6 @@ export default function ForexAnalyst() {
           <span aria-hidden="true">↻</span> Reconnect feed
         </button>
       </header>
-
-      <div className={styles.sourceNotice} role="note">
-        <span className={styles.sourceIcon}>i</span>
-        <p>
-          <strong>Data source transparency.</strong> This first web version uses Deriv public market data through the existing TradeBridge backend.
-          It is not connected to the quote stream inside your MT5 web session, and price equivalence has not been verified.
-        </p>
-        <p className={styles.engineScope}><strong>Analysis engine v1:</strong> transparent rule-based calculations first. AI-generated explanations come after the feed and calculations are validated.</p>
-      </div>
 
       <section className={styles.marketBar} aria-label="Forex chart controls">
         <label className={styles.pairSelector}>
