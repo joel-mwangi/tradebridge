@@ -92,8 +92,9 @@
 .message[data-kind="error"] { color: #ff8b96; }
 @media (max-width: 760px) {
   .header { padding: 16px; }
-  .connectBody { display: grid; grid-template-columns: 42px minmax(0, 1fr); padding: 16px; }
-  .connectBody > button { grid-column: 1 / -1; width: 100%; }
+  .connectBody { grid-template-columns: 42px minmax(0, 1fr); padding: 16px; }
+  .connectSteps { grid-template-columns: 1fr; }
+  .connectStepBody .primaryButton { width: 100%; }
   .tradeBody { padding: 15px; }
   .accountRow { grid-template-columns: 1fr auto; }
   .accountRow .field { grid-column: 1 / -1; }
