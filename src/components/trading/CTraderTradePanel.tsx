@@ -352,7 +352,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
     if (!selectedAccountIsDemo || permissionScope !== "trading") return;
     const draft = positionDraft(position);
     const closeVolume = partial ? Number(draft.partial_close) : undefined;
-    if (partial && (!Number.isFinite(closeVolume) || closeVolume <= 0 || closeVolume >= position.volume_units)) {
+    if (partial && (closeVolume === undefined || !Number.isFinite(closeVolume) || closeVolume <= 0 || closeVolume >= position.volume_units)) {
       setNotice("Partial-close volume must be positive and smaller than the open position volume.");
       setNoticeKind("error");
       return;
