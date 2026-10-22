@@ -9,7 +9,7 @@ TradeBridge's Forex Analyst can link a Deriv cTrader account using cTrader Open 
    `https://swigtrade.vercel.app/api/auth/ctrader/callback`
    Register a different exact URI for local development if needed.
 3. Configure OAuth authorization scope as `trading` when users connect. The cTrader authorization page remains responsible for user consent.
-4. Apply `supabase/migrations/20261022120000_add_ctrader_gateway.sql` to the TradeBridge Supabase project.
+4. Apply `supabase/migrations/20261022120000_add_ctrader_gateway.sql` and `supabase/migrations/20261022150000_add_ctrader_position_actions.sql` to the TradeBridge Supabase project.
 
 ## Environment variables
 
@@ -45,17 +45,22 @@ Do not add the cTrader client secret, service-role key, encryption key, or bridg
 1. Apply the Supabase migration in the right project.
 2. Configure backend and frontend environment variables, then redeploy both services.
 3. Connect a cTrader **Demo** account from the Forex Analyst and verify that account IDs and Forex symbols load.
-4. Keep `CTRADER_DEMO_ORDERS_ENABLED=false` until demo authorization, account ownership, server limits and the provider's order acknowledgement have been tested.
-5. Then the operator may set `CTRADER_DEMO_ORDERS_ENABLED=true` for demo orders only, starting with a very small allowed volume.
-6. Confirm every test order in the cTrader account activity before relying on TradeBridge's acknowledgement.
+4. Verify that open positions, pending orders, stop-loss/take-profit, and net unrealised P/L reconcile against the cTrader account.
+5. Test protection edits, partial closes and full closes on Demo only; verify the position list after each action.
+6. Keep all live-account position-changing actions blocked until provider-connected Demo acceptance tests pass and a separate live rollout review is completed.
+7. Keep `CTRADER_DEMO_ORDERS_ENABLED=false` until demo authorization, account ownership, server limits and the provider's order acknowledgement have been tested.
+8. Then the operator may set `CTRADER_DEMO_ORDERS_ENABLED=true` for demo orders only, starting with a very small allowed volume.
+9. Confirm every test order in the cTrader account activity before relying on TradeBridge's acknowledgement.
 
 ## Execution safeguards in this implementation
 
 - OAuth tokens are stored encrypted server-side, not in browser cookies.
 - TradeBridge checks linked-account ownership and uses cTrader symbol IDs.
 - The order endpoint accepts only explicitly confirmed **Demo** market orders and checks the server maximum plus cTrader's per-symbol minimum, maximum and step.
-- A persistent one-time idempotency key blocks duplicate submissions.
-- If cTrader does not acknowledge an order, TradeBridge records the outcome as unknown and instructs the user not to retry blindly.
+- A persistent one-time idempotency key blocks duplicate order submissions and position actions.
+- If cTrader does not acknowledge an order/action, TradeBridge records the outcome as unknown and instructs the user to reconcile account state before trying again.
+- Open positions, pending orders, stop-loss/take-profit and net unrealised P/L are read from cTrader; the UI refreshes them every 15 seconds.
+- Stop-loss/take-profit changes and full/partial position closes require explicit confirmation and are demo-only in this implementation.
 - Real-money order execution remains blocked in the backend, even when the user has a linked live account.
 
 This is an integration foundation, not a claim that the hosted callback or a real order has been live-tested. Validate cTrader app approval, registered redirect URI, database migration and demo order round-trip before considering further rollout.
