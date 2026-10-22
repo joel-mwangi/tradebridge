@@ -102,3 +102,51 @@
   .orderResult { align-items: flex-start; flex-direction: column; }
   .orderResult button { width: 100%; }
 }
+
+.positionSection { display: grid; gap: 14px; padding-top: 18px; border-top: 1px solid var(--ct-line); min-width: 0; }
+.positionHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.positionHeader h3 { margin: 0 0 5px; font-size: 16px; letter-spacing: -.2px; }
+.positionHeader p { margin: 0; color: var(--ct-muted); font-size: 11px; line-height: 1.5; max-width: 600px; }
+.positionHeader .eyebrow { margin-bottom: 5px; }
+.positionEmpty { display: grid; gap: 5px; padding: 20px 14px; border: 1px dashed var(--ct-border); border-radius: 9px; background: var(--ct-surface); text-align: center; }
+.positionEmpty strong { font-size: 12px; }
+.positionEmpty span { color: var(--ct-muted); font-size: 10px; line-height: 1.5; }
+.positionList { display: grid; gap: 12px; min-width: 0; }
+.positionCard { display: grid; gap: 13px; min-width: 0; padding: 14px; border: 1px solid var(--ct-border); border-radius: 11px; background: var(--ct-surface); }
+.positionTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.positionIdentity { display: grid; gap: 4px; min-width: 0; }
+.positionIdentity strong { font-size: 14px; }
+.positionIdentity span { color: var(--ct-muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.positionPnl { display: grid; gap: 5px; text-align: right; }
+.positionPnl span, .positionMetrics span { color: var(--ct-muted); font-size: 8px; font-weight: 900; letter-spacing: .65px; }
+.positionPnl strong { color: #31d59c; font-size: 14px; font-variant-numeric: tabular-nums; }
+.positionPnl strong[data-negative="true"] { color: #ff8b96; }
+.positionMetrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.positionMetrics > div { display: grid; gap: 5px; min-width: 0; padding: 9px; border: 1px solid var(--ct-line); border-radius: 8px; }
+.positionMetrics strong { font-size: 11px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.positionProtectionForm { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) auto; gap: 10px; align-items: end; }
+.positionProtectionForm .primaryButton { min-height: 40px; }
+.positionCloseRow { display: grid; grid-template-columns: minmax(140px, .7fr) auto auto; gap: 9px; align-items: end; padding-top: 12px; border-top: 1px solid var(--ct-line); }
+.positionCloseRow .textButton, .positionCloseRow .dangerButton { min-height: 40px; }
+.pendingOrders { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--ct-line); border-radius: 9px; }
+.pendingOrders > strong { font-size: 11px; }
+.pendingOrder { display: grid; gap: 4px; padding-top: 8px; border-top: 1px solid var(--ct-line); }
+.pendingOrder span { font-size: 10px; }
+.pendingOrder small { color: var(--ct-muted); font-size: 9px; }
+.positionFoot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--ct-muted); font-size: 9px; }
+@media (max-width: 760px) {
+  .positionProtectionForm { grid-template-columns: 1fr 1fr; }
+  .positionProtectionForm .primaryButton { grid-column: 1 / -1; }
+  .positionCloseRow { grid-template-columns: 1fr 1fr; }
+  .positionCloseRow .field { grid-column: 1 / -1; }
+  .positionCloseRow .textButton, .positionCloseRow .dangerButton { width: 100%; }
+}
+@media (max-width: 430px) {
+  .positionHeader { display: grid; }
+  .positionHeader > button { width: 100%; }
+  .positionTop { flex-direction: column; }
+  .positionPnl { text-align: left; }
+  .positionMetrics { grid-template-columns: 1fr; }
+  .positionProtectionForm, .positionCloseRow { grid-template-columns: 1fr; }
+  .positionProtectionForm .primaryButton, .positionCloseRow .field { grid-column: auto; }
+}
