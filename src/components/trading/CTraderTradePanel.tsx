@@ -325,7 +325,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           <div className={styles.connectGlyph}>↗</div>
           <div className={styles.connectCopy}>
             <strong>Connect your Deriv cTrader account</strong>
-            <span>You'll authorize access on cTrader, then return here. TradeBridge never asks for your cTrader password.</span>
+            <span>You&apos;ll authorize access on cTrader, then return here. TradeBridge never asks for your cTrader password.</span>
           </div>
           <button type="button" className={styles.primaryButton} disabled={loading || busy} onClick={() => { window.location.href = "/api/auth/ctrader/start"; }}>
             {loading ? "Checking connection…" : "Connect cTrader"}
@@ -431,7 +431,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
             <span className={styles.marketIcon}>◎</span>
             <div>
               <strong>Market order · Demo only</strong>
-              <span>Executed at cTrader's available market price. The chart price may differ; spread and slippage apply. Volume limits are rechecked by the backend.</span>
+              <span>Executed at cTrader&apos;s available market price. The chart price may differ; spread and slippage apply. Volume limits are rechecked by the backend.</span>
             </div>
           </div>
 
