@@ -35,12 +35,14 @@ test("Forex Analyst includes a distinct cTrader demo ticket", () => {
   assert.match(panel, /\/ctrader\/symbols/);
   assert.match(panel, /\/ctrader\/orders/);
   assert.match(panel, /confirmed: true/);
+  assert.match(panel, /\/ctrader\/quote/);
+  assert.match(panel, /quote\.quote_age_seconds/);
   assert.match(panel, /Real-money orders are disabled/);
 });
 
 test("cTrader ticket does not reuse Deriv option contracts or chart quotes for orders", () => {
   assert.doesNotMatch(panel, /DIGITOVER|DIGITUNDER|contract_type|proposal_id|quoteBox/);
-  assert.match(panel, /Chart price may differ; spread and slippage apply/);
+  assert.match(panel, /chart price may differ; spread and slippage apply/i);
 });
 
 test("cTrader server-storage migration revokes direct access from browser roles", () => {
