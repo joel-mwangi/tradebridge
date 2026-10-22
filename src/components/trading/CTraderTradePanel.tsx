@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import styles from "./CTraderTradePanel.module.css";
 
@@ -92,6 +92,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   const [pendingOrders, setPendingOrders] = useState<CTraderPendingOrder[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [positionsRetrievedAt, setPositionsRetrievedAt] = useState("");
+  const positionLoadSequence = useRef(0);
   const [positionActionBusyId, setPositionActionBusyId] = useState<string | null>(null);
   const [protectionDrafts, setProtectionDrafts] = useState<Record<string, PositionDraft>>({});
 
@@ -121,6 +122,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
   }, [apiBase]);
 
   const refreshPositions = useCallback(async (quiet = false) => {
+    const requestSequence = ++positionLoadSequence.current;
     if (!connected || !accountId) {
       setPositions([]);
       setPendingOrders([]);
@@ -130,16 +132,17 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
     if (!quiet) setPositionsLoading(true);
     try {
       const payload = await authenticatedFetch("/ctrader/positions?account_id=" + encodeURIComponent(accountId));
+      if (requestSequence !== positionLoadSequence.current) return;
       setPositions(Array.isArray(payload.positions) ? payload.positions as CTraderPosition[] : []);
       setPendingOrders(Array.isArray(payload.pending_orders) ? payload.pending_orders as CTraderPendingOrder[] : []);
       setPositionsRetrievedAt(typeof payload.retrieved_at === "string" ? payload.retrieved_at : "");
     } catch (error) {
-      if (!quiet) {
+      if (requestSequence === positionLoadSequence.current && !quiet) {
         setNotice(error instanceof Error ? error.message : "Could not refresh cTrader positions.");
         setNoticeKind("error");
       }
     } finally {
-      if (!quiet) setPositionsLoading(false);
+      if (requestSequence === positionLoadSequence.current && !quiet) setPositionsLoading(false);
     }
   }, [connected, accountId, authenticatedFetch]);
 
@@ -514,7 +517,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           <div className={styles.accountRow}>
             <label className={styles.field}>
               <span>TRADING ACCOUNT</span>
-              <select value={accountId} onChange={(event) => { setAccountId(event.target.value); setConfirmed(false); setQuote(null); setQuoteReceivedAt(null); }} disabled={busy}>
+              <select value={accountId} onChange={(event) => { setAccountId(event.target.value); setConfirmed(false); setQuote(null); setQuoteReceivedAt(null); }} disabled={busy || Boolean(positionActionBusyId)}>
                 {accounts.map((account) => (
                   <option key={account.account_id} value={account.account_id}>
                     {(account.account_type === "demo" ? "Demo" : "Real · read-only")}{account.broker_title_short ? " · " + account.broker_title_short : ""}{account.trader_login ? " · " + account.trader_login : ""}
@@ -526,7 +529,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
               <span>PERMISSION</span>
               <strong>{permissionScope === "trading" ? "Trading access" : "View only"}</strong>
             </div>
-            <button className={styles.textButton} type="button" onClick={disconnect} disabled={busy}>Disconnect</button>
+            <button className={styles.textButton} type="button" onClick={disconnect} disabled={busy || Boolean(positionActionBusyId)}>Disconnect</button>
           </div>
 
           {activeAccount?.account_type === "live" && (
@@ -568,7 +571,7 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
                 <strong>cTrader live quote</strong>
                 <span>Bid is the sell price · Ask is the buy price</span>
               </div>
-              <button type="button" className={styles.textButton} onClick={() => setQuoteRevision((value) => value + 1)} disabled={busy || quoteLoading || !activeAccount || !activeSymbol}>
+              <button type="button" className={styles.textButton} onClick={() => setQuoteRevision((value) => value + 1)} disabled={busy || Boolean(positionActionBusyId) || quoteLoading || !activeAccount || !activeSymbol}>
                 {quoteLoading ? "Refreshing…" : "Refresh quote"}
               </button>
             </div>
@@ -614,12 +617,12 @@ export default function CTraderTradePanel({ currentSymbol }: { currentSymbol: st
           </div>
 
           <label className={styles.confirmLine}>
-            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy || !selectedAccountIsDemo || permissionScope !== "trading" || !quote || quoteLoading || quote.quote_age_seconds === null || quote.quote_age_seconds > 15 || (quoteReceivedAt !== null && Date.now() - quoteReceivedAt > 15_000)} />
+            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy || Boolean(positionActionBusyId) || !selectedAccountIsDemo || permissionScope !== "trading" || !quote || quoteLoading || quote.quote_age_seconds === null || quote.quote_age_seconds > 15 || (quoteReceivedAt !== null && Date.now() - quoteReceivedAt > 15_000)} />
             <span>I confirm this is a demo order for <strong>{activeSymbol?.symbol_name ?? "the selected Forex pair"}</strong>, <strong>{side}</strong>, volume <strong>{volume || "—"}</strong> units.</span>
           </label>
 
           <div className={styles.actions}>
-            <button type="button" className={side === "BUY" ? styles.primaryButton : styles.dangerButton} disabled={busy || !selectedAccountIsDemo || permissionScope !== "trading" || !activeSymbol || !confirmed} onClick={submitOrder}>
+            <button type="button" className={side === "BUY" ? styles.primaryButton : styles.dangerButton} disabled={busy || Boolean(positionActionBusyId) || !selectedAccountIsDemo || permissionScope !== "trading" || !activeSymbol || !confirmed} onClick={submitOrder}>
               {busy ? "Sending to cTrader…" : `Confirm Demo ${side}`}
             </button>
             <span className={styles.secondaryText}>Real-money orders are disabled.</span>
