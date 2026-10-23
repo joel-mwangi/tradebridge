@@ -167,7 +167,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
     const stake = Number(strategyStake);
     if (!Number.isFinite(stake) || stake < 1 || stake > 1000) { setAutoState({ state: "blocked_invalid_stake", submitted: 0, consecutiveLosses: 0, remaining: 3 }); setAutoArmed(false); return; }
     const input = { symbol, contractType: direction === "UNDER" ? "DIGITUNDER" as const : "DIGITOVER" as const, stake, duration: 1, durationUnit: "t" as const, barrier: String(barrier) };
-    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: symbol + ":" + barrier + ":" + direction + ":" + Date.now() }, input).then((snapshot) => setAutoState(snapshot)).catch(() => setAutoState(session.snapshot()));
+    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: symbol + ":" + barrier + ":" + direction + ":" + Date.now() }, input).then((snapshot) => { setAutoState(snapshot); setAutoArmed(false); }).catch(() => { setAutoState(session.snapshot()); setAutoArmed(false); });
   }, [autoArmed, status?.qualification?.under_qualifies, status?.qualification?.over_qualifies, symbol, barrier, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
 
   useEffect(() => {
