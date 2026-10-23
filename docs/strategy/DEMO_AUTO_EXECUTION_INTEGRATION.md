@@ -1,23 +1,24 @@
 # Demo strategy auto-execution
 
-## Integrated flow
+The user's latest explicit strategy discussion is authoritative. See [STRATEGY_SOURCE_OF_TRUTH.md](../STRATEGY_SOURCE_OF_TRUTH.md). This document must not override it.
 
-- `DigitStrategyPanel` exposes an explicit Demo-only arm control and a stake field.
-- Arming waits for an exclusive qualified Under or Over signal from the existing strategy status stream. The selected barrier is used as the contract barrier.
-- `TradingWorkspace` passes the verified Demo-account gate and `useTradingSession.executeDemoStrategyTrade` into the panel.
-- The trading hook uses the existing authenticated backend Deriv WebSocket session to request a fresh proposal, submit the buy, subscribe to the resulting contract, and await a normalized settled status plus Deriv's reported profit.
-- The coordinator runs contracts sequentially, counts only settled outcomes, stops after three settled buys, and stops earlier after two consecutive losses. A win or breakeven resets the consecutive-loss count.
-- The Stop new buys control stops the sequence after the current contract settles; it does not attempt to force-sell an active contract.
-- A timeout, disconnect, invalid contract ID, or missing settlement profit enters `reconciliation_required`. The hook persists the unresolved-order lock, blocks further orders, and does not retry automatically.
-- The trading session rejects auto-execution unless the selected account type is exactly `demo`. Real-account execution remains disabled by the workspace gate.
+## Required behavior
 
-## Important behavior
+- The user selects Over or Under and a barrier, then clicks Run. Run starts a fresh strategy session and arms demo execution when a verified Demo account and the execution callback are available.
+- A market qualification is not an entry signal. The coordinator may buy only when the backend reports `signal_generated: true` for the user's selected direction, market, and barrier after all filters and the post-trigger digit sequence have passed.
+- One confirmed signal starts one sequence of up to three sequential 1-tick demo buys. Wait for each contract's authoritative settlement and reconciliation before the next buy.
+- Stop immediately after two consecutive settled losses. Never submit the third buy after two consecutive losses. A win or breakeven resets the consecutive-loss count.
+- After three buys or the two-loss stop, stop the strategy session. Do not automatically restart; require the user to click Run again.
+- An unknown/unreconciled outcome blocks further buys and requires reconciliation. Never automatically retry an order with an unknown outcome.
+- Real-account auto-execution remains disabled.
 
-- The strategy uses a **1-tick** duration for this initial implementation. Stake is explicitly configurable in the panel (minimum 1, maximum 1000 account-currency units).
-- The coordinator does not guarantee profitability. Digit frequencies and qualifications are observations, not reliable predictions of future ticks.
-- The unresolved-order lock survives reloads, but the coordinator's in-memory sequence counters do not resume after reload. A reload during an active order is deliberately fail-closed and requires manual reconciliation in Deriv.
-- Stop is cooperative: it prevents subsequent buys after the current contract settles. It does not cancel an already submitted buy or force-close an open contract.
+## Operational safeguards
+
+- Stake is configurable in the panel (minimum 1, maximum 1000 account-currency units).
+- The coordinator uses the authenticated backend Deriv WebSocket session through the existing trading hook.
+- Stop is cooperative: it prevents subsequent buys after the current contract settles; it does not force-sell an active contract.
+- Frequency and signal rules are observations, not a guarantee of profitability.
 
 ## Verification required
 
-Run `npm test`, `npm run lint`, and `npm run build` on this branch before merging. Verify in a Deriv Demo account that a qualification triggers a quote/buy, each contract settles before the next starts, two losses stop the sequence, three settled buys complete the sequence, and an interrupted order blocks further entries. Real-account execution must remain disabled.
+Run `npm test`, `npm run lint`, and `npm run build` before merging. Verify that qualification alone does not execute; only a completed entry signal starts a sequence; direction and barrier match the user's selection; settlement is sequential; two consecutive losses stop the sequence; three buys complete the sequence; and a new Run is required afterward.
