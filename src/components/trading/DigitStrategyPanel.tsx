@@ -11,6 +11,7 @@ type StrategyStatus = {
   type?: string;
   error?: { message?: string };
   symbol?: string | null;
+  barrier?: number;
   state?: string;
   reason?: string;
   selected_group?: string | null;
@@ -75,7 +76,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: string; windowSize: number }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { symbol: string; windowSize: number; barrier: number }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -245,12 +246,12 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
   useEffect(() => {
     const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(status.state ?? ""));
     if (!active || !symbol || !Number.isInteger(windowSize)) return;
-    if (status?.symbol === symbol && status?.digit_window_size === windowSize) return;
+    if (status?.symbol === symbol && status?.digit_window_size === windowSize && status?.barrier === barrier) return;
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
-    socket.send(JSON.stringify({ strategy: { action: "start", symbol, window_size: windowSize } }));
-  }, [symbol, windowSize, status?.state, status?.symbol, status?.digit_window_size]);
+    socket.send(JSON.stringify({ strategy: { action: "start", symbol, window_size: windowSize, barrier } }));
+  }, [symbol, windowSize, barrier, status?.state, status?.symbol, status?.digit_window_size, status?.barrier]);
 
   useEffect(() => {
     if (!lastTickAt) return;
@@ -268,7 +269,7 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
     }
     if (action === "start" && !symbol) return;
     setBusy(true);
-    socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize } : { action } }));
+    socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier } : { action } }));
   }
 
   const state = status?.state ?? "idle";
@@ -307,6 +308,8 @@ export default function DigitStrategyPanel({ symbol, windowSize }: { symbol: str
             <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--muted)", fontSize: 10 }}>
               <Icon name="eye" size={12} />
               <span>{windowSize.toLocaleString()}</span>
+              <span>·</span>
+              <span>Barrier {barrier}</span>
               <span>·</span>
               <Icon name="shield" size={12} />
               <span aria-label="Execution disabled">⊘</span>
