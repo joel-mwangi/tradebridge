@@ -282,7 +282,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
-    socket.send(JSON.stringify({ strategy: { action: "start", symbol, window_size: windowSize, barrier } }));
+    socket.send(JSON.stringify({ strategy: { action: "start", symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } }));
   }, [symbol, windowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier]);
 
   useEffect(() => {
