@@ -83,3 +83,16 @@ test("digit frequency percentages are rendered from backend snapshots, not recal
   assert.ok(workspaceCss.includes(".ticketDigitCircle { display: grid; place-items: center; width: min(100%, 27px); aspect-ratio: 1"));
   assert.ok(!read("src/components/trading/PriceChart.tsx").includes("Digit frequency"));
 });;
+
+
+test("strategy live tape and histogram share backend-selected-window colour ranks", () => {
+  const strategy = read("src/components/trading/DigitStrategyPanel.tsx");
+  assert.match(workspace, /frequencyWindow=\{snapshots\[selectedSymbol\]\?\.digitFrequency\?\.windows\[String\(digitWindowSize\)\]\}/);
+  assert.match(strategy, /FREQUENCY HISTOGRAM/);
+  assert.match(strategy, /frequencyWindow\?\.percentages\[String\(digit\)\]/);
+  assert.match(strategy, /frequencyWindow\?\.counts\[String\(digit\)\]/);
+  assert.match(strategy, /rankPalette = \{ red: "#f87171", yellow: "#fbbf24", blue: "#60a5fa", green: "#4ade80" \}/);
+  assert.match(strategy, /rankTint\(roles\)/);
+  assert.match(strategy, /Digit frequency histogram for/);
+  assert.doesNotMatch(strategy, /const counts = DIGITS\.map\(\(digit\) => tape\.filter/);
+});
