@@ -115,3 +115,24 @@ test("prevents overlapping sequences", async () => {
   const result = await pending;
   assert.equal(result.submitted, 3);
 });
+
+
+test("stop prevents additional buys after the active contract settles", async () => {
+  let releaseFirst;
+  let calls = 0;
+  const runner = createDemoExecutionSession({
+    sessionId: "s8", isDemoAccount: true,
+    executeAndReconcile: () => {
+      calls += 1;
+      return new Promise((resolve) => { releaseFirst = resolve; });
+    },
+  });
+  const pending = runner.runQualifiedSignal(signal, input);
+  await Promise.resolve();
+  runner.stop();
+  releaseFirst(settled("1", "won", 0.8));
+  const result = await pending;
+  assert.equal(result.submitted, 1);
+  assert.equal(result.state, "stopped");
+  assert.equal(calls, 1);
+});
