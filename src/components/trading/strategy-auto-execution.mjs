@@ -50,7 +50,7 @@ export function createDemoExecutionSession({ sessionId, isDemoAccount, executeAn
       try {
         // Wait for each accepted contract to settle before submitting the next.
         // This is required to enforce the two-consecutive-loss stop correctly.
-        while (submitted < MAX_STRATEGY_TRADES && consecutiveLosses < MAX_CONSECUTIVE_LOSSES) {
+        while (submitted < MAX_STRATEGY_TRADES && consecutiveLosses < MAX_CONSECUTIVE_LOSSES && state !== "stopped") {
           state = "executing";
           const result = await executeAndReconcile({
             ...tradeInput,
@@ -75,7 +75,7 @@ export function createDemoExecutionSession({ sessionId, isDemoAccount, executeAn
             : 0;
         }
 
-        state = consecutiveLosses >= MAX_CONSECUTIVE_LOSSES ? "stopped" : "completed";
+        if (state !== "stopped") state = consecutiveLosses >= MAX_CONSECUTIVE_LOSSES ? "stopped" : "completed";
         return this.snapshot();
       } catch (error) {
         // Unknown provider outcomes must pause the strategy, not trigger retries.
