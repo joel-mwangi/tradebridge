@@ -16,6 +16,7 @@ type StrategyStatus = {
   state?: string;
   reason?: string;
   selected_group?: string | null;
+  signal_generated?: boolean;
   trigger_digit?: number | null;
   feed_state?: string;
   observation_count?: number;
@@ -157,19 +158,28 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
 
   useEffect(() => {
     if (!autoArmed || !autoSessionRef.current || !executeDemoStrategyTrade || !isDemoAccount) return;
-    if (status?.symbol !== symbol || status?.barrier !== barrier || !["observing", "waiting_for_more_data", "selected"].includes(status?.state ?? "")) return;
-    const under = status?.qualification?.under_qualifies === true;
-    const over = status?.qualification?.over_qualifies === true;
-    if (under === over || signalConsumedRef.current) return;
-    const direction = under ? "UNDER" : "OVER";
+    if (status?.symbol !== symbol || status?.barrier !== barrier || status?.signal_generated !== true) return;
+    if (status.selected_group !== "under" && status.selected_group !== "over") return;
+    if (signalConsumedRef.current) return;
+    const direction = status.selected_group === "under" ? "UNDER" : "OVER";
     if ((direction === "UNDER" && barrier < 1) || (direction === "OVER" && barrier > 8)) return;
     signalConsumedRef.current = true;
     const session = autoSessionRef.current;
     const stake = Number(strategyStake);
     if (!Number.isFinite(stake) || stake < 1 || stake > 1000) { setAutoState({ state: "blocked_invalid_stake", submitted: 0, consecutiveLosses: 0, remaining: 3 }); setAutoArmed(false); return; }
     const input = { symbol, contractType: direction === "UNDER" ? "DIGITUNDER" as const : "DIGITOVER" as const, stake, duration: 1, durationUnit: "t" as const, barrier: String(barrier) };
-    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: symbol + ":" + barrier + ":" + direction + ":" + Date.now() }, input).then((snapshot) => { setAutoState(snapshot); setAutoArmed(false); }).catch(() => { setAutoState(session.snapshot()); setAutoArmed(false); });
-  }, [autoArmed, status?.qualification?.under_qualifies, status?.qualification?.over_qualifies, status?.symbol, status?.barrier, status?.state, symbol, barrier, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
+    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: symbol + ":" + barrier + ":" + direction + ":" + Date.now() }, input).then((snapshot) => {
+      setAutoState(snapshot);
+      setAutoArmed(false);
+      const socket = socketRef.current;
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ strategy: { action: "stop" } }));
+    }).catch(() => {
+      setAutoState(session.snapshot());
+      setAutoArmed(false);
+      const socket = socketRef.current;
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ strategy: { action: "stop" } }));
+    });
+  }, [autoArmed, status?.signal_generated, status?.selected_group, status?.symbol, status?.barrier, symbol, barrier, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
 
   useEffect(() => {
     const previous = previousTransportRef.current;
@@ -290,6 +300,26 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
       return;
     }
     if (action === "start" && !symbol) return;
+    if (action === "start") {
+      signalConsumedRef.current = false;
+      setAutoState(null);
+      if (isDemoAccount && executeDemoStrategyTrade) {
+        try {
+          autoSessionRef.current = createDemoExecutionSession({ sessionId: symbol + "-" + Date.now(), isDemoAccount, executeAndReconcile: executeDemoStrategyTrade });
+          setAutoState(autoSessionRef.current.snapshot());
+          setAutoArmed(true);
+        } catch {
+          setAutoArmed(false);
+          setAutoState({ state: "blocked_demo_only", submitted: 0, consecutiveLosses: 0, remaining: 3 });
+        }
+      } else {
+        setAutoArmed(false);
+      }
+    } else if (action === "stop") {
+      autoSessionRef.current?.stop();
+      setAutoArmed(false);
+      setAutoState(autoSessionRef.current?.snapshot() ?? null);
+    }
     setBusy(true);
     socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier } : { action } }));
   }
@@ -456,16 +486,12 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
           </label>
         </div>
         <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-          <button type="button" disabled={!isDemoAccount || !executeDemoStrategyTrade || !active || autoArmed || autoState?.state === "executing" || !/^\d+(?:\.\d{1,2})?$/.test(strategyStake) || Number(strategyStake) < 1 || Number(strategyStake) > 1000} onClick={() => {
-            signalConsumedRef.current = false;
-            try { autoSessionRef.current = createDemoExecutionSession({ sessionId: symbol + "-" + Date.now(), isDemoAccount, executeAndReconcile: executeDemoStrategyTrade! }); setAutoState(autoSessionRef.current.snapshot()); setAutoArmed(true); }
-            catch { setAutoState({ state: "blocked_demo_only", submitted: 0, consecutiveLosses: 0, remaining: 3 }); }
-          }} style={{ border: 0, borderRadius: 8, padding: "8px 11px", background: "#168a68", color: "#fff", fontSize: 10, fontWeight: 850, cursor: "pointer", opacity: !isDemoAccount || !executeDemoStrategyTrade || !active ? .45 : 1 }}>Arm on qualification</button>
+          <span style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", color: autoArmed ? "#35d6a0" : "var(--muted)", fontSize: 10, fontWeight: 850 }}>{autoArmed ? "Run active · execution armed" : "Execution disarmed"}</span>
           <button type="button" disabled={!autoArmed && autoState?.state !== "executing"} onClick={() => { autoSessionRef.current?.stop(); setAutoArmed(false); setAutoState(autoSessionRef.current?.snapshot() ?? null); }} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", background: "transparent", color: "var(--ink)", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>Stop new buys</button>
           <span style={{ color: "var(--muted)", fontSize: 10 }}>{!isDemoAccount ? "Select a Demo account to enable" : autoArmed ? "Armed · waiting for a qualified signal" : autoState ? autoState.state + " · " + autoState.submitted + "/3 settled · " + autoState.consecutiveLosses + " consecutive losses" : "Disarmed · no orders will be placed"}</span>
         </div>
         {autoState?.state === "reconciliation_required" && <div role="alert" style={{ color: "#f4b740", fontSize: 10 }}>Order outcome is unresolved. Automatic execution is paused. Reconcile the contract and statement directly in Deriv before any retry.</div>}
-        <div style={{ color: "var(--muted)", fontSize: 9 }}>Real-account execution is disabled. Arming does not place an order; execution starts only after one exclusive Under/Over qualification. Every buy waits for Deriv settlement before the next.</div>
+        <div style={{ color: "var(--muted)", fontSize: 9 }}>Real-account execution is disabled. Clicking Run arms demo execution; no buy occurs until the backend reports a completed entry signal after all filters and the tick sequence pass. Each buy waits for authoritative Deriv settlement. The session stops after the sequence and requires a fresh Run.</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 13 }}>
         <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
