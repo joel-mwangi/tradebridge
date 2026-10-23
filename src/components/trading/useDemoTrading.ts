@@ -30,6 +30,16 @@ type TradeInput = {
   barrier?: string;
 };
 
+type AutoTradeResult = { status: "settled"; contractId: string; outcome: "won" | "lost" | "breakeven"; profit: number };
+type AutoTradePending = {
+  proposalId: number;
+  buyId: number | null;
+  contractId: string | null;
+  resolve: (result: AutoTradeResult) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
 type ApiMessage = {
   msg_type?: string;
   req_id?: number;
@@ -85,6 +95,7 @@ export function useTradingSession(
   const statementRequestRef = useRef<{ id: number; offset: number; limit: number } | null>(null);
   const loadedStatementCountRef = useRef(STATEMENT_PAGE_SIZE);
   const buyRequestRef = useRef<number | null>(null);
+  const autoTradeRef = useRef<AutoTradePending | null>(null);
   const sellRequestRef = useRef<{ id: number; contractId: string } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedContractIdsRef = useRef<Set<string>>(new Set());
@@ -303,6 +314,17 @@ export function useTradingSession(
               return;
             }
             const requestId = message.req_id;
+            const pendingAuto = autoTradeRef.current;
+            if (pendingAuto && (requestId === pendingAuto.proposalId || requestId === pendingAuto.buyId)) {
+              if (pendingAuto.timer) clearTimeout(pendingAuto.timer);
+              autoTradeRef.current = null;
+              if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+              setOrderResolutionRequired(true);
+              setBusy(false);
+              setStatus("Demo strategy order was rejected or could not be confirmed. Reconcile Deriv account activity before retrying.");
+              pendingAuto.reject(new Error(errorMessage || "Demo strategy order failed; reconciliation required"));
+              return;
+            }
             if (statementRequestRef.current && requestId === statementRequestRef.current.id) {
               statementRequestRef.current = null;
               setActivityLoading(false);
@@ -422,6 +444,57 @@ export function useTradingSession(
             return;
           }
 
+          const pendingAuto = autoTradeRef.current;
+          if (message.msg_type === "proposal" && message.proposal && pendingAuto && message.req_id === pendingAuto.proposalId) {
+            const proposalId = String(message.proposal.id ?? "");
+            const askPrice = numeric(message.proposal.ask_price);
+            if (!proposalId || askPrice === null || askPrice <= 0) {
+              if (pendingAuto.timer) clearTimeout(pendingAuto.timer);
+              autoTradeRef.current = null;
+              if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+              setOrderResolutionRequired(true);
+              setBusy(false);
+              pendingAuto.reject(new Error("Invalid Demo quote; reconciliation required"));
+              return;
+            }
+            const buyId = ++sequenceRef.current;
+            pendingAuto.buyId = buyId;
+            if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "pending");
+            setStatus("Qualified signal confirmed. Submitting Demo contract to Deriv…");
+            const activeSocket = socketRef.current;
+            if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) {
+              if (pendingAuto.timer) clearTimeout(pendingAuto.timer);
+              autoTradeRef.current = null;
+              if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+              setOrderResolutionRequired(true);
+              setBusy(false);
+              pendingAuto.reject(new Error("Trading connection lost before buy; reconciliation required"));
+              return;
+            }
+            activeSocket.send(JSON.stringify({ buy: proposalId, price: askPrice, req_id: buyId }));
+            return;
+          }
+
+          if (message.msg_type === "buy" && message.buy && pendingAuto && pendingAuto.buyId !== null && message.req_id === pendingAuto.buyId) {
+            const contractId = String(message.buy.contract_id ?? "");
+            if (!/^\d+$/.test(contractId)) {
+              if (pendingAuto.timer) clearTimeout(pendingAuto.timer);
+              autoTradeRef.current = null;
+              if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+              setOrderResolutionRequired(true);
+              setBusy(false);
+              pendingAuto.reject(new Error("Deriv buy response lacked a valid contract ID; reconciliation required"));
+              refreshAccount();
+              return;
+            }
+            pendingAuto.contractId = contractId;
+            setStatus("Demo contract " + contractId + " accepted. Waiting for Deriv settlement…");
+            subscribedContractIdsRef.current.add(contractId);
+            send({ proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1, req_id: ++sequenceRef.current });
+            refreshAccount();
+            return;
+          }
+
           if (message.msg_type === "proposal" && message.proposal && quoteRequestRef.current && message.req_id === quoteRequestRef.current.id) {
             clearTimeoutRef();
             const input = quoteRequestRef.current.input;
@@ -499,6 +572,26 @@ export function useTradingSession(
           if (message.msg_type === "proposal_open_contract" && message.proposal_open_contract) {
             const raw = message.proposal_open_contract;
             const position = toPosition(raw);
+            const pendingAuto = autoTradeRef.current;
+            if (pendingAuto?.contractId && position?.contractId === pendingAuto.contractId && position.status === "settled") {
+              const profit = numeric((raw as Record<string, unknown>).profit);
+              if (profit === null) {
+                if (pendingAuto.timer) clearTimeout(pendingAuto.timer);
+                autoTradeRef.current = null;
+                if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+                setOrderResolutionRequired(true);
+                setBusy(false);
+                pendingAuto.reject(new Error("Settled contract did not include authoritative profit; reconciliation required"));
+                return;
+              }
+              if (pendingAuto.timer) clearTimeout(pendingAuto.timer);
+              autoTradeRef.current = null;
+              if (orderResolutionKey) clearOrderResolution(orderResolutionKey);
+              setOrderResolutionRequired(false);
+              setBusy(false);
+              setStatus("Demo contract " + pendingAuto.contractId + " settled. Strategy is reconciling the outcome.");
+              pendingAuto.resolve({ status: "settled", contractId: pendingAuto.contractId, profit, outcome: profit > 0 ? "won" : profit < 0 ? "lost" : "breakeven" });
+            }
             if (!position) return;
             // toPosition normalizes provider-specific terminal flags/status.
             // Never compare normalized "settled" to raw Deriv status names.
@@ -536,6 +629,14 @@ export function useTradingSession(
           pingTimer = null;
           statementRequestRef.current = null;
           setActivityLoading(false);
+          if (autoTradeRef.current) {
+            const pending = autoTradeRef.current;
+            autoTradeRef.current = null;
+            if (pending.timer) clearTimeout(pending.timer);
+            if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+            setOrderResolutionRequired(true);
+            pending.reject(new Error("Trading connection closed during Demo strategy execution; reconciliation required"));
+          }
           if (buyRequestRef.current !== null || sellRequestRef.current !== null) {
             // A socket closing while an order is in-flight leaves its outcome
             // ambiguous, regardless of whether it was a buy or early sale.
@@ -588,9 +689,62 @@ export function useTradingSession(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, account?.account_id, account?.account_type, account?.currency, realTradingEnabled]);
 
+  function executeDemoStrategyTrade(input: TradeInput): Promise<AutoTradeResult> {
+    return new Promise((resolve, reject) => {
+      const persistedResolution = readOrderResolution(orderResolutionKey);
+      const activeSocket = socketRef.current;
+      if ((account?.account_type ?? "").toLowerCase() !== "demo") {
+        reject(new Error("Automatic strategy execution is restricted to Deriv Demo accounts."));
+        return;
+      }
+      if (!connected || !account || !activeSocket || activeSocket.readyState !== WebSocket.OPEN) {
+        reject(new Error("Authenticated Demo trading session is not connected."));
+        return;
+      }
+      if (persistedResolution || orderResolutionRequired || autoTradeRef.current || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+        reject(new Error("Order reconciliation is required or another order is active."));
+        return;
+      }
+      if (!Number.isFinite(input.stake) || input.stake < 1 || input.stake > 1000
+        || !Number.isInteger(input.duration) || input.duration < 1 || input.duration > 10 || input.durationUnit !== "t") {
+        reject(new Error("Demo strategy stake or tick duration is outside the supported range."));
+        return;
+      }
+      const barrier = input.barrier === undefined ? null : /^\d$/.test(input.barrier) ? Number(input.barrier) : null;
+      if ((input.contractType === "DIGITOVER" && (barrier === null || barrier > 8))
+        || (input.contractType === "DIGITUNDER" && (barrier === null || barrier < 1))) {
+        reject(new Error("Over/Under strategy requires a valid barrier digit."));
+        return;
+      }
+      const proposalId = ++sequenceRef.current;
+      const pending: AutoTradePending = { proposalId, buyId: null, contractId: null, resolve, reject, timer: null };
+      autoTradeRef.current = pending;
+      if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "pending");
+      setOrderResolutionRequired(true);
+      setQuote(null);
+      setBusy(true);
+      setStatus("Automatic Demo strategy requesting a fresh quote…");
+      pending.timer = setTimeout(() => {
+        if (autoTradeRef.current !== pending) return;
+        autoTradeRef.current = null;
+        if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
+        setOrderResolutionRequired(true);
+        setBusy(false);
+        setStatus("Demo strategy order outcome is unknown. Reconcile Deriv before retrying.");
+        reject(new Error("Demo strategy timed out; reconciliation required"));
+      }, 45_000);
+      activeSocket.send(JSON.stringify({
+        proposal: 1, amount: input.stake, basis: "stake", contract_type: input.contractType,
+        currency: account.currency ?? "USD", duration: input.duration, duration_unit: "t",
+        ...(input.barrier !== undefined ? { barrier: input.barrier } : {}),
+        underlying_symbol: input.symbol, req_id: proposalId,
+      }));
+    });
+  }
+
   function requestQuote(input: TradeInput) {
     const persistedResolution = readOrderResolution(orderResolutionKey);
-    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+    if (persistedResolution || orderResolutionRequired || autoTradeRef.current !== null || buyRequestRef.current !== null || sellRequestRef.current !== null) {
       setOrderResolutionRequired(true);
       setQuote(null);
       setStatus("Trade entry is paused because a previous order has an unknown outcome. Reconcile open positions and account statement directly in Deriv before unlocking.");
@@ -674,7 +828,7 @@ export function useTradingSession(
 
   function confirmQuote() {
     const persistedResolution = readOrderResolution(orderResolutionKey);
-    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+    if (persistedResolution || orderResolutionRequired || autoTradeRef.current !== null || buyRequestRef.current !== null || sellRequestRef.current !== null) {
       setOrderResolutionRequired(true);
       setQuote(null);
       setStatus("Trade entry is paused because a previous order has an unknown outcome. Reconcile open positions and account statement directly in Deriv before unlocking.");
@@ -765,7 +919,7 @@ export function useTradingSession(
 
   function sellPosition(contractId: string) {
     const persistedResolution = readOrderResolution(orderResolutionKey);
-    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+    if (persistedResolution || orderResolutionRequired || autoTradeRef.current !== null || buyRequestRef.current !== null || sellRequestRef.current !== null) {
       setOrderResolutionRequired(true);
       setStatus("Order actions are paused because a previous submission has an unknown outcome. Reconcile it directly in Deriv before submitting another order.");
       return;
@@ -820,5 +974,6 @@ export function useTradingSession(
     orderResolutionRequired, acknowledgeOrderResolution,
     activityHasMore, activityLoading, loadMoreActivity,
     requestQuote, confirmQuote, dismissQuote, sellPosition, refreshAccount: refreshAccountNow,
+    executeDemoStrategyTrade,
   };
 }
