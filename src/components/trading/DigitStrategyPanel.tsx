@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { createDemoExecutionSession } from "./strategy-auto-execution.mjs";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -76,7 +77,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, frequency }: { symbol: string; windowSize: number; barrier: number; frequency?: import("./types").BackendDigitFrequency }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, frequency, isDemoAccount = false, executeDemoStrategyTrade }: { symbol: string; windowSize: number; barrier: number; frequency?: import("./types").BackendDigitFrequency; isDemoAccount?: boolean; executeDemoStrategyTrade?: (input: { symbol: string; contractType: "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "t"; barrier: string }) => Promise<{ status: "settled"; contractId: string; outcome: "won" | "lost" | "breakeven"; profit: number }> }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -88,6 +89,11 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
   const [events, setEvents] = useState<Array<{ key: string; kind: "tick" | "status" | "warning"; time: number; digit?: number }>>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundVolume, setSoundVolume] = useState(0.35);
+  const [strategyStake, setStrategyStake] = useState("1");
+  const [autoArmed, setAutoArmed] = useState(false);
+  const [autoState, setAutoState] = useState<{ state: string; submitted: number; consecutiveLosses: number; remaining: number } | null>(null);
+  const autoSessionRef = useRef<ReturnType<typeof createDemoExecutionSession> | null>(null);
+  const signalConsumedRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const previousTransportRef = useRef<typeof transport | null>(null);
   const previousStrategyStateRef = useRef<string | null>(null);
@@ -148,6 +154,21 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
     setSoundVolume(value);
     try { localStorage.setItem("tradebridge_strategy_sound_volume", String(value)); } catch { /* ignore */ }
   }
+
+  useEffect(() => {
+    if (!autoArmed || !autoSessionRef.current || !executeDemoStrategyTrade || !isDemoAccount) return;
+    const under = status?.qualification?.under_qualifies === true;
+    const over = status?.qualification?.over_qualifies === true;
+    if (under === over || signalConsumedRef.current) return;
+    const direction = under ? "UNDER" : "OVER";
+    if ((direction === "UNDER" && barrier < 1) || (direction === "OVER" && barrier > 8)) return;
+    signalConsumedRef.current = true;
+    const session = autoSessionRef.current;
+    const stake = Number(strategyStake);
+    if (!Number.isFinite(stake) || stake < 1 || stake > 1000) { setAutoState({ state: "blocked_invalid_stake", submitted: 0, consecutiveLosses: 0, remaining: 3 }); setAutoArmed(false); return; }
+    const input = { symbol, contractType: direction === "UNDER" ? "DIGITUNDER" as const : "DIGITOVER" as const, stake, duration: 1, durationUnit: "t" as const, barrier: String(barrier) };
+    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: symbol + ":" + barrier + ":" + direction + ":" + Date.now() }, input).then((snapshot) => setAutoState(snapshot)).catch(() => setAutoState(session.snapshot()));
+  }, [autoArmed, status?.qualification?.under_qualifies, status?.qualification?.over_qualifies, symbol, barrier, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
 
   useEffect(() => {
     const previous = previousTransportRef.current;
@@ -423,6 +444,25 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
         Barrier <strong style={{ color: "#22d3ee" }}>{barrier}</strong>: {barrierCount.toLocaleString()} matching ticks excluded from Over/Under · frequency colors show rank, not contract outcome.
       </div>
 
+      <div style={{ marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))", display: "grid", gap: 9 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div><div style={{ color: "var(--ink)", fontSize: 12, fontWeight: 850 }}>Demo auto-execution</div><div style={{ color: "var(--muted)", fontSize: 10, marginTop: 3 }}>1-tick Over/Under · max 3 settled buys · stop at 2 consecutive losses</div></div>
+          <label style={{ color: "var(--muted)", fontSize: 10, display: "flex", alignItems: "center", gap: 6 }}>Stake
+            <input aria-label="Demo strategy stake" type="number" min="1" max="1000" step="1" value={strategyStake} disabled={autoArmed || autoState?.state === "executing"} onChange={(event) => setStrategyStake(event.target.value)} style={{ width: 76, padding: "7px 8px", border: "1px solid var(--line)", borderRadius: 8, background: "var(--surface)", color: "var(--ink)" }} />
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+          <button type="button" disabled={!isDemoAccount || !executeDemoStrategyTrade || !active || autoArmed || autoState?.state === "executing" || !/^\d+(?:\.\d{1,2})?$/.test(strategyStake) || Number(strategyStake) < 1 || Number(strategyStake) > 1000} onClick={() => {
+            signalConsumedRef.current = false;
+            try { autoSessionRef.current = createDemoExecutionSession({ sessionId: symbol + "-" + Date.now(), isDemoAccount, executeAndReconcile: executeDemoStrategyTrade! }); setAutoState(autoSessionRef.current.snapshot()); setAutoArmed(true); }
+            catch { setAutoState({ state: "blocked_demo_only", submitted: 0, consecutiveLosses: 0, remaining: 3 }); }
+          }} style={{ border: 0, borderRadius: 8, padding: "8px 11px", background: "#168a68", color: "#fff", fontSize: 10, fontWeight: 850, cursor: "pointer", opacity: !isDemoAccount || !executeDemoStrategyTrade || !active ? .45 : 1 }}>Arm on qualification</button>
+          <button type="button" disabled={!autoArmed && autoState?.state !== "executing"} onClick={() => { autoSessionRef.current?.stop(); setAutoArmed(false); setAutoState(autoSessionRef.current?.snapshot() ?? null); }} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", background: "transparent", color: "var(--ink)", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>Stop new buys</button>
+          <span style={{ color: "var(--muted)", fontSize: 10 }}>{!isDemoAccount ? "Select a Demo account to enable" : autoArmed ? "Armed · waiting for a qualified signal" : autoState ? autoState.state + " · " + autoState.submitted + "/3 settled · " + autoState.consecutiveLosses + " consecutive losses" : "Disarmed · no orders will be placed"}</span>
+        </div>
+        {autoState?.state === "reconciliation_required" && <div role="alert" style={{ color: "#f4b740", fontSize: 10 }}>Order outcome is unresolved. Automatic execution is paused. Reconcile the contract and statement directly in Deriv before any retry.</div>}
+        <div style={{ color: "var(--muted)", fontSize: 9 }}>Real-account execution is disabled. Arming does not place an order; execution starts only after one exclusive Under/Over qualification. Every buy waits for Deriv settlement before the next.</div>
+      </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 13 }}>
         <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
           <span style={{ width: 8, height: 8, flexShrink: 0, borderRadius: 99, background: state === "blocked" || transport === "disconnected" || transport === "stale" ? "#f4b740" : active ? "#35d6a0" : "var(--muted)" }} />
