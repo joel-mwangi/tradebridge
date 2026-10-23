@@ -1274,3 +1274,9 @@
   .chartPanel .chartQuote { max-width: 55%; }
   .chartPanel .tickMoveUp, .chartPanel .tickMoveDown, .chartPanel .tickMoveNeutral { white-space: normal; }
 }
+
+
+/* Contract-aware colors for the compact ticket's frequency histogram. */
+.ticketDigitCircle.ticketDigitQualifies { border-color:#16a34a; background:rgba(22,163,74,.16); color:#22c55e; }
+.ticketDigitCircle.ticketDigitOther { border-color:var(--border); background:var(--surface); color:var(--muted); }
+.ticketDigitCircle.ticketDigitBarrier { border-color:#f59e0b; background:rgba(245,158,11,.17); color:#fbbf24; }
