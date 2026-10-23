@@ -78,7 +78,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, frequency, isDemoAccount = false, executeDemoStrategyTrade }: { symbol: string; windowSize: number; barrier: number; frequency?: import("./types").BackendDigitFrequency; isDemoAccount?: boolean; executeDemoStrategyTrade?: (input: { symbol: string; contractType: "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "t"; barrier: string }) => Promise<{ status: "settled"; contractId: string; outcome: "won" | "lost" | "breakeven"; profit: number }> }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, frequency, isDemoAccount = false, executeDemoStrategyTrade }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; frequency?: import("./types").BackendDigitFrequency; isDemoAccount?: boolean; executeDemoStrategyTrade?: (input: { symbol: string; contractType: "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "t"; barrier: string }) => Promise<{ status: "settled"; contractId: string; outcome: "won" | "lost" | "breakeven"; profit: number }> }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -283,7 +283,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
     socket.send(JSON.stringify({ strategy: { action: "start", symbol, window_size: windowSize, barrier } }));
-  }, [symbol, windowSize, barrier, status?.state, status?.symbol, status?.digit_window_size, status?.barrier]);
+  }, [symbol, windowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier]);
 
   useEffect(() => {
     if (!lastTickAt) return;
@@ -321,7 +321,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
       setAutoState(autoSessionRef.current?.snapshot() ?? null);
     }
     setBusy(true);
-    socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier } : { action } }));
+    socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } : { action } }));
   }
 
   const state = status?.state ?? "idle";
