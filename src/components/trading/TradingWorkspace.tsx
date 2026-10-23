@@ -661,7 +661,7 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} />
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} isDemoAccount={activeAccountIsDemo && accountSessionReady} executeDemoStrategyTrade={trading.executeDemoStrategyTrade} />
                 )}
 
                 {tradeView === "charts" && (
