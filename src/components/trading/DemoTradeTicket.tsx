@@ -86,24 +86,6 @@ export default function DemoTradeTicket({
   const belowCount = observedDigits.filter((digit) => digit < target).length;
   const percent = (count: number) => observedDigits.length ? (count / observedDigits.length * 100).toFixed(1) + "%" : "—";
   const digitFrequencyCounts = Array.from({ length: 10 }, (_, digit) => recentFrequency?.counts[String(digit)] ?? 0);
-  const digitOutcomeClass = (digit: number) => {
-    if ((mode === "over-under" || mode === "matches-differs") && digit === target) return styles.ticketDigitBarrier;
-    const qualifies = mode === "over-under"
-      ? (activePrediction === "UNDER" ? digit < target : digit > target)
-      : mode === "even-odd"
-        ? (activePrediction === "EVEN" ? digit % 2 === 0 : digit % 2 !== 0)
-        : (activePrediction === "MATCHES" ? digit === target : digit !== target);
-    return qualifies ? styles.ticketDigitQualifies : styles.ticketDigitOther;
-  };
-  const digitOutcomeLabel = (digit: number) => {
-    if ((mode === "over-under" || mode === "matches-differs") && digit === target) return "barrier digit";
-    const qualifies = mode === "over-under"
-      ? (activePrediction === "UNDER" ? digit < target : digit > target)
-      : mode === "even-odd"
-        ? (activePrediction === "EVEN" ? digit % 2 === 0 : digit % 2 !== 0)
-        : (activePrediction === "MATCHES" ? digit === target : digit !== target);
-    return qualifies ? "qualifies for selected contract" : "does not qualify for selected contract";
-  };
   const digitFrequencyPercent = (digit: number) => {
     const value = recentFrequency?.percentages[String(digit)];
     return typeof value === "number" ? value.toFixed(1) + "%" : "—";
