@@ -76,7 +76,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { symbol: string; windowSize: number; barrier: number }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, frequency }: { symbol: string; windowSize: number; barrier: number; frequency?: import("./types").BackendDigitFrequency }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -276,8 +276,21 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { sy
   const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(state));
   const healthColor = transport === "connected" ? "#35d6a0" : transport === "stale" ? "#f4b740" : "#f06f79";
   const tickAge = lastTickAt ? Math.max(0, Math.floor((Date.now() - lastTickAt) / 1000)) : null;
-  const counts = DIGITS.map((digit) => tape.filter((tick) => tick.digit === digit).length);
+  const frequencyWindow = frequency?.symbol === symbol ? frequency.windows?.[String(windowSize)] : undefined;
+  const counts = DIGITS.map((digit) => frequencyWindow?.counts?.[String(digit)] ?? 0);
+  const total = frequencyWindow?.sample_size ?? 0;
+  const hasFrequency = Boolean(frequencyWindow && total > 0);
   const maxCount = Math.max(1, ...counts);
+  const ranked = [...DIGITS].sort((a, b) => counts[b] - counts[a] || a - b);
+  const rank = (digit: number) => hasFrequency ? ranked.indexOf(digit) + 1 : 0;
+  const rankColor = (digit: number) => !hasFrequency ? "var(--muted)" : rank(digit) === 1 ? "#4ade80" : rank(digit) === 2 ? "#60a5fa" : rank(digit) === 10 ? "#f87171" : rank(digit) === 9 ? "#fbbf24" : "var(--ink)";
+  const rankBackground = (digit: number) => !hasFrequency ? "var(--surface)" : rank(digit) === 1 ? "#142d25" : rank(digit) === 2 ? "#17283d" : rank(digit) === 10 ? "#351e23" : rank(digit) === 9 ? "#332b19" : "var(--surface)";
+  const overDigits = DIGITS.filter((digit) => digit > barrier);
+  const underDigits = DIGITS.filter((digit) => digit < barrier);
+  const overCount = overDigits.reduce((sum, digit) => sum + counts[digit], 0);
+  const underCount = underDigits.reduce((sum, digit) => sum + counts[digit], 0);
+  const barrierCount = counts[barrier] ?? 0;
+  const percentage = (count: number) => total > 0 ? `${(count / total * 100).toFixed(1)}%` : "—";
   const latest = tape[tape.length - 1];
   const qualification = status?.qualification;
   const groupState = (value?: boolean) => value === true ? "#35d6a0" : value === false ? "#f06f79" : "var(--muted)";
@@ -346,7 +359,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { sy
           </div>
         </div>
         <div style={{ display: "flex", gap: 5, alignItems: "stretch" }}>
-          {tape.length ? tape.slice(-12).map((item) => <button key={item.key} type="button" onClick={() => setSelectedDigit(item.digit)} aria-label={`Inspect digit ${item.digit}`} className="tb-digit-in" style={{ ...tile, borderColor: selectedDigit === item.digit ? "var(--teal)" : "var(--line)", boxShadow: selectedDigit === item.digit ? "inset 0 0 0 1px var(--teal)" : "none", background: item.key === latest?.key ? "var(--teal)" : "var(--surface)", color: item.key === latest?.key ? "#fff" : "var(--ink)", minHeight: 44 }}>{item.digit}</button>) : Array.from({ length: 12 }, (_, index) => <div key={index} style={{ ...tile, minHeight: 44, opacity: .25 + (index % 4) * .12 }}><span className={transport === "connected" ? "tb-pulse" : ""} style={{ width: 5, height: 5, borderRadius: 9, background: "var(--muted)" }} /></div>)}
+          {tape.length ? tape.slice(-12).map((item) => <button key={item.key} type="button" onClick={() => setSelectedDigit(item.digit)} aria-label={`Inspect digit ${item.digit}`} className="tb-digit-in" style={{ ...tile, borderColor: selectedDigit === item.digit ? "var(--teal)" : rankColor(item.digit), boxShadow: selectedDigit === item.digit ? "inset 0 0 0 1px var(--teal)" : item.key === latest?.key ? "0 0 0 2px #22d3ee" : "none", background: rankBackground(item.digit), color: rankColor(item.digit), minHeight: 44 }}>{item.digit}</button>) : Array.from({ length: 12 }, (_, index) => <div key={index} style={{ ...tile, minHeight: 44, opacity: .25 + (index % 4) * .12 }}><span className={transport === "connected" ? "tb-pulse" : ""} style={{ width: 5, height: 5, borderRadius: 9, background: "var(--muted)" }} /></div>)}
         </div>
         <div style={{ height: 2, overflow: "hidden", borderRadius: 5, marginTop: 11, background: "var(--line)" }}>
           <div style={{ width: transport === "connected" ? "35%" : "12%", height: "100%", background: healthColor, animation: transport === "connected" ? "tb-sweep 2.5s linear infinite" : "none" }} />
@@ -356,14 +369,20 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { sy
       <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))", gap: 5, marginTop: 12 }}>
         {DIGITS.map((digit) => {
           const count = counts[digit];
-          const height = Math.max(5, (count / maxCount) * 35);
+          const height = Math.max(3, (count / maxCount) * 35);
           const chosen = selectedDigit === digit;
-          return <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={`Select digit ${digit}, observed ${count} times in the visible tape`} style={{ border: `1px solid ${chosen ? "var(--teal)" : "var(--line)"}`, borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "color-mix(in srgb, var(--teal) 8%, transparent)" : "transparent", color: "var(--ink)", minWidth: 0, cursor: "pointer" }}>
+          const color = rankColor(digit);
+          return <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={`Digit ${digit}: ${count} backend-observed ticks`} style={{ border: `1px solid ${chosen ? "var(--teal)" : hasFrequency ? color : "var(--line)"}`, borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "color-mix(in srgb, var(--teal) 8%, transparent)" : rankBackground(digit), color, minWidth: 0, cursor: "pointer" }}>
             <span style={{ display: "block", fontSize: 11, fontWeight: 800 }}>{digit}</span>
-            <span style={{ height: 38, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}><span style={{ width: "58%", maxWidth: 16, height, borderRadius: 4, background: chosen ? "var(--teal)" : count ? "color-mix(in srgb, var(--teal) 60%, transparent)" : "var(--line)", transition: "height .18s ease" }} /></span>
-            <span style={{ display: "block", fontSize: 9, color: "var(--muted)" }}>{count}</span>
+            <span style={{ height: 38, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}><span style={{ width: "58%", maxWidth: 16, height: hasFrequency ? height : 3, borderRadius: 4, background: hasFrequency ? color : "var(--line)", transition: "height .18s ease" }} /></span>
+            <span style={{ display: "block", fontSize: 9 }}>{hasFrequency ? percentage(count) : "—"}</span>
+            <span style={{ display: "block", fontSize: 8, color: "var(--muted)" }}>{hasFrequency ? count.toLocaleString() : "—"}</span>
           </button>;
         })}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, marginTop: 8, color: "var(--muted)", fontSize: 9 }}>
+        <span>{hasFrequency ? `${total.toLocaleString()} / ${windowSize.toLocaleString()} ticks` : "Waiting for backend frequency snapshot"}</span>
+        <span style={{ color: "#4ade80" }}>● Highest</span><span style={{ color: "#60a5fa" }}>● 2nd highest</span><span style={{ color: "#f87171" }}>● Lowest</span><span style={{ color: "#fbbf24" }}>● 2nd lowest</span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 12 }}>
@@ -383,6 +402,25 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { sy
             </div>
           </div>
         ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 10 }}>
+        {[
+          { label: "UNDER", digits: underDigits, count: underCount, color: "#60a5fa", operator: "<" },
+          { label: "OVER", digits: overDigits, count: overCount, color: "#4ade80", operator: ">" },
+        ].map((group) => <div key={group.label} style={{ border: `1px solid ${group.color}55`, borderRadius: 12, padding: 10, background: `color-mix(in srgb, ${group.color} 5%, transparent)` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+            <strong style={{ color: group.color, fontSize: 10, letterSpacing: ".12em" }}>{group.label} {group.operator} {barrier}</strong>
+            <strong style={{ color: "var(--ink)", fontSize: 12 }}>{percentage(group.count)}</strong>
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 9 }}>
+            {group.digits.map((digit) => <span key={digit} title={`Digit ${digit}: ${counts[digit]} ticks`} style={{ flex: 1, minWidth: 0, textAlign: "center", border: `1px solid ${rankColor(digit)}55`, borderRadius: 6, padding: "6px 0", color: rankColor(digit), background: rankBackground(digit), fontWeight: 800, fontSize: 12 }}>{digit}</span>)}
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 9, marginTop: 7 }}>{hasFrequency ? `${group.count.toLocaleString()} ticks` : "Awaiting frequency data"}</div>
+        </div>)}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 9, color: "var(--muted)" }}>
+        Barrier <strong style={{ color: "#22d3ee" }}>{barrier}</strong>: {barrierCount.toLocaleString()} matching ticks excluded from Over/Under · frequency colors show rank, not contract outcome.
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 13 }}>
