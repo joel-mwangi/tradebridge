@@ -16,6 +16,7 @@ type StrategyStatus = {
   state?: string;
   reason?: string;
   selected_group?: string | null;
+  requested_direction?: string | null;
   signal_generated?: boolean;
   trigger_digit?: number | null;
   feed_state?: string;
