@@ -306,6 +306,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     }
     if (action === "start" && !symbol) return;
     if (action === "start") {
+      // Clear prior-run status before arming so an old signal cannot trigger a new sequence.
+      setStatus(null);
       signalConsumedRef.current = false;
       setAutoState(null);
       if (isDemoAccount && executeDemoStrategyTrade) {
