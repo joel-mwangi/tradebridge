@@ -50,26 +50,6 @@ export default function DigitAnalysis({
   const below = digits.filter((p) => p.digit < target).length;
   const matches = counts[target];
   const differs = total - matches;
-  const outcomeClass = (digit: number) => {
-    if (mode === "over-under" || mode === "matches-differs") {
-      if (digit === target) return styles.contractBarrier;
-    }
-    const qualifies = mode === "over-under"
-      ? (prediction === "UNDER" ? digit < target : digit > target)
-      : mode === "even-odd"
-        ? (prediction === "EVEN" ? digit % 2 === 0 : digit % 2 !== 0)
-        : (prediction === "MATCHES" ? digit === target : digit !== target);
-    return qualifies ? styles.contractQualifies : styles.contractOther;
-  };
-  const outcomeLabel = (digit: number) => {
-    if ((mode === "over-under" || mode === "matches-differs") && digit === target) return "barrier digit";
-    const qualifies = mode === "over-under"
-      ? (prediction === "UNDER" ? digit < target : digit > target)
-      : mode === "even-odd"
-        ? (prediction === "EVEN" ? digit % 2 === 0 : digit % 2 !== 0)
-        : (prediction === "MATCHES" ? digit === target : digit !== target);
-    return qualifies ? "qualifies for selected contract" : "does not qualify for selected contract";
-  };
   const percent = (digit: number) => {
     const value = frequency?.percentages[String(digit)];
     return typeof value === "number" ? value.toFixed(1) + "%" : "—";
@@ -96,7 +76,7 @@ export default function DigitAnalysis({
         const r = rank(d);
         const cls = r === 1 ? styles.top : r === 2 ? styles.second : r === 10 ? styles.low : r === 9 ? styles.secondLow : "";
         return <div className={styles.frequencyItem} key={d}>
-          <div className={[styles.ring, cls, outcomeClass(d), d === latestDigit ? styles.latestDigitRing : ""].filter(Boolean).join(" ")} aria-label={`Digit ${d}, ${percent(d)} of observed ticks; ${outcomeLabel(d)}`}><strong className={styles.digitNumber}>{d}</strong><span className={styles.digitPercent}>{percent(d)}</span>{d === latestDigit && <span className={styles.star} aria-label="Latest incoming tick digit" title="Latest incoming tick">★</span>}</div>
+          <div className={[styles.ring, cls, d === latestDigit ? styles.latestDigitRing : ""].filter(Boolean).join(" ")} aria-label={`Digit ${d}, ${percent(d)} of observed ticks`}><strong className={styles.digitNumber}>{d}</strong><span className={styles.digitPercent}>{percent(d)}</span>{d === latestDigit && <span className={styles.star} aria-label="Latest incoming tick digit" title="Latest incoming tick">★</span>}</div>
           <span className={styles.count}>{frequency ? `${counts[d]} ticks` : "Waiting for backend"}</span>
           <span className={styles.rank}>{!total ? " " : r === 1 ? "Highest" : r === 2 ? "2nd high" : r === 9 ? "2nd low" : r === 10 ? "Lowest" : " "}</span>
         </div>;
