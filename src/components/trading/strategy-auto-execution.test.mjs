@@ -98,15 +98,20 @@ test("rejects unqualified or mismatched-market signals", async () => {
 });
 
 test("prevents overlapping sequences", async () => {
-  let resolveTrade;
+  let releaseFirst;
+  let calls = 0;
   const runner = createDemoExecutionSession({
     sessionId: "s7", isDemoAccount: true,
-    executeAndReconcile: () => new Promise((resolve) => { resolveTrade = resolve; }),
+    executeAndReconcile: () => {
+      calls += 1;
+      if (calls === 1) return new Promise((resolve) => { releaseFirst = resolve; });
+      return Promise.resolve(settled(String(calls), "won", 1));
+    },
   });
   const pending = runner.runQualifiedSignal(signal, input);
   await Promise.resolve();
   await assert.rejects(() => runner.runQualifiedSignal(signal, input), /already in flight/);
-  resolveTrade(settled("1", "won", 1));
+  releaseFirst(settled("1", "won", 1));
   const result = await pending;
   assert.equal(result.submitted, 3);
 });
