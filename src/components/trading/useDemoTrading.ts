@@ -477,7 +477,7 @@ export function useTradingSession(
 
           if (message.msg_type === "buy" && message.buy && pendingAuto && pendingAuto.buyId !== null && message.req_id === pendingAuto.buyId) {
             const contractId = String(message.buy.contract_id ?? "");
-            if (!/^\\d+$/.test(contractId)) {
+            if (!/^\d+$/.test(contractId)) {
               if (pendingAuto.timer) clearTimeout(pendingAuto.timer);
               autoTradeRef.current = null;
               if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
@@ -710,7 +710,7 @@ export function useTradingSession(
         reject(new Error("Demo strategy stake or tick duration is outside the supported range."));
         return;
       }
-      const barrier = input.barrier === undefined ? null : /^\\d$/.test(input.barrier) ? Number(input.barrier) : null;
+      const barrier = input.barrier === undefined ? null : /^\d$/.test(input.barrier) ? Number(input.barrier) : null;
       if ((input.contractType === "DIGITOVER" && (barrier === null || barrier > 8))
         || (input.contractType === "DIGITUNDER" && (barrier === null || barrier < 1))) {
         reject(new Error("Over/Under strategy requires a valid barrier digit."));
