@@ -385,7 +385,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
         <span style={{ color: "#4ade80" }}>● Highest</span><span style={{ color: "#60a5fa" }}>● 2nd highest</span><span style={{ color: "#f87171" }}>● Lowest</span><span style={{ color: "#fbbf24" }}>● 2nd lowest</span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 12 }}>      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 12 }}>
         {[
           { id: "under", icon: "↓", color: groupState(qualification?.under_qualifies), qualifies: qualification?.under_qualifies, threshold: qualification?.under_threshold_passes, stability: qualification?.under_stability_passes },
           { id: "over", icon: "↑", color: groupState(qualification?.over_qualifies), qualifies: qualification?.over_qualifies, threshold: qualification?.over_threshold_passes, stability: qualification?.over_stability_passes },
@@ -402,6 +402,25 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, freque
             </div>
           </div>
         ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 10 }}>
+        {[
+          { label: "UNDER", digits: underDigits, count: underCount, color: "#60a5fa", operator: "<" },
+          { label: "OVER", digits: overDigits, count: overCount, color: "#4ade80", operator: ">" },
+        ].map((group) => <div key={group.label} style={{ border: `1px solid ${group.color}55`, borderRadius: 12, padding: 10, background: `color-mix(in srgb, ${group.color} 5%, transparent)` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+            <strong style={{ color: group.color, fontSize: 10, letterSpacing: ".12em" }}>{group.label} {group.operator} {barrier}</strong>
+            <strong style={{ color: "var(--ink)", fontSize: 12 }}>{percentage(group.count)}</strong>
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 9 }}>
+            {group.digits.map((digit) => <span key={digit} title={`Digit ${digit}: ${counts[digit]} ticks`} style={{ flex: 1, minWidth: 0, textAlign: "center", border: `1px solid ${rankColor(digit)}55`, borderRadius: 6, padding: "6px 0", color: rankColor(digit), background: rankBackground(digit), fontWeight: 800, fontSize: 12 }}>{digit}</span>)}
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 9, marginTop: 7 }}>{hasFrequency ? `${group.count.toLocaleString()} ticks` : "Awaiting frequency data"}</div>
+        </div>)}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 9, color: "var(--muted)" }}>
+        Barrier <strong style={{ color: "#22d3ee" }}>{barrier}</strong>: {barrierCount.toLocaleString()} matching ticks excluded from Over/Under · frequency colors show rank, not contract outcome.
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 13 }}>
