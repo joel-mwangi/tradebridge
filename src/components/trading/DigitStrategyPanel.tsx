@@ -278,12 +278,16 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   useEffect(() => {
     const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(status.state ?? ""));
     if (!active || !symbol || !Number.isInteger(windowSize)) return;
-    if (status?.symbol === symbol && status?.digit_window_size === windowSize && status?.barrier === barrier) return;
+    if (status?.symbol === symbol && status?.digit_window_size === windowSize && status?.barrier === barrier && status?.requested_direction === direction.toLowerCase()) return;
+    // Configuration changes invalidate the active run. Never silently start a replacement session.
+    autoSessionRef.current?.stop();
+    setAutoArmed(false);
+    setAutoState(autoSessionRef.current?.snapshot() ?? null);
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
-    socket.send(JSON.stringify({ strategy: { action: "start", symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } }));
-  }, [symbol, windowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier]);
+    socket.send(JSON.stringify({ strategy: { action: "stop" } }));
+  }, [symbol, windowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier, status?.requested_direction]);
 
   useEffect(() => {
     if (!lastTickAt) return;
