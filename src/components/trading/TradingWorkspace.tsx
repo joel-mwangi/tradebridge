@@ -661,7 +661,7 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} />
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} />
                 )}
 
                 {tradeView === "charts" && (
