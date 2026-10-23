@@ -719,6 +719,8 @@ export function useTradingSession(
       const proposalId = ++sequenceRef.current;
       const pending: AutoTradePending = { proposalId, buyId: null, contractId: null, resolve, reject, timer: null };
       autoTradeRef.current = pending;
+      if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "pending");
+      setOrderResolutionRequired(true);
       setQuote(null);
       setBusy(true);
       setStatus("Automatic Demo strategy requesting a fresh quote…");
@@ -742,7 +744,7 @@ export function useTradingSession(
 
   function requestQuote(input: TradeInput) {
     const persistedResolution = readOrderResolution(orderResolutionKey);
-    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+    if (persistedResolution || orderResolutionRequired || autoTradeRef.current !== null || buyRequestRef.current !== null || sellRequestRef.current !== null) {
       setOrderResolutionRequired(true);
       setQuote(null);
       setStatus("Trade entry is paused because a previous order has an unknown outcome. Reconcile open positions and account statement directly in Deriv before unlocking.");
@@ -826,7 +828,7 @@ export function useTradingSession(
 
   function confirmQuote() {
     const persistedResolution = readOrderResolution(orderResolutionKey);
-    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+    if (persistedResolution || orderResolutionRequired || autoTradeRef.current !== null || buyRequestRef.current !== null || sellRequestRef.current !== null) {
       setOrderResolutionRequired(true);
       setQuote(null);
       setStatus("Trade entry is paused because a previous order has an unknown outcome. Reconcile open positions and account statement directly in Deriv before unlocking.");
@@ -917,7 +919,7 @@ export function useTradingSession(
 
   function sellPosition(contractId: string) {
     const persistedResolution = readOrderResolution(orderResolutionKey);
-    if (persistedResolution || orderResolutionRequired || buyRequestRef.current !== null || sellRequestRef.current !== null) {
+    if (persistedResolution || orderResolutionRequired || autoTradeRef.current !== null || buyRequestRef.current !== null || sellRequestRef.current !== null) {
       setOrderResolutionRequired(true);
       setStatus("Order actions are paused because a previous submission has an unknown outcome. Reconcile it directly in Deriv before submitting another order.");
       return;
