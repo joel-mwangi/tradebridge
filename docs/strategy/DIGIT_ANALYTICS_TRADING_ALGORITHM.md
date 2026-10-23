@@ -90,14 +90,26 @@ During these 10 seconds:
 
 If data is incomplete or stale, the algorithm must fail closed for qualification: it must not claim that a group is stable based on missing updates.
 
-## 5. Digit groups
+## 5. Strategy qualification groups and barrier-relative display classes
 
-| Group | Digits | Direction used if selected |
+The strategy's **qualification groups** remain the fixed five-digit groups used to compare Digit Analytics percentages and select a contract direction:
+
+| Qualification group | Digits | Direction if selected |
 |---|---|---|
-| **Under** | `0, 1, 2, 3, 4` | Under / `DIGITUNDER` contract |
-| **Over** | `5, 6, 7, 8, 9` | Over / `DIGITOVER` contract |
+| **Under qualification** | `0, 1, 2, 3, 4` | Under / `DIGITUNDER` contract |
+| **Over qualification** | `5, 6, 7, 8, 9` | Over / `DIGITOVER` contract |
 
-The strategy selects one group, then chooses the single digit with the lowest percentage within that group as the trigger digit. It does not select the direction manually from a user control.
+These qualification groups are **not** the same as the barrier-relative classes displayed for the user's selected barrier. The UI must not label the barrier-relative lower/upper sets as the fixed qualification groups.
+
+For a selected barrier `b`, the display classes are mutually exclusive and exhaustive:
+
+- **Lower class:** digits `0` through `b - 1` (`d < b`).
+- **Barrier class:** the single digit `b` (`d = b`).
+- **Upper class:** digits `b + 1` through `9` (`d > b`).
+
+For example, barrier `4` yields lower `{0,1,2,3}`, barrier `{4}`, and upper `{5,6,7,8,9}`. Barrier `6` yields lower `{0,1,2,3,4,5}`, barrier `{6}`, and upper `{7,8,9}`. The barrier digit must not be counted in either lower or upper class. For barrier `0`, the lower class is empty; for barrier `9`, the upper class is empty. Empty classes must display `0` ticks and `—` percentage when the sample size is zero, without dividing by zero.
+
+The strategy selects a qualification group using the threshold and stability rules below, then chooses the lowest-percentage digit in that selected group as its trigger. Barrier-relative display classes are descriptive and do not silently change the established qualification or trigger-sequence rules.
 
 ## 6. Percentage-threshold qualification
 
