@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import type { BackendDigitFrequencyWindow } from "./types";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -76,7 +77,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { symbol: string; windowSize: number; barrier: number }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, frequencyWindow }: { symbol: string; windowSize: number; barrier: number; frequencyWindow?: BackendDigitFrequencyWindow }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -276,9 +277,41 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { sy
   const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(state));
   const healthColor = transport === "connected" ? "#35d6a0" : transport === "stale" ? "#f4b740" : "#f06f79";
   const tickAge = lastTickAt ? Math.max(0, Math.floor((Date.now() - lastTickAt) / 1000)) : null;
-  const counts = DIGITS.map((digit) => tape.filter((tick) => tick.digit === digit).length);
-  const maxCount = Math.max(1, ...counts);
   const latest = tape[tape.length - 1];
+  const frequencyCounts = DIGITS.map((digit) => frequencyWindow?.counts[String(digit)] ?? 0);
+  const maxFrequencyCount = Math.max(1, ...frequencyCounts);
+  const frequencyValues = DIGITS
+    .map((digit) => frequencyWindow?.percentages[String(digit)])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const frequencyReady = Boolean(frequencyWindow && frequencyWindow.sample_size > 0 && frequencyValues.length === DIGITS.length);
+  const rankLevels = frequencyReady ? [...new Set(frequencyValues)].sort((a, b) => a - b) : [];
+  const rankPalette = { red: "#f87171", yellow: "#fbbf24", blue: "#60a5fa", green: "#4ade80" } as const;
+  const ranksForDigit = (digit: number): Array<keyof typeof rankPalette> => {
+    const value = frequencyWindow?.percentages[String(digit)];
+    if (!frequencyReady || typeof value !== "number" || rankLevels.length < 2) return [];
+    const roles: Array<keyof typeof rankPalette> = [];
+    if (value === rankLevels[0]) roles.push("red");
+    if (value === rankLevels[1]) roles.push("yellow");
+    if (value === rankLevels[rankLevels.length - 2]) roles.push("blue");
+    if (value === rankLevels[rankLevels.length - 1]) roles.push("green");
+    return roles;
+  };
+  const rankName = (roles: Array<keyof typeof rankPalette>) => roles.map((role) => ({
+    red: "least frequent",
+    yellow: "second least frequent",
+    blue: "second most frequent",
+    green: "most frequent",
+  }[role])).join(" + ");
+  const rankFill = (roles: Array<keyof typeof rankPalette>) => roles.length === 1
+    ? rankPalette[roles[0]]
+    : roles.length > 1
+      ? "linear-gradient(135deg, " + rankPalette[roles[0]] + " 0 50%, " + rankPalette[roles[1]] + " 50% 100%)"
+      : "var(--line)";
+  const rankTint = (roles: Array<keyof typeof rankPalette>) => roles.length === 1
+    ? "color-mix(in srgb, " + rankPalette[roles[0]] + " 16%, var(--surface))"
+    : roles.length > 1
+      ? "linear-gradient(135deg, color-mix(in srgb, " + rankPalette[roles[0]] + " 19%, var(--surface)) 0 50%, color-mix(in srgb, " + rankPalette[roles[1]] + " 19%, var(--surface)) 50% 100%)"
+      : "var(--surface)";
   const qualification = status?.qualification;
   const groupState = (value?: boolean) => value === true ? "#35d6a0" : value === false ? "#f06f79" : "var(--muted)";
   const panel: CSSProperties = { border: "1px solid var(--line)", borderRadius: 18, padding: 16, background: "var(--surface)", marginBottom: 16, overflow: "hidden" };
@@ -346,24 +379,46 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier }: { sy
           </div>
         </div>
         <div style={{ display: "flex", gap: 5, alignItems: "stretch" }}>
-          {tape.length ? tape.slice(-12).map((item) => <button key={item.key} type="button" onClick={() => setSelectedDigit(item.digit)} aria-label={`Inspect digit ${item.digit}`} className="tb-digit-in" style={{ ...tile, borderColor: selectedDigit === item.digit ? "var(--teal)" : "var(--line)", boxShadow: selectedDigit === item.digit ? "inset 0 0 0 1px var(--teal)" : "none", background: item.key === latest?.key ? "var(--teal)" : "var(--surface)", color: item.key === latest?.key ? "#fff" : "var(--ink)", minHeight: 44 }}>{item.digit}</button>) : Array.from({ length: 12 }, (_, index) => <div key={index} style={{ ...tile, minHeight: 44, opacity: .25 + (index % 4) * .12 }}><span className={transport === "connected" ? "tb-pulse" : ""} style={{ width: 5, height: 5, borderRadius: 9, background: "var(--muted)" }} /></div>)}
+          {tape.length ? tape.slice(-12).map((item) => {
+            const roles = ranksForDigit(item.digit);
+            const latestTick = item.key === latest?.key;
+            const rankText = rankName(roles) || (frequencyReady ? (rankLevels.length < 2 ? "all digits tied; no distinct ranks" : "middle rank or tied ranks") : "frequency rank unavailable");
+            return <button key={item.key} type="button" onClick={() => setSelectedDigit(item.digit)} aria-label={"Inspect digit " + item.digit + ", " + rankText} title={rankText} className="tb-digit-in" style={{ ...tile, borderColor: selectedDigit === item.digit ? "var(--teal)" : roles.length === 1 ? rankPalette[roles[0]] : "var(--line)", boxShadow: selectedDigit === item.digit ? "inset 0 0 0 1px var(--teal), 0 0 0 1px var(--teal)" : latestTick ? "0 0 0 2px var(--ink)" : "none", background: rankTint(roles), color: roles.length === 1 ? rankPalette[roles[0]] : "var(--ink)", minHeight: 44, position: "relative" }}>{item.digit}{latestTick && <span aria-label="Latest tick" style={{ position: "absolute", top: 3, right: 5, width: 4, height: 4, borderRadius: 99, background: "var(--teal)" }} />}</button>;
+          })} : Array.from({ length: 12 }, (_, index) => <div key={index} style={{ ...tile, minHeight: 44, opacity: .25 + (index % 4) * .12 }}><span className={transport === "connected" ? "tb-pulse" : ""} style={{ width: 5, height: 5, borderRadius: 9, background: "var(--muted)" }} /></div>)}
         </div>
         <div style={{ height: 2, overflow: "hidden", borderRadius: 5, marginTop: 11, background: "var(--line)" }}>
           <div style={{ width: transport === "connected" ? "35%" : "12%", height: "100%", background: healthColor, animation: transport === "connected" ? "tb-sweep 2.5s linear infinite" : "none" }} />
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))", gap: 5, marginTop: 12 }}>
-        {DIGITS.map((digit) => {
-          const count = counts[digit];
-          const height = Math.max(5, (count / maxCount) * 35);
-          const chosen = selectedDigit === digit;
-          return <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={`Select digit ${digit}, observed ${count} times in the visible tape`} style={{ border: `1px solid ${chosen ? "var(--teal)" : "var(--line)"}`, borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "color-mix(in srgb, var(--teal) 8%, transparent)" : "transparent", color: "var(--ink)", minWidth: 0, cursor: "pointer" }}>
-            <span style={{ display: "block", fontSize: 11, fontWeight: 800 }}>{digit}</span>
-            <span style={{ height: 38, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}><span style={{ width: "58%", maxWidth: 16, height, borderRadius: 4, background: chosen ? "var(--teal)" : count ? "color-mix(in srgb, var(--teal) 60%, transparent)" : "var(--line)", transition: "height .18s ease" }} /></span>
-            <span style={{ display: "block", fontSize: 9, color: "var(--muted)" }}>{count}</span>
-          </button>;
-        })}
+      <div style={{ marginTop: 12, border: "1px solid var(--line)", borderRadius: 14, padding: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <span style={{ color: "var(--ink)", fontSize: 10, fontWeight: 850, letterSpacing: ".12em" }}>FREQUENCY HISTOGRAM</span>
+            <span style={{ color: "var(--muted)", fontSize: 9 }}>{frequencyReady ? frequencyWindow!.sample_size.toLocaleString() + " valid ticks · " + windowSize.toLocaleString() + "-tick window" : "Waiting for backend frequency · " + windowSize.toLocaleString() + "-tick window"}</span>
+          </div>
+          <div aria-label="Frequency colour legend" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {(["green", "blue", "red", "yellow"] as const).map((role) => <span key={role} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--muted)", fontSize: 9, whiteSpace: "nowrap" }}><i style={{ display: "inline-block", width: 7, height: 7, borderRadius: 2, background: rankPalette[role] }} />{({ green: "Highest", blue: "2nd high", red: "Lowest", yellow: "2nd low" } as const)[role]}</span>)}
+          </div>
+        </div>
+        <div role="group" aria-label={"Digit frequency histogram for " + windowSize + " ticks"} style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))", gap: 5 }}>
+          {DIGITS.map((digit) => {
+            const count = frequencyCounts[digit];
+            const value = frequencyWindow?.percentages[String(digit)];
+            const percent = typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) + "%" : "—";
+            const roles = ranksForDigit(digit);
+            const tone = rankFill(roles);
+            const roleText = rankName(roles) || (frequencyReady && rankLevels.length < 2 ? "all digits tied; no distinct ranks" : frequencyReady ? "middle rank or tied ranks" : "frequency unavailable");
+            const barHeight = frequencyReady ? Math.max(count > 0 ? 2 : 1, (count / maxFrequencyCount) * 42) : 2;
+            const chosen = selectedDigit === digit;
+            return <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={"Digit " + digit + ", " + count + " ticks, " + percent + ", " + roleText} title={"Digit " + digit + " · " + percent + " · " + roleText} style={{ border: "1px solid " + (chosen ? "var(--teal)" : roles.length === 1 ? rankPalette[roles[0]] : "var(--line)"), borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "color-mix(in srgb, var(--teal) 8%, transparent)" : "transparent", color: "var(--ink)", minWidth: 0, cursor: "pointer" }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 850 }}>{digit}</span>
+              <span style={{ height: 44, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}><span style={{ width: "58%", maxWidth: 16, height: barHeight + "px", borderRadius: 4, background: tone, boxShadow: roles.length === 1 ? "0 0 8px " + rankPalette[roles[0]] + "25" : "none", transition: "height .18s ease, background .18s ease" }} /></span>
+              <span style={{ display: "block", fontSize: 9, color: roles.length === 1 ? rankPalette[roles[0]] : "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{frequencyReady ? percent : "—"}</span>
+              <span style={{ display: "block", fontSize: 8, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{frequencyReady ? count : "—"}</span>
+            </button>;
+          })}
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 12 }}>
