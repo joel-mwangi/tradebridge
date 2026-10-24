@@ -163,13 +163,13 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (!autoArmed || !autoSessionRef.current || !executeDemoStrategyTrade || !isDemoAccount) return;
     const signalCheck = validateRunnableStrategySignal(status, { symbol, windowSize, barrier, direction });
     if (!signalCheck.ok || signalConsumedRef.current || !activeRunIdRef.current) return;
-    const direction = status.selected_group === "under" ? "UNDER" : "OVER";
+    const executionDirection = status.selected_group === "under" ? "UNDER" : "OVER";
     signalConsumedRef.current = true;
     const session = autoSessionRef.current;
     const stake = Number(strategyStake);
     if (!Number.isFinite(stake) || stake < 1 || stake > 1000) { setAutoState({ state: "blocked_invalid_stake", submitted: 0, consecutiveLosses: 0, remaining: 3 }); setAutoArmed(false); return; }
-    const input = { symbol, contractType: direction === "UNDER" ? "DIGITUNDER" as const : "DIGITOVER" as const, stake, duration: 1, durationUnit: "t" as const, barrier: String(barrier) };
-    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: activeRunIdRef.current + ":" + symbol + ":" + windowSize + ":" + barrier + ":" + direction }, input).then((snapshot) => {
+    const input = { symbol, contractType: executionDirection === "UNDER" ? "DIGITUNDER" as const : "DIGITOVER" as const, stake, duration: 1, durationUnit: "t" as const, barrier: String(barrier) };
+    void session.runQualifiedSignal({ qualified: true, symbol, direction: executionDirection, barrier, signalId: activeRunIdRef.current + ":" + symbol + ":" + windowSize + ":" + barrier + ":" + executionDirection }, input).then((snapshot) => {
       setAutoState(snapshot);
       setAutoArmed(false);
       const socket = socketRef.current;
