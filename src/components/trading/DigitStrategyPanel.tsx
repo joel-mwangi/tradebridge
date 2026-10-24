@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import type { StrategyContractUpdate, StrategyExecutionStatus } from "./types";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -68,7 +69,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -226,7 +227,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   }, [symbol]);
 
   useEffect(() => {
-    const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(status.state ?? ""));
+    const active = ["observing", "waiting_for_more_data", "selected"].includes(status?.state ?? "");
     if (!active || !symbol || !Number.isInteger(windowSize)) return;
     if (status?.symbol === symbol && status?.digit_window_size === windowSize && status?.barrier === barrier && status?.requested_direction === direction.toLowerCase()) return;
     // Configuration changes invalidate the active run. Never silently start a replacement session.
@@ -273,6 +274,52 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const rankColor = (digit: number) => !hasFrequency ? "var(--muted)" : rank(digit) === 1 ? "#4ade80" : rank(digit) === 2 ? "#60a5fa" : rank(digit) === 10 ? "#f87171" : rank(digit) === 9 ? "#fbbf24" : "var(--ink)";
   const rankBackground = (digit: number) => !hasFrequency ? "var(--surface)" : rank(digit) === 1 ? "#142d25" : rank(digit) === 2 ? "#17283d" : rank(digit) === 10 ? "#351e23" : rank(digit) === 9 ? "#332b19" : "var(--surface)";
   const latest = tape[tape.length - 1];
+  const executionState = executionStatus?.state ?? "";
+  const reportedBuyCount = executionStatus?.buy_count ?? 0;
+  const reportedMaxBuys = executionStatus?.max_buys ?? 3;
+  const maxBuys = Number.isInteger(reportedMaxBuys) && reportedMaxBuys > 0 && reportedMaxBuys <= 10 ? reportedMaxBuys : 3;
+  const buyCount = Number.isInteger(reportedBuyCount) ? Math.min(maxBuys, Math.max(0, reportedBuyCount)) : 0;
+  const completedBuys = executionState === "waiting_settlement" ? Math.max(0, buyCount - 1) : buyCount;
+  const consecutiveLosses = Math.max(0, executionStatus?.consecutive_losses ?? 0);
+  const activeContractId = executionStatus?.active_contract_id == null
+    ? null
+    : String(executionStatus.active_contract_id);
+  const isExecutionActive = ["waiting_proposal", "waiting_buy", "waiting_settlement"].includes(executionState);
+  const isStoppedForLosses = executionState === "stopped" && consecutiveLosses >= 2;
+  const executionColor = executionState === "completed" ? "#35d6a0"
+    : executionState === "stopped" ? "#f06f79"
+      : isExecutionActive ? "#60a5fa" : "#f4b740";
+  let executionTitle = "";
+  let executionDetail = executionStatus?.reason ?? "";
+  if (executionState === "waiting_proposal") {
+    if (buyCount === 0) executionTitle = "Signal confirmed";
+    else {
+      const lastContractOutcome = contractUpdate?.outcome;
+      const outcomeLabel = lastContractOutcome === "won" ? "won"
+        : lastContractOutcome === "lost" ? "lost"
+          : lastContractOutcome === "breakeven" ? "settled at breakeven"
+            : consecutiveLosses > 0 ? "lost" : "settled";
+      executionTitle = `Buy ${buyCount} ${outcomeLabel}`;
+    }
+    executionDetail = `Preparing Buy ${Math.min(buyCount + 1, maxBuys)} of ${maxBuys}`;
+  } else if (executionState === "waiting_buy") {
+    executionTitle = `Buy ${Math.min(buyCount + 1, maxBuys)} of ${maxBuys}`;
+    executionDetail = "Submitting contract...";
+  } else if (executionState === "waiting_settlement") {
+    executionTitle = `Buy ${buyCount} accepted`;
+    executionDetail = "Waiting for settlement...";
+  } else if (executionState === "stopped") {
+    executionTitle = "Strategy stopped";
+    executionDetail = isStoppedForLosses ? "Two consecutive losses" : executionStatus?.reason ?? "Execution stopped";
+  } else if (executionState === "completed") {
+    executionTitle = "Strategy completed";
+    executionDetail = `${buyCount} of ${maxBuys} buys finished`;
+  }
+  const showExecutionCard = Boolean(executionStatus || (status?.state === "selected" && status.signal_generated));
+  const matchingContractUpdate = contractUpdate
+    && (!activeContractId || contractUpdate.contractId === activeContractId)
+    ? contractUpdate
+    : null;
   const panel: CSSProperties = { border: "1px solid var(--line)", borderRadius: 18, padding: 16, background: "var(--surface)", marginBottom: 16, overflow: "hidden" };
   const tile: React.CSSProperties = { minWidth: 0, flex: "1 1 0", display: "grid", placeItems: "center", borderRadius: 10, minHeight: 45, border: "1px solid var(--line)", background: "var(--surface-2, var(--sidebar-bg))", color: "var(--ink)", fontSize: 17, fontWeight: 850, transition: "transform .18s ease, border-color .18s ease" };
 
@@ -304,7 +351,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
               <span>Barrier {barrier}</span>
               <span>·</span>
               <Icon name="shield" size={12} />
-              <span aria-label="Execution disabled">⊘</span>
+              <span aria-label="Execution status received from authenticated trading session">Execution</span>
             </div>
           </div>
         </div>
@@ -348,6 +395,77 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           <button type="button" onClick={() => playCue("test")} aria-label="Test strategy sound" title="Test sound" style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "7px 9px", background: "transparent", color: "var(--ink)", fontSize: 10, cursor: "pointer" }}>Test</button>
         </div>
       </div>
+
+      {showExecutionCard && (
+        <div aria-live="polite" aria-label="Strategy execution progress" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: `1px solid ${executionColor}55`, background: `color-mix(in srgb, ${executionColor} 7%, var(--surface-2, var(--sidebar-bg)))` }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 5 }}>
+              <span style={{ color: executionColor, fontSize: 10, fontWeight: 850, letterSpacing: ".12em", textTransform: "uppercase" }}>
+                {executionTitle || "Signal confirmed"}
+              </span>
+              <strong style={{ color: "var(--ink)", fontSize: 17 }}>
+                {executionDetail || "Waiting for authenticated execution update..."}
+              </strong>
+            </div>
+            {executionStatus && (
+              <span style={{ padding: "5px 8px", borderRadius: 999, background: `${executionColor}18`, color: executionColor, fontSize: 10, fontWeight: 800 }}>
+                {executionState.replaceAll("_", " ") || "execution update"}
+              </span>
+            )}
+          </div>
+
+          {executionStatus && (
+            <>
+              <div aria-label={`${buyCount} of ${maxBuys} buys completed`} style={{ display: "grid", gridTemplateColumns: `repeat(${maxBuys}, minmax(0, 1fr))`, gap: 6, marginTop: 14 }}>
+                {Array.from({ length: maxBuys }, (_, index) => {
+                  const number = index + 1;
+                  const done = number <= completedBuys;
+                  const activeBuy = executionState === "waiting_settlement" ? buyCount : buyCount + 1;
+                  const current = isExecutionActive && number === activeBuy;
+                  const skipped = isStoppedForLosses && number > buyCount;
+                  const color = done ? "#35d6a0" : skipped ? "#f06f79" : current ? "#60a5fa" : "var(--line)";
+                  return <div key={number} style={{ display: "grid", gap: 5 }}>
+                    <div style={{ height: 5, borderRadius: 99, background: color, opacity: done || current || skipped ? 1 : .45 }} />
+                    <span style={{ color: done || current || skipped ? color : "var(--muted)", fontSize: 9, fontWeight: 750 }}>
+                      {skipped ? `Buy ${number} skipped` : done ? `Buy ${number} done` : current ? `Buy ${number} ${executionState === "waiting_settlement" ? "settling" : "next"}` : `Buy ${number}`}
+                    </span>
+                  </div>;
+                })}
+              </div>
+              {consecutiveLosses > 0 && executionState !== "stopped" && (
+                <div style={{ marginTop: 10, color: "#f4b740", fontSize: 11, fontWeight: 750 }}>
+                  Loss streak: {consecutiveLosses}
+                </div>
+              )}
+              {isStoppedForLosses && (
+                <div style={{ marginTop: 10, color: "#f06f79", fontSize: 11, fontWeight: 750 }}>
+                  Buy {Math.min(buyCount + 1, maxBuys)} was not executed
+                </div>
+              )}
+              {activeContractId && (
+                <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid var(--line)", color: "var(--muted)", fontSize: 10 }}>
+                  Active contract <strong style={{ color: "var(--ink)" }}>{activeContractId}</strong>
+                </div>
+              )}
+              {matchingContractUpdate && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8, color: "var(--muted)", fontSize: 10 }}>
+                  <span>Contract: <strong style={{ color: "var(--ink)" }}>{matchingContractUpdate.providerStatus || matchingContractUpdate.outcome}</strong></span>
+                  {matchingContractUpdate.profit !== null && (
+                    <span>Profit: <strong style={{ color: matchingContractUpdate.profit >= 0 ? "#35d6a0" : "#f06f79" }}>
+                      {matchingContractUpdate.profit > 0 ? "+" : ""}{matchingContractUpdate.profit.toFixed(2)} {matchingContractUpdate.currency}
+                    </strong></span>
+                  )}
+                </div>
+              )}
+              {executionStatus.reason && (
+                <p style={{ margin: "9px 0 0", color: "var(--muted)", fontSize: 10, lineHeight: 1.5 }}>
+                  {executionStatus.reason}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ marginTop: 16, border: "1px solid var(--line)", borderRadius: 14, padding: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>

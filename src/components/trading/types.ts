@@ -69,6 +69,24 @@ export interface OpenPosition {
   longcode: string;
 }
 
+export interface StrategyExecutionStatus {
+  type: "strategy_execution_status";
+  state?: string;
+  reason?: string;
+  buy_count?: number;
+  max_buys?: number;
+  consecutive_losses?: number;
+  active_contract_id?: string | number | null;
+}
+
+export interface StrategyContractUpdate {
+  contractId: string;
+  providerStatus: string;
+  outcome: OpenPosition["outcome"];
+  profit: number | null;
+  currency: string;
+}
+
 export interface AccountActivity {
   id: string;
   time: number | null;

@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { AccountActivity, DemoQuote, DerivAccount, DigitContractType, OpenPosition } from "./types";
+import type {
+  AccountActivity,
+  DemoQuote,
+  DerivAccount,
+  DigitContractType,
+  OpenPosition,
+  StrategyContractUpdate,
+  StrategyExecutionStatus,
+} from "./types";
 import {
   clearOrderResolution as clearStoredOrderResolution,
   readOrderResolution as readStoredOrderResolution,
@@ -41,6 +49,13 @@ type AutoTradePending = {
 };
 
 type ApiMessage = {
+  type?: string;
+  state?: string;
+  reason?: string;
+  buy_count?: number;
+  max_buys?: number;
+  consecutive_losses?: number;
+  active_contract_id?: string | number | null;
   msg_type?: string;
   req_id?: number;
   error?: { message?: string; code?: string };
@@ -79,6 +94,8 @@ export function useTradingSession(
   const [busy, setBusy] = useState(false);
   const [quote, setQuote] = useState<DemoQuote | null>(null);
   const [positions, setPositions] = useState<OpenPosition[]>([]);
+  const [strategyExecutionStatus, setStrategyExecutionStatus] = useState<StrategyExecutionStatus | null>(null);
+  const [strategyContractUpdate, setStrategyContractUpdate] = useState<StrategyContractUpdate | null>(null);
   const [activity, setActivity] = useState<AccountActivity[]>([]);
   const [activityHasMore, setActivityHasMore] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -181,6 +198,8 @@ export function useTradingSession(
     setQuote(null);
     setStatus("");
     setPositions([]);
+    setStrategyExecutionStatus(null);
+    setStrategyContractUpdate(null);
     setActivity([]);
     setActivityHasMore(false);
     setActivityLoading(false);
@@ -302,6 +321,18 @@ export function useTradingSession(
             }, error);
             setStatus("Deriv returned a message TradeBridge could not read.");
             return;
+          }
+
+          if (message.type === "strategy_execution_status") {
+            setStrategyExecutionStatus({
+              type: "strategy_execution_status",
+              state: message.state,
+              reason: message.reason,
+              buy_count: message.buy_count,
+              max_buys: message.max_buys,
+              consecutive_losses: message.consecutive_losses,
+              active_contract_id: message.active_contract_id,
+            });
           }
 
           if (message.error) {
@@ -572,6 +603,15 @@ export function useTradingSession(
           if (message.msg_type === "proposal_open_contract" && message.proposal_open_contract) {
             const raw = message.proposal_open_contract;
             const position = toPosition(raw);
+            if (position) {
+              setStrategyContractUpdate({
+                contractId: position.contractId,
+                providerStatus: position.providerStatus,
+                outcome: position.outcome,
+                profit: position.profit,
+                currency: position.currency,
+              });
+            }
             const pendingAuto = autoTradeRef.current;
             if (pendingAuto?.contractId && position?.contractId === pendingAuto.contractId && position.status === "settled") {
               const profit = numeric((raw as Record<string, unknown>).profit);
@@ -971,6 +1011,7 @@ export function useTradingSession(
 
   return {
     sessionState, status, busy, quote, positions, activity, balance, realizedProfit,
+    strategyExecutionStatus, strategyContractUpdate,
     orderResolutionRequired, acknowledgeOrderResolution,
     activityHasMore, activityLoading, loadMoreActivity,
     requestQuote, confirmQuote, dismissQuote, sellPosition, refreshAccount: refreshAccountNow,
