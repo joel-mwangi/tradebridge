@@ -266,6 +266,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const counts = DIGITS.map((digit) => frequencyWindow?.counts?.[String(digit)] ?? 0);
   const total = frequencyWindow?.sample_size ?? 0;
   const hasFrequency = Boolean(frequencyWindow && total > 0);
+  const percentage = (count: number) => total > 0 ? `${(count / total * 100).toFixed(1)}%` : "—";
   const maxCount = Math.max(1, ...counts);
   const ranked = [...DIGITS].sort((a, b) => counts[b] - counts[a] || a - b);
   const rank = (digit: number) => hasFrequency ? ranked.indexOf(digit) + 1 : 0;
