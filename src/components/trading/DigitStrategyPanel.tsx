@@ -37,6 +37,57 @@ type TickMessage = {
 };
 
 type TapeDigit = { digit: number; key: string; time: number };
+type CheckState = "pass" | "fail" | "waiting";
+type StrategyCheck = { label: string; state: CheckState; detail: string };
+
+function strategyChecks(status: StrategyStatus, direction: "OVER" | "UNDER", barrier: number): StrategyCheck[] {
+  const reason = status.reason ?? "";
+  const directionName = direction[0] + direction.slice(1).toLowerCase();
+  const otherDirection = direction === "OVER" ? "UNDER" : "OVER";
+  const qualificationFailure = reason.match(/(?:user-selected\s+)?(over|under)\s*(\d+)\s+does not qualify/i);
+  const stableDuration = reason.match(/Red\/Green have been stable for ([\d.]+) seconds/i);
+  const qualificationFailed = Boolean(qualificationFailure)
+    || (status.selected_group != null && status.selected_group.toLowerCase() !== direction.toLowerCase());
+  const qualificationPassed = status.selected_group?.toLowerCase() === direction.toLowerCase()
+    || status.signal_generated === true;
+  const stabilityFailed = /(?:stability|stable).*(?:failed|not stable|unstable)|(?:failed|not stable|unstable).*stability/i.test(reason);
+  const stabilityPassed = Boolean(stableDuration) || /Red\/Green.*stable/i.test(reason);
+
+  return [
+    {
+      label: `${directionName} ${barrier} qualification`,
+      state: qualificationFailed ? "fail" : qualificationPassed ? "pass" : "waiting",
+      detail: qualificationFailure
+        ? `${qualificationFailure[1][0].toUpperCase()}${qualificationFailure[1].slice(1).toLowerCase()} ${qualificationFailure[2]} does not qualify`
+        : qualificationFailed
+          ? `${status.selected_group} was selected instead of ${directionName}; no opposite-direction trade will be made`
+          : qualificationPassed
+            ? `${directionName} qualification passed`
+            : `Waiting for ${directionName} ${barrier} qualification`,
+    },
+    {
+      label: "Red/Green stability",
+      state: stabilityPassed ? "pass" : stabilityFailed ? "fail" : "waiting",
+      detail: stableDuration
+        ? `Stable for ${stableDuration[1]} seconds`
+        : stabilityFailed
+          ? reason
+          : "Waiting for a reported stability result",
+    },
+    {
+      label: "Direction lock",
+      state: "pass",
+      detail: `Only your selected ${directionName} is eligible; ${otherDirection} will not be substituted`,
+    },
+    {
+      label: "Entry signal",
+      state: status.signal_generated ? "pass" : "waiting",
+      detail: status.signal_generated
+        ? "Entry signal confirmed"
+        : "Waiting for the selected direction and entry conditions",
+    },
+  ];
+}
 
 function lastDigit(quote: number | string, pipSize?: number): number | null {
   const value = Number(quote);
@@ -316,6 +367,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     executionDetail = `${buyCount} of ${maxBuys} buys finished`;
   }
   const showExecutionCard = Boolean(executionStatus || (status?.state === "selected" && status.signal_generated));
+  const checks = status ? strategyChecks(status, direction, barrier) : [];
+  const showChecks = Boolean(status && (active || status.reason || status.signal_generated));
   const matchingContractUpdate = contractUpdate
     && (!activeContractId || contractUpdate.contractId === activeContractId)
     ? contractUpdate
@@ -467,6 +520,32 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
       )}
 
+      {showChecks && (
+        <div aria-label="Strategy qualification checks" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: "1px solid var(--line)", background: "var(--surface-2, var(--sidebar-bg))" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <strong style={{ color: "var(--ink)", fontSize: 12 }}>Why no trade yet?</strong>
+            <span style={{ color: "var(--muted)", fontSize: 10 }}>Live strategy checks</span>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {checks.map((check) => {
+              const color = check.state === "pass" ? "#35d6a0" : check.state === "fail" ? "#f06f79" : "#f4b740";
+              const marker = check.state === "pass" ? "✓" : check.state === "fail" ? "×" : "·";
+              return (
+                <div key={check.label} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                  <span aria-label={check.state} style={{ width: 18, height: 18, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: 99, background: `${color}18`, color, fontSize: 13, fontWeight: 900 }}>
+                    {marker}
+                  </span>
+                  <div style={{ display: "grid", gap: 2 }}>
+                    <strong style={{ color: "var(--ink)", fontSize: 10 }}>{check.label}</strong>
+                    <span style={{ color: check.state === "fail" ? "#f06f79" : "var(--muted)", fontSize: 10, lineHeight: 1.45 }}>{check.detail}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{ marginTop: 16, border: "1px solid var(--line)", borderRadius: 14, padding: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}><Icon name="pulse" size={14} /><span style={{ fontSize: 10, letterSpacing: ".14em" }}>◉ LIVE TAPE</span></div>
@@ -504,7 +583,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 13 }}>
         <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
           <span style={{ width: 8, height: 8, flexShrink: 0, borderRadius: 99, background: state === "blocked" || transport === "disconnected" || transport === "stale" ? "#f4b740" : active ? "#35d6a0" : "var(--muted)" }} />
-          <span style={{ color: "var(--muted)", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={status?.reason ?? status?.state ?? transport}>{status?.reason ?? status?.state ?? transport}</span>
+          <span style={{ color: "var(--muted)", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={status?.reason ?? status?.state ?? transport}>{status?.signal_generated ? "Entry signal confirmed" : status?.state?.replaceAll("_", " ") ?? transport}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--muted)", fontSize: 10, flexShrink: 0 }}>
           <Icon name="clock" size={12} /><span>{tickAge === null ? "—" : `${tickAge}s`}</span>
