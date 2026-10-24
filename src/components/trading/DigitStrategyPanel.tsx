@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import type { BackendDigitFrequencyWindow, StrategyContractUpdate, StrategyExecutionStatus } from "./types";
+import type { StrategyContractUpdate, StrategyExecutionStatus } from "./types";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -37,77 +37,6 @@ type TickMessage = {
 };
 
 type TapeDigit = { digit: number; key: string; time: number };
-type CheckState = "pass" | "fail" | "waiting";
-type StrategyCheck = { label: string; state: CheckState; detail: string };
-
-function strategyChecks(
-  status: StrategyStatus,
-  direction: "OVER" | "UNDER",
-  barrier: number,
-  frequencyWindow?: BackendDigitFrequencyWindow,
-): StrategyCheck[] {
-  const reason = status.reason ?? "";
-  const directionName = direction[0] + direction.slice(1).toLowerCase();
-  const otherDirection = direction === "OVER" ? "UNDER" : "OVER";
-  const qualificationDigits = direction === "OVER" ? [5, 6, 7, 8, 9] : [0, 1, 2, 3, 4];
-  const percentages = qualificationDigits.map((digit) => frequencyWindow?.percentages?.[String(digit)]);
-  const hasAllPercentages = percentages.every((value) => typeof value === "number" && Number.isFinite(value));
-  const highPercentages = hasAllPercentages ? percentages.filter((value) => value! >= 10) : [];
-  const snapshotThresholdFailed = hasAllPercentages
-    && (percentages.some((value) => value! >= 10.5) || highPercentages.length > 1);
-  const qualificationFailure = reason.match(/(?:user-selected\s+)?(over|under)\s*(\d+)\s+does not qualify/i);
-  const stableDuration = reason.match(/Red\/Green have been stable for ([\d.]+) seconds/i);
-  const qualificationFailed = Boolean(qualificationFailure)
-    || (status.selected_group != null && status.selected_group.toLowerCase() !== direction.toLowerCase());
-  const qualificationPassed = status.selected_group?.toLowerCase() === direction.toLowerCase()
-    || status.signal_generated === true;
-  const stabilityFailed = /(?:stability|stable).*(?:failed|not stable|unstable)|(?:failed|not stable|unstable).*stability/i.test(reason);
-  const stabilityPassed = Boolean(stableDuration) || /Red\/Green.*stable/i.test(reason);
-
-  return [
-    {
-      label: `${directionName} ${barrier} backend qualification`,
-      state: qualificationFailed || snapshotThresholdFailed ? "fail" : qualificationPassed ? "pass" : "waiting",
-      detail: qualificationFailure
-        ? `${qualificationFailure[1][0].toUpperCase()}${qualificationFailure[1].slice(1).toLowerCase()} ${qualificationFailure[2]} does not qualify`
-        : qualificationFailed
-          ? `${status.selected_group} was selected instead of ${directionName}; no opposite-direction trade will be made`
-          : snapshotThresholdFailed
-            ? `${highPercentages.length > 1 ? `${highPercentages.length} qualification digits are at least 10%` : "A qualification digit is at least 10.5%"} in the latest frequency snapshot`
-          : qualificationPassed
-            ? `${directionName} qualification passed`
-            : `Waiting for ${directionName} ${barrier} qualification`,
-    },
-    {
-      label: "Red/Green stability",
-      state: stabilityPassed ? "pass" : stabilityFailed ? "fail" : "waiting",
-      detail: stableDuration
-        ? `Stable for ${stableDuration[1]} seconds`
-        : stabilityFailed
-          ? reason
-          : "Waiting for a reported stability result",
-    },
-    {
-      label: "Direction lock",
-      state: "pass",
-      detail: `Only your selected ${directionName} is eligible; ${otherDirection} will not be substituted`,
-    },
-    {
-      label: "Entry signal",
-      state: status.signal_generated ? "pass" : "waiting",
-      detail: status.signal_generated
-        ? "Entry signal confirmed"
-        : "Waiting for the selected direction and entry conditions",
-    },
-    {
-      label: `${directionName} latest-percentage snapshot`,
-      state: !hasAllPercentages ? "waiting" : snapshotThresholdFailed ? "fail" : "pass",
-      detail: hasAllPercentages
-        ? `${highPercentages.length} of 5 qualification digits are at least 10%; at most one may be below 10.5%. Snapshot only, not the backend's timed qualification result.`
-        : `Waiting for percentages for qualification digits ${qualificationDigits.join(", ")}`,
-    },
-  ];
-}
 
 function lastDigit(quote: number | string, pipSize?: number): number | null {
   const value = Number(quote);
@@ -339,19 +268,6 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const total = frequencyWindow?.sample_size ?? 0;
   const hasFrequency = Boolean(frequencyWindow && total > 0);
   const percentage = (count: number) => total > 0 ? `${(count / total * 100).toFixed(1)}%` : "—";
-  const contractDigits = direction === "OVER"
-    ? Array.from({ length: Math.max(0, 9 - barrier) }, (_, index) => barrier + index + 1)
-    : Array.from({ length: Math.max(0, barrier) }, (_, index) => index);
-  const qualificationDigits = direction === "OVER" ? [5, 6, 7, 8, 9] : [0, 1, 2, 3, 4];
-  const qualificationPercentages = qualificationDigits.map((digit) => frequencyWindow?.percentages?.[String(digit)]);
-  const allQualificationPercentagesAvailable = qualificationPercentages.every((value) => typeof value === "number" && Number.isFinite(value));
-  const highQualificationDigits = allQualificationPercentagesAvailable
-    ? qualificationDigits.filter((digit) => frequencyWindow!.percentages[String(digit)]! >= 10)
-    : [];
-  const thresholdFailureDigits = allQualificationPercentagesAvailable
-    ? qualificationDigits.filter((digit) => frequencyWindow!.percentages[String(digit)]! >= 10.5)
-    : [];
-  const snapshotThresholdFails = thresholdFailureDigits.length > 0 || highQualificationDigits.length > 1;
   const maxCount = Math.max(1, ...counts);
   const ranked = [...DIGITS].sort((a, b) => counts[b] - counts[a] || a - b);
   const rank = (digit: number) => hasFrequency ? ranked.indexOf(digit) + 1 : 0;
@@ -400,8 +316,6 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     executionDetail = `${buyCount} of ${maxBuys} buys finished`;
   }
   const showExecutionCard = Boolean(executionStatus || (status?.state === "selected" && status.signal_generated));
-  const checks = status ? strategyChecks(status, direction, barrier, frequencyWindow) : [];
-  const showChecks = Boolean(status && (active || status.reason || status.signal_generated));
   const matchingContractUpdate = contractUpdate
     && (!activeContractId || contractUpdate.contractId === activeContractId)
     ? contractUpdate
@@ -553,72 +467,12 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
       )}
 
-      {showChecks && (
-        <div aria-label="Strategy qualification checks" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: "1px solid var(--line)", background: "var(--surface-2, var(--sidebar-bg))" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <strong style={{ color: "var(--ink)", fontSize: 12 }}>{direction === "OVER" ? "Over" : "Under"} {barrier} qualification breakdown</strong>
-            <span style={{ color: "var(--muted)", fontSize: 10 }}>Contract and qualification are separate checks</span>
-          </div>
-          <div style={{ display: "grid", gap: 8, marginBottom: 12, padding: 10, borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "var(--ink)", fontSize: 10 }}>
-              <strong>{direction === "OVER" ? "Contract wins on digits" : "Contract wins on digits"}</strong>
-              <span>{contractDigits.length ? contractDigits.join(", ") : "No winning digits for this barrier"}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "var(--muted)", fontSize: 10 }}>
-              <strong>{direction} qualification group</strong>
-              <span>{qualificationDigits.join(", ")} · checked against the 10% threshold</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(contractDigits.length, 1)}, minmax(0, 1fr))`, gap: 5 }}>
-              {contractDigits.map((digit) => {
-                const inQualificationGroup = qualificationDigits.includes(digit);
-                const digitPercent = frequencyWindow?.percentages?.[String(digit)];
-                const highDigitCount = qualificationDigits.filter((groupDigit) =>
-                  (frequencyWindow?.percentages?.[String(groupDigit)] ?? 0) >= 10,
-                ).length;
-                const digitFailsThreshold = inQualificationGroup
-                  && typeof digitPercent === "number"
-                  && (digitPercent >= 10.5 || (digitPercent >= 10 && highDigitCount > 1));
-                const digitState: CheckState = !hasFrequency || typeof digitPercent !== "number"
-                  ? "waiting"
-                  : digitFailsThreshold ? "fail" : "pass";
-                const color = digitState === "pass" ? "#35d6a0" : digitState === "fail" ? "#f06f79" : "#f4b740";
-                const marker = digitState === "pass" ? "✓" : digitState === "fail" ? "×" : "·";
-                return (
-                  <div key={digit} aria-label={`Digit ${digit}: ${typeof digitPercent === "number" ? `${digitPercent.toFixed(1)} percent` : "no percentage available"}${inQualificationGroup ? `, qualification ${digitState}` : ", contract only"}`} style={{ display: "grid", justifyItems: "center", gap: 4, padding: "7px 2px", borderRadius: 8, border: `1px solid ${inQualificationGroup ? `${color}66` : "var(--line)"}`, background: "var(--surface-2, var(--sidebar-bg))" }}>
-                    <span style={{ color: "var(--ink)", fontSize: 11, fontWeight: 850 }}>{digit}</span>
-                    <strong style={{ color: inQualificationGroup ? color : "var(--muted)", fontSize: 10 }}>
-                      {typeof digitPercent === "number" ? `${digitPercent.toFixed(1)}%` : "—"}
-                    </strong>
-                    <span style={{ color: inQualificationGroup ? color : "var(--muted)", fontSize: 9 }}>
-                      {inQualificationGroup ? marker : "contract"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <span style={{ color: snapshotThresholdFails ? "#f06f79" : "var(--muted)", fontSize: 9, lineHeight: 1.45 }}>
-              {allQualificationPercentagesAvailable
-                ? `${snapshotThresholdFails ? "Snapshot threshold warning" : "Snapshot threshold looks within limits"}: every qualification digit should be under 10%, with at most one below 10.5%. This is a current frequency snapshot, not the strategy's timed backend qualification.`
-                : `Waiting for percentage data for all qualification digits (${qualificationDigits.join(", ")}). Missing values are not treated as a pass.`}
-            </span>
-          </div>
-          <div style={{ display: "grid", gap: 8 }}>
-            {checks.map((check) => {
-              const color = check.state === "pass" ? "#35d6a0" : check.state === "fail" ? "#f06f79" : "#f4b740";
-              const marker = check.state === "pass" ? "✓" : check.state === "fail" ? "×" : "·";
-              return (
-                <div key={check.label} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                  <span aria-label={check.state} style={{ width: 18, height: 18, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: 99, background: `${color}18`, color, fontSize: 13, fontWeight: 900 }}>
-                    {marker}
-                  </span>
-                  <div style={{ display: "grid", gap: 2 }}>
-                    <strong style={{ color: "var(--ink)", fontSize: 10 }}>{check.label}</strong>
-                    <span style={{ color: check.state === "fail" ? "#f06f79" : "var(--muted)", fontSize: 10, lineHeight: 1.45 }}>{check.detail}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {status && (
+        <div aria-label="Backend strategy status" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: "1px solid var(--line)", background: "var(--surface-2, var(--sidebar-bg))" }}>
+          <strong style={{ display: "block", color: "var(--ink)", fontSize: 12, marginBottom: 9 }}>Backend strategy status</strong>
+          <pre style={{ margin: 0, maxHeight: 260, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "var(--muted)", fontSize: 10, lineHeight: 1.55 }}>
+            {JSON.stringify(status, null, 2)}
+          </pre>
         </div>
       )}
 
