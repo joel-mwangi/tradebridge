@@ -668,7 +668,7 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} isDemoAccount={activeAccountIsDemo && accountSessionReady} executeDemoStrategyTrade={trading.executeDemoStrategyTrade} />
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} />
                 )}
 
                 {tradeView === "charts" && (

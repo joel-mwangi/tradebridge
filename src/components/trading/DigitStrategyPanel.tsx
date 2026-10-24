@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { createDemoExecutionSession } from "./strategy-auto-execution.mjs";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -21,16 +20,6 @@ type StrategyStatus = {
   trigger_digit?: number | null;
   feed_state?: string;
   observation_count?: number;
-  qualification?: {
-    decision?: string;
-    under_qualifies?: boolean;
-    over_qualifies?: boolean;
-    under_threshold_passes?: boolean;
-    under_stability_passes?: boolean;
-    over_threshold_passes?: boolean;
-    over_stability_passes?: boolean;
-  } | null;
-  execution_enabled?: boolean;
   digit_window_size?: number;
 };
 
@@ -79,7 +68,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, isDemoAccount = false, executeDemoStrategyTrade }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; isDemoAccount?: boolean; executeDemoStrategyTrade?: (input: { symbol: string; contractType: "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "t"; barrier: string }) => Promise<{ status: "settled"; contractId: string; outcome: "won" | "lost" | "breakeven"; profit: number }> }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -91,16 +80,9 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const [events, setEvents] = useState<Array<{ key: string; kind: "tick" | "status" | "warning"; time: number; digit?: number }>>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundVolume, setSoundVolume] = useState(0.35);
-  const [strategyStake, setStrategyStake] = useState("1");
-  const [autoArmed, setAutoArmed] = useState(false);
-  const [autoState, setAutoState] = useState<{ state: string; submitted: number; consecutiveLosses: number; remaining: number } | null>(null);
-  const autoSessionRef = useRef<ReturnType<typeof createDemoExecutionSession> | null>(null);
-  const signalConsumedRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const previousTransportRef = useRef<typeof transport | null>(null);
   const previousStrategyStateRef = useRef<string | null>(null);
-  const previousUnderQualifiedRef = useRef<boolean | undefined>(undefined);
-  const previousOverQualifiedRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
     try {
@@ -112,7 +94,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     }
   }, []);
 
-  const playCue = useCallback((kind: "start" | "connected" | "disconnected" | "qualify" | "clear" | "stop" | "error" | "test") => {
+  const playCue = useCallback((kind: "start" | "connected" | "disconnected" | "stop" | "error" | "test") => {
     if (!soundEnabled && kind !== "test") return;
     try {
       const AudioContextClass = window.AudioContext;
@@ -121,8 +103,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       audioContextRef.current = context;
       if (context.state === "suspended") void context.resume();
       const patterns: Record<typeof kind, number[]> = {
-        start: [660], connected: [660, 880], disconnected: [330], qualify: [784, 988],
-        clear: [523, 392], stop: [523, 392], error: [330, 330], test: [660, 880],
+        start: [660], connected: [660, 880], disconnected: [330],
+        stop: [523, 392], error: [330, 330], test: [660, 880],
       };
       const notes = patterns[kind];
       const now = context.currentTime;
@@ -158,32 +140,6 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   }
 
   useEffect(() => {
-    if (!autoArmed || !autoSessionRef.current || !executeDemoStrategyTrade || !isDemoAccount) return;
-    if (status?.symbol !== symbol || status?.barrier !== barrier || status?.signal_generated !== true) return;
-    // The user-selected contract is authoritative. Never execute a signal for the opposite group.
-    if (status.requested_direction !== direction.toLowerCase()) return;
-    if (status.selected_group !== direction.toLowerCase()) return;
-    if (signalConsumedRef.current) return;
-    if ((direction === "UNDER" && barrier < 1) || (direction === "OVER" && barrier > 8)) return;
-    signalConsumedRef.current = true;
-    const session = autoSessionRef.current;
-    const stake = Number(strategyStake);
-    if (!Number.isFinite(stake) || stake < 1 || stake > 1000) { setAutoState({ state: "blocked_invalid_stake", submitted: 0, consecutiveLosses: 0, remaining: 3 }); setAutoArmed(false); return; }
-    const input = { symbol, contractType: direction === "UNDER" ? "DIGITUNDER" as const : "DIGITOVER" as const, stake, duration: 1, durationUnit: "t" as const, barrier: String(barrier) };
-    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: symbol + ":" + barrier + ":" + direction + ":" + Date.now() }, input).then((snapshot) => {
-      setAutoState(snapshot);
-      setAutoArmed(false);
-      const socket = socketRef.current;
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ strategy: { action: "stop" } }));
-    }).catch(() => {
-      setAutoState(session.snapshot());
-      setAutoArmed(false);
-      const socket = socketRef.current;
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ strategy: { action: "stop" } }));
-    });
-  }, [autoArmed, status?.signal_generated, status?.selected_group, status?.requested_direction, status?.symbol, status?.barrier, symbol, barrier, direction, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
-
-  useEffect(() => {
     const previous = previousTransportRef.current;
     if (previous !== null && previous !== transport) {
       if (transport === "connected") playCue("connected");
@@ -204,14 +160,6 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     }
     previousStrategyStateRef.current = nextState;
 
-    const under = status?.qualification?.under_qualifies;
-    const over = status?.qualification?.over_qualifies;
-    const priorUnder = previousUnderQualifiedRef.current;
-    const priorOver = previousOverQualifiedRef.current;
-    if ((under === true && priorUnder !== true) || (over === true && priorOver !== true)) playCue("qualify");
-    else if ((priorUnder === true && under === false) || (priorOver === true && over === false)) playCue("clear");
-    previousUnderQualifiedRef.current = under;
-    previousOverQualifiedRef.current = over;
   }, [status, playCue]);
 
   useEffect(() => {
@@ -282,9 +230,6 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (!active || !symbol || !Number.isInteger(windowSize)) return;
     if (status?.symbol === symbol && status?.digit_window_size === windowSize && status?.barrier === barrier && status?.requested_direction === direction.toLowerCase()) return;
     // Configuration changes invalidate the active run. Never silently start a replacement session.
-    autoSessionRef.current?.stop();
-    setAutoArmed(false);
-    setAutoState(autoSessionRef.current?.snapshot() ?? null);
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
@@ -307,26 +252,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     }
     if (action === "start" && !symbol) return;
     if (action === "start") {
-      // Clear prior-run status before arming so an old signal cannot trigger a new sequence.
       setStatus(null);
-      signalConsumedRef.current = false;
-      setAutoState(null);
-      if (isDemoAccount && executeDemoStrategyTrade) {
-        try {
-          autoSessionRef.current = createDemoExecutionSession({ sessionId: symbol + "-" + Date.now(), isDemoAccount, executeAndReconcile: executeDemoStrategyTrade });
-          setAutoState(autoSessionRef.current.snapshot());
-          setAutoArmed(true);
-        } catch {
-          setAutoArmed(false);
-          setAutoState({ state: "blocked_demo_only", submitted: 0, consecutiveLosses: 0, remaining: 3 });
-        }
-      } else {
-        setAutoArmed(false);
-      }
-    } else if (action === "stop") {
-      autoSessionRef.current?.stop();
-      setAutoArmed(false);
-      setAutoState(autoSessionRef.current?.snapshot() ?? null);
     }
     setBusy(true);
     socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } : { action } }));
@@ -345,17 +271,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const rank = (digit: number) => hasFrequency ? ranked.indexOf(digit) + 1 : 0;
   const rankColor = (digit: number) => !hasFrequency ? "var(--muted)" : rank(digit) === 1 ? "#4ade80" : rank(digit) === 2 ? "#60a5fa" : rank(digit) === 10 ? "#f87171" : rank(digit) === 9 ? "#fbbf24" : "var(--ink)";
   const rankBackground = (digit: number) => !hasFrequency ? "var(--surface)" : rank(digit) === 1 ? "#142d25" : rank(digit) === 2 ? "#17283d" : rank(digit) === 10 ? "#351e23" : rank(digit) === 9 ? "#332b19" : "var(--surface)";
-  // Barrier-relative display classes are mutually exclusive: lower, exact barrier, upper.
-  // Keep these separate from the strategy qualification groups (Under 0–4 / Over 5–9).
-  const lowerDigits = DIGITS.filter((digit) => digit < barrier);
-  const upperDigits = DIGITS.filter((digit) => digit > barrier);
-  const lowerCount = lowerDigits.reduce((sum, digit) => sum + counts[digit], 0);
-  const upperCount = upperDigits.reduce((sum, digit) => sum + counts[digit], 0);
-  const barrierCount = counts[barrier] ?? 0;
-  const percentage = (count: number) => total > 0 ? `${(count / total * 100).toFixed(1)}%` : "—";
   const latest = tape[tape.length - 1];
-  const qualification = status?.qualification;
-  const groupState = (value?: boolean) => value === true ? "#35d6a0" : value === false ? "#f06f79" : "var(--muted)";
   const panel: CSSProperties = { border: "1px solid var(--line)", borderRadius: 18, padding: 16, background: "var(--surface)", marginBottom: 16, overflow: "hidden" };
   const tile: React.CSSProperties = { minWidth: 0, flex: "1 1 0", display: "grid", placeItems: "center", borderRadius: 10, minHeight: 45, border: "1px solid var(--line)", background: "var(--surface-2, var(--sidebar-bg))", color: "var(--ink)", fontSize: 17, fontWeight: 850, transition: "transform .18s ease, border-color .18s ease" };
 
@@ -466,60 +382,6 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         <span style={{ color: "#4ade80" }}>● Highest</span><span style={{ color: "#60a5fa" }}>● 2nd highest</span><span style={{ color: "#f87171" }}>● Lowest</span><span style={{ color: "#fbbf24" }}>● 2nd lowest</span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginTop: 12 }}>
-        {[
-          { id: "under", icon: "↓", color: groupState(qualification?.under_qualifies), qualifies: qualification?.under_qualifies, threshold: qualification?.under_threshold_passes, stability: qualification?.under_stability_passes },
-          { id: "over", icon: "↑", color: groupState(qualification?.over_qualifies), qualifies: qualification?.over_qualifies, threshold: qualification?.over_threshold_passes, stability: qualification?.over_stability_passes },
-        ].map((group) => (
-          <div key={group.id} style={{ border: `1px solid ${group.color}55`, borderRadius: 12, padding: 11, background: `color-mix(in srgb, ${group.color} 5%, transparent)` }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 17, color: group.color }}>{group.icon}</span>
-              <span style={{ display: "flex", gap: 4, alignItems: "center" }} aria-label={group.qualifies === true ? "Qualified" : group.qualifies === false ? "Not qualified" : "Pending"}>
-                {[group.threshold, group.stability, group.qualifies].map((passed, index) => <span key={index} style={{ width: 8, height: 8, borderRadius: 99, background: passed === true ? "#35d6a0" : passed === false ? "#f06f79" : "var(--line)" }} />)}
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 5, marginTop: 12 }}>
-              {[group.threshold, group.stability, group.qualifies].map((passed, index) => <span key={index} style={{ flex: 1, height: 5, borderRadius: 4, background: passed === true ? "#35d6a0" : passed === false ? "#f06f79" : "var(--line)" }} />)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 9, marginTop: 10 }}>
-        {[
-          { label: "LOWER CLASS", digits: lowerDigits, count: lowerCount, color: "#60a5fa", operator: "<", key: "lower" },
-          { label: "BARRIER CLASS", digits: [barrier], count: barrierCount, color: "#22d3ee", operator: "=", key: "barrier" },
-          { label: "UPPER CLASS", digits: upperDigits, count: upperCount, color: "#4ade80", operator: ">", key: "upper" },
-        ].map((group) => <div key={group.key} style={{ border: `1px solid ${group.color}55`, borderRadius: 12, padding: 10, background: `color-mix(in srgb, ${group.color} 5%, transparent)`, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}>
-            <strong style={{ color: group.color, fontSize: 9, letterSpacing: ".08em" }}>{group.label}</strong>
-            <strong style={{ color: "var(--ink)", fontSize: 12 }}>{percentage(group.count)}</strong>
-          </div>
-          <div style={{ display: "flex", gap: 4, marginTop: 9, flexWrap: "wrap" }}>
-            {group.digits.map((digit) => <span key={digit} title={`Digit ${digit}: ${counts[digit]} ticks`} style={{ flex: "1 1 18px", minWidth: 0, textAlign: "center", border: `1px solid ${rankColor(digit)}55`, borderRadius: 6, padding: "6px 0", color: rankColor(digit), background: rankBackground(digit), fontWeight: 800, fontSize: 12 }}>{digit}</span>)}
-          </div>
-          <div style={{ color: "var(--muted)", fontSize: 9, marginTop: 7 }}>{group.operator} {barrier} · {hasFrequency ? `${group.count.toLocaleString()} ticks` : "Awaiting frequency data"}</div>
-        </div>)}
-      </div>
-      <div style={{ marginTop: 8, fontSize: 9, color: "var(--muted)" }}>
-        Barrier-relative classes: lower digits lose on Under/ win on Over only according to the selected contract rules; the exact barrier digit loses on both Over and Under. Frequency colors show rank, not contract outcome.
-      </div>
-
-      <div style={{ marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))", display: "grid", gap: 9 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <div><div style={{ color: "var(--ink)", fontSize: 12, fontWeight: 850 }}>Demo auto-execution</div><div style={{ color: "var(--muted)", fontSize: 10, marginTop: 3 }}>1-tick Over/Under · max 3 settled buys · stop at 2 consecutive losses</div></div>
-          <label style={{ color: "var(--muted)", fontSize: 10, display: "flex", alignItems: "center", gap: 6 }}>Stake
-            <input aria-label="Demo strategy stake" type="number" min="1" max="1000" step="1" value={strategyStake} disabled={autoArmed || autoState?.state === "executing"} onChange={(event) => setStrategyStake(event.target.value)} style={{ width: 76, padding: "7px 8px", border: "1px solid var(--line)", borderRadius: 8, background: "var(--surface)", color: "var(--ink)" }} />
-          </label>
-        </div>
-        <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", color: autoArmed ? "#35d6a0" : "var(--muted)", fontSize: 10, fontWeight: 850 }}>{autoArmed ? "Run active · execution armed" : "Execution disarmed"}</span>
-          <button type="button" disabled={!autoArmed && autoState?.state !== "executing"} onClick={() => { autoSessionRef.current?.stop(); setAutoArmed(false); setAutoState(autoSessionRef.current?.snapshot() ?? null); }} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", background: "transparent", color: "var(--ink)", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>Stop new buys</button>
-          <span style={{ color: "var(--muted)", fontSize: 10 }}>{!isDemoAccount ? "Select a Demo account to enable" : autoArmed ? "Armed · waiting for a qualified signal" : autoState ? autoState.state + " · " + autoState.submitted + "/3 settled · " + autoState.consecutiveLosses + " consecutive losses" : "Disarmed · no orders will be placed"}</span>
-        </div>
-        {autoState?.state === "reconciliation_required" && <div role="alert" style={{ color: "#f4b740", fontSize: 10 }}>Order outcome is unresolved. Automatic execution is paused. Reconcile the contract and statement directly in Deriv before any retry.</div>}
-        <div style={{ color: "var(--muted)", fontSize: 9 }}>Real-account execution is disabled. Clicking Run arms demo execution; no buy occurs until the backend reports a completed entry signal after all filters and the tick sequence pass. Each buy waits for authoritative Deriv settlement. The session stops after the sequence and requires a fresh Run.</div>
-      </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 13 }}>
         <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
           <span style={{ width: 8, height: 8, flexShrink: 0, borderRadius: 99, background: state === "blocked" || transport === "disconnected" || transport === "stale" ? "#f4b740" : active ? "#35d6a0" : "var(--muted)" }} />
