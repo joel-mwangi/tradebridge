@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { createDemoExecutionSession } from "./strategy-auto-execution.mjs";
+import { validateRunnableStrategySignal } from "./strategy-signal-contract.mjs";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -96,6 +97,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const [autoState, setAutoState] = useState<{ state: string; submitted: number; consecutiveLosses: number; remaining: number } | null>(null);
   const autoSessionRef = useRef<ReturnType<typeof createDemoExecutionSession> | null>(null);
   const signalConsumedRef = useRef(false);
+  const activeRunIdRef = useRef<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const previousTransportRef = useRef<typeof transport | null>(null);
   const previousStrategyStateRef = useRef<string | null>(null);
@@ -159,17 +161,15 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
 
   useEffect(() => {
     if (!autoArmed || !autoSessionRef.current || !executeDemoStrategyTrade || !isDemoAccount) return;
-    if (status?.symbol !== symbol || status?.barrier !== barrier || status?.signal_generated !== true) return;
-    if (status.selected_group !== "under" && status.selected_group !== "over") return;
-    if (signalConsumedRef.current) return;
+    const signalCheck = validateRunnableStrategySignal(status, { symbol, windowSize, barrier, direction });
+    if (!signalCheck.ok || signalConsumedRef.current || !activeRunIdRef.current) return;
     const direction = status.selected_group === "under" ? "UNDER" : "OVER";
-    if ((direction === "UNDER" && barrier < 1) || (direction === "OVER" && barrier > 8)) return;
     signalConsumedRef.current = true;
     const session = autoSessionRef.current;
     const stake = Number(strategyStake);
     if (!Number.isFinite(stake) || stake < 1 || stake > 1000) { setAutoState({ state: "blocked_invalid_stake", submitted: 0, consecutiveLosses: 0, remaining: 3 }); setAutoArmed(false); return; }
     const input = { symbol, contractType: direction === "UNDER" ? "DIGITUNDER" as const : "DIGITOVER" as const, stake, duration: 1, durationUnit: "t" as const, barrier: String(barrier) };
-    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: symbol + ":" + barrier + ":" + direction + ":" + Date.now() }, input).then((snapshot) => {
+    void session.runQualifiedSignal({ qualified: true, symbol, direction, barrier, signalId: activeRunIdRef.current + ":" + symbol + ":" + windowSize + ":" + barrier + ":" + direction }, input).then((snapshot) => {
       setAutoState(snapshot);
       setAutoArmed(false);
       const socket = socketRef.current;
@@ -180,7 +180,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       const socket = socketRef.current;
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ strategy: { action: "stop" } }));
     });
-  }, [autoArmed, status?.signal_generated, status?.selected_group, status?.symbol, status?.barrier, symbol, barrier, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
+  }, [autoArmed, status, symbol, windowSize, barrier, direction, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
 
   useEffect(() => {
     const previous = previousTransportRef.current;
@@ -309,6 +309,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       // Clear prior-run status before arming so an old signal cannot trigger a new sequence.
       setStatus(null);
       signalConsumedRef.current = false;
+      activeRunIdRef.current = symbol + ":" + windowSize + ":" + barrier + ":" + direction + ":" + Date.now();
       setAutoState(null);
       if (isDemoAccount && executeDemoStrategyTrade) {
         try {
