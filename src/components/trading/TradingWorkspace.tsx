@@ -147,6 +147,13 @@ export default function TradingWorkspace() {
     if (prediction === "OVER" && digitTarget > 8) setDigitTarget(5);
   }
 
+  function setStrategyDirection(direction: "OVER" | "UNDER") {
+    setDigitModeState("over-under");
+    setDigitPrediction(direction);
+    if (direction === "UNDER" && digitTarget < 1) setDigitTarget(5);
+    if (direction === "OVER" && digitTarget > 8) setDigitTarget(5);
+  }
+
   useEffect(() => {
     const saved = localStorage.getItem("tradebridge_theme");
     if (saved === "light" || saved === "dark") setTheme(saved);
@@ -661,7 +668,7 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={(direction) => { setDigitModeState("over-under"); setPredictionAndValidateTarget(direction); }} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} isDemoAccount={activeAccountIsDemo && accountSessionReady} executeDemoStrategyTrade={trading.executeDemoStrategyTrade} />
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} isDemoAccount={activeAccountIsDemo && accountSessionReady} executeDemoStrategyTrade={trading.executeDemoStrategyTrade} />
                 )}
 
                 {tradeView === "charts" && (
