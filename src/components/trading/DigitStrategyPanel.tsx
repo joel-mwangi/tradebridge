@@ -79,7 +79,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, frequency, isDemoAccount = false, executeDemoStrategyTrade }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; frequency?: import("./types").BackendDigitFrequency; isDemoAccount?: boolean; executeDemoStrategyTrade?: (input: { symbol: string; contractType: "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "t"; barrier: string }) => Promise<{ status: "settled"; contractId: string; outcome: "won" | "lost" | "breakeven"; profit: number }> }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, isDemoAccount = false, executeDemoStrategyTrade }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; isDemoAccount?: boolean; executeDemoStrategyTrade?: (input: { symbol: string; contractType: "DIGITOVER" | "DIGITUNDER"; stake: number; duration: number; durationUnit: "t"; barrier: string }) => Promise<{ status: "settled"; contractId: string; outcome: "won" | "lost" | "breakeven"; profit: number }> }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
@@ -160,9 +160,10 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   useEffect(() => {
     if (!autoArmed || !autoSessionRef.current || !executeDemoStrategyTrade || !isDemoAccount) return;
     if (status?.symbol !== symbol || status?.barrier !== barrier || status?.signal_generated !== true) return;
-    if (status.selected_group !== "under" && status.selected_group !== "over") return;
+    // The user-selected contract is authoritative. Never execute a signal for the opposite group.
+    if (status.requested_direction !== direction.toLowerCase()) return;
+    if (status.selected_group !== direction.toLowerCase()) return;
     if (signalConsumedRef.current) return;
-    const direction = status.selected_group === "under" ? "UNDER" : "OVER";
     if ((direction === "UNDER" && barrier < 1) || (direction === "OVER" && barrier > 8)) return;
     signalConsumedRef.current = true;
     const session = autoSessionRef.current;
@@ -180,7 +181,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       const socket = socketRef.current;
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ strategy: { action: "stop" } }));
     });
-  }, [autoArmed, status?.signal_generated, status?.selected_group, status?.symbol, status?.barrier, symbol, barrier, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
+  }, [autoArmed, status?.signal_generated, status?.selected_group, status?.requested_direction, status?.symbol, status?.barrier, symbol, barrier, direction, strategyStake, isDemoAccount, executeDemoStrategyTrade]);
 
   useEffect(() => {
     const previous = previousTransportRef.current;
@@ -394,6 +395,25 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
           <button type="button" onClick={() => send("stop")} disabled={busy || !active} aria-label="Stop observation" title="Stop" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy || !active ? .4 : 1, cursor: "pointer" }}><Icon name="stop" /></button>
           <button type="button" onClick={() => send("status")} disabled={busy} aria-label="Refresh status" title="Refresh" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy ? .5 : 1, cursor: "pointer" }}><Icon name="refresh" /></button>
+        </div>
+      </div>
+
+      <div aria-label="Strategy contract type" style={{ display: "grid", gap: 8, marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: 3 }}>
+            <strong style={{ color: "var(--ink)", fontSize: 12 }}>Contract type</strong>
+            <span style={{ color: "var(--muted)", fontSize: 10 }}>Choose the contract the Strategy run should qualify</span>
+          </div>
+          <span style={{ color: "var(--muted)", fontSize: 10 }}>Selected: <strong style={{ color: "var(--ink)" }}>{direction}</strong></span>
+        </div>
+        <div role="group" aria-label="Select Over or Under contract" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+          {(["OVER", "UNDER"] as const).map((option) => {
+            const selected = direction === option;
+            const accent = option === "OVER" ? "#35d6a0" : "#60a5fa";
+            return <button key={option} type="button" aria-pressed={selected} onClick={() => { if (option !== direction) onDirectionChange(option); }} style={{ minHeight: 42, border: `1px solid ${selected ? accent : "var(--line)"}`, borderRadius: 9, padding: "9px 12px", background: selected ? `color-mix(in srgb, ${accent} 14%, transparent)` : "transparent", color: selected ? accent : "var(--ink)", fontSize: 12, fontWeight: 850, letterSpacing: ".06em", cursor: "pointer", transition: "background .15s ease, border-color .15s ease" }}>
+              {option === "OVER" ? "↑ OVER" : "↓ UNDER"}
+            </button>;
+          })}
         </div>
       </div>
 
