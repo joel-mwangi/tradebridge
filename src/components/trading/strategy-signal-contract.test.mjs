@@ -29,5 +29,5 @@ for (const [field, value, reason] of [
 }
 test("rejects impossible contract barriers for the requested direction", () => {
   assert.equal(validateRunnableStrategySignal({ ...status, barrier: 9 }, config).reason, "barrier_mismatch");
-  assert.equal(validateRunnableStrategySignal({ ...status, barrier: 0 }, { ...config, direction: "UNDER", barrier: 0 }).reason, "invalid_under_barrier");
+  assert.equal(validateRunnableStrategySignal({ ...status, requested_direction: "under", selected_group: "under", barrier: 0 }, { ...config, direction: "UNDER", barrier: 0 }).reason, "invalid_under_barrier");
 });
