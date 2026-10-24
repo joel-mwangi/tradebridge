@@ -22,6 +22,27 @@ type StrategyStatus = {
   feed_state?: string;
   observation_count?: number;
   digit_window_size?: number;
+  stable_since?: string | null;
+  stability_seconds_required?: number;
+  window_seconds?: number;
+  red_digits?: number[];
+  yellow_digits?: number[];
+  blue_digits?: number[];
+  green_digits?: number[];
+  execution_enabled?: boolean;
+  qualification?: {
+    decision?: string;
+    reason?: string;
+    under_threshold_passes?: boolean;
+    under_stability_passes?: boolean;
+    under_color_positions_pass?: boolean;
+    under_trigger_passes?: boolean;
+    over_threshold_passes?: boolean;
+    over_stability_passes?: boolean;
+    over_color_positions_pass?: boolean;
+    over_trigger_passes?: boolean;
+    trigger_digit?: number | null;
+  };
 };
 
 type TickMessage = {
@@ -74,6 +95,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const seenTicksRef = useRef(new Set<string>());
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
   const [status, setStatus] = useState<StrategyStatus | null>(null);
+  const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tape, setTape] = useState<TapeDigit[]>([]);
   const [lastTickAt, setLastTickAt] = useState<number | null>(null);
@@ -467,14 +489,105 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
       )}
 
-      {status && (
-        <div aria-label="Backend strategy status" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: "1px solid var(--line)", background: "var(--surface-2, var(--sidebar-bg))" }}>
-          <strong style={{ display: "block", color: "var(--ink)", fontSize: 12, marginBottom: 9 }}>Backend strategy status</strong>
-          <pre style={{ margin: 0, maxHeight: 260, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "var(--muted)", fontSize: 10, lineHeight: 1.55 }}>
-            {JSON.stringify(status, null, 2)}
-          </pre>
-        </div>
-      )}
+      {status && (() => {
+        const qualification = status.qualification;
+        const selectedDirection = status.requested_direction === "under" ? "under" : "over";
+        const directionChecks = selectedDirection === "over"
+          ? [
+              { label: "Frequency threshold", passed: qualification?.over_threshold_passes },
+              { label: "Ranking stability", passed: qualification?.over_stability_passes },
+              { label: "Colour positions", passed: qualification?.over_color_positions_pass },
+              { label: "Entry trigger", passed: qualification?.over_trigger_passes },
+            ]
+          : [
+              { label: "Frequency threshold", passed: qualification?.under_threshold_passes },
+              { label: "Ranking stability", passed: qualification?.under_stability_passes },
+              { label: "Colour positions", passed: qualification?.under_color_positions_pass },
+              { label: "Entry trigger", passed: qualification?.under_trigger_passes },
+            ];
+        const failedCheck = directionChecks.find((check) => check.passed === false);
+        const allChecksPassed = directionChecks.every((check) => check.passed === true);
+        const statusColor = status.signal_generated ? "#35d6a0" : allChecksPassed ? "#35d6a0" : "#f4b740";
+        const displayState = status.signal_generated ? "Entry signal confirmed"
+          : status.state === "waiting_for_more_data" ? "Waiting for qualifying conditions"
+          : status.state === "observing" ? "Observing market"
+          : status.state ? status.state.replaceAll("_", " ") : "Status unavailable";
+        const digitGroup = (label: string, digits: number[] | undefined, color: string) => (
+          <div key={label} style={{ flex: "1 1 90px", minWidth: 0, padding: "9px 10px", borderRadius: 10, background: `${color}14`, border: `1px solid ${color}55` }}>
+            <div style={{ color, fontSize: 10, fontWeight: 850, marginBottom: 4 }}>{label}</div>
+            <div style={{ color: "var(--ink)", fontSize: 17, fontWeight: 850 }}>{digits?.length ? digits.join(", ") : "—"}</div>
+          </div>
+        );
+        return (
+          <div aria-label="Readable backend strategy status" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: `1px solid ${statusColor}55`, background: "var(--surface-2, var(--sidebar-bg))" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: 5 }}>
+                <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 850, letterSpacing: ".12em", textTransform: "uppercase" }}>Strategy status · {selectedDirection.toUpperCase()} {status.barrier ?? barrier}</span>
+                <strong style={{ color: "var(--ink)", fontSize: 16 }}>{displayState}</strong>
+                <span style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>{status.reason ?? qualification?.reason ?? "Waiting for the backend to report qualification details."}</span>
+              </div>
+              <span style={{ padding: "5px 9px", borderRadius: 999, background: `${statusColor}18`, color: statusColor, fontSize: 10, fontWeight: 850 }}>{status.signal_generated ? "SIGNAL READY" : allChecksPassed ? "QUALIFIED" : "OBSERVING"}</span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: 8, marginTop: 13 }}>
+              <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+                <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Ranking stability</span>
+                <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 16 }}>{status.stability_seconds_required != null ? `${status.stability_seconds_required}s required` : "Requirement unknown"}</strong>
+                <span style={{ color: qualification?.[selectedDirection === "over" ? "over_stability_passes" : "under_stability_passes"] ? "#35d6a0" : "#f4b740", fontSize: 10 }}>{qualification?.[selectedDirection === "over" ? "over_stability_passes" : "under_stability_passes"] === true ? "✓ Requirement met" : qualification?.[selectedDirection === "over" ? "over_stability_passes" : "under_stability_passes"] === false ? "× Not yet met" : "Waiting for data"}</span>
+              </div>
+              <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+                <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Market feed</span>
+                <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 16 }}>{status.feed_state === "healthy" ? "Healthy" : (status.feed_state ?? "Unknown").replaceAll("_", " ")}</strong>
+                <span style={{ color: status.feed_state === "healthy" ? "#35d6a0" : "#f4b740", fontSize: 10 }}>{status.observation_count ?? 0} observations</span>
+              </div>
+              <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+                <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Entry trigger</span>
+                <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 16 }}>{status.trigger_digit != null ? `Digit ${status.trigger_digit}` : "Not triggered"}</strong>
+                <span style={{ color: status.signal_generated ? "#35d6a0" : "var(--muted)", fontSize: 10 }}>{status.signal_generated ? "Signal generated" : "No qualifying digit yet"}</span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 13 }}>
+              <strong style={{ display: "block", color: "var(--ink)", fontSize: 11, marginBottom: 8 }}>Live colour rankings</strong>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {digitGroup("RED · lowest", status.red_digits, "#f87171")}
+                {digitGroup("YELLOW · 2nd lowest", status.yellow_digits, "#fbbf24")}
+                {digitGroup("BLUE · 2nd highest", status.blue_digits, "#60a5fa")}
+                {digitGroup("GREEN · highest", status.green_digits, "#4ade80")}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 13, paddingTop: 11, borderTop: "1px solid var(--line)" }}>
+              <strong style={{ display: "block", color: "var(--ink)", fontSize: 11, marginBottom: 8 }}>Qualification checklist</strong>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 7 }}>
+                {directionChecks.map((check) => {
+                  const color = check.passed === true ? "#35d6a0" : check.passed === false ? "#f87171" : "var(--muted)";
+                  const icon = check.passed === true ? "✓" : check.passed === false ? "×" : "·";
+                  return <div key={check.label} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 9px", borderRadius: 9, background: "var(--surface)", border: "1px solid var(--line)" }}>
+                    <span aria-hidden="true" style={{ color, fontSize: 15, fontWeight: 900 }}>{icon}</span>
+                    <span style={{ color: "var(--ink)", fontSize: 10, fontWeight: 700 }}>{check.label}</span>
+                    <span style={{ marginLeft: "auto", color, fontSize: 9, fontWeight: 800 }}>{check.passed === true ? "PASS" : check.passed === false ? "FAIL" : "—"}</span>
+                  </div>;
+                })}
+              </div>
+              {failedCheck && (
+                <p style={{ margin: "9px 0 0", color: "#f4b740", fontSize: 11, lineHeight: 1.5 }}>
+                  <strong>Still needed:</strong> {failedCheck.label} has not passed. The system will keep observing; it will not switch to {selectedDirection === "over" ? "Under" : "Over"} automatically.
+                </p>
+              )}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                <span style={{ color: "var(--muted)", fontSize: 10 }}>Execution: {status.execution_enabled ? "enabled by backend" : "disabled"} · Window: {status.digit_window_size?.toLocaleString() ?? windowSize.toLocaleString()} digits</span>
+                <button type="button" onClick={() => setStatusDetailsOpen((open) => !open)} aria-expanded={statusDetailsOpen} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "7px 9px", background: "transparent", color: "var(--ink)", fontSize: 10, fontWeight: 750, cursor: "pointer" }}>{statusDetailsOpen ? "Hide developer details" : "Developer details (JSON)"}</button>
+              </div>
+              {statusDetailsOpen && (
+                <pre style={{ margin: "10px 0 0", maxHeight: 260, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "var(--muted)", fontSize: 10, lineHeight: 1.55 }}>
+                  {JSON.stringify(status, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ marginTop: 16, border: "1px solid var(--line)", borderRadius: 14, padding: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
