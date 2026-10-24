@@ -93,6 +93,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
 export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
+  const [retryCount, setRetryCount] = useState(0);
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
   const [status, setStatus] = useState<StrategyStatus | null>(null);
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
@@ -192,6 +193,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     }
     let alive = true;
     let socket: WebSocket;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
     try {
       socket = new WebSocket(MARKET_SOCKET);
       socketRef.current = socket;
@@ -201,6 +204,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     }
     socket.onopen = () => {
       if (!alive) return;
+      reconnectAttempts = 0;
       setTransport("connected");
       socket.send(JSON.stringify({ strategy: { action: "status" } }));
     };
@@ -240,13 +244,20 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       }
     };
     socket.onerror = () => { if (alive) setTransport("disconnected"); };
-    socket.onclose = () => { if (alive) setTransport("disconnected"); };
+    socket.onclose = () => {
+      if (!alive) return;
+      setTransport("disconnected");
+      reconnectAttempts += 1;
+      const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts - 1, 5), 30_000);
+      reconnectTimer = setTimeout(() => setRetryCount((count) => count + 1), delay);
+    };
     return () => {
       alive = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (socketRef.current === socket) socketRef.current = null;
       socket.close();
     };
-  }, [symbol]);
+  }, [symbol, retryCount]);
 
   useEffect(() => {
     const active = ["observing", "waiting_for_more_data", "selected"].includes(status?.state ?? "");

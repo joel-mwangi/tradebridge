@@ -206,6 +206,8 @@ export default function ForexAnalyst() {
     let alive = true;
     let socket: WebSocket | null = null;
     let connectionOpened = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
 
     pendingHistoryRef.current.clear();
     subscribedSymbolsRef.current.clear();
@@ -228,6 +230,7 @@ export default function ForexAnalyst() {
 
     socket.onopen = () => {
       if (!alive || !socket) return;
+      reconnectAttempts = 0;
       connectionOpened = true;
       setFeedStatus("Discovering available forex pairs");
       // Deliberately no digit-contract filter: this workspace is for forex chart analysis.
@@ -403,11 +406,15 @@ export default function ForexAnalyst() {
     socket.onclose = () => {
       if (!alive) return;
       setFeedReady(false);
-      setFeedStatus(connectionOpened ? "Market-data connection disconnected" : "Could not connect to market data");
+      setFeedStatus(connectionOpened ? "Market-data connection disconnected; reconnecting" : "Could not connect to market data; reconnecting");
+      reconnectAttempts += 1;
+      const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts - 1, 5), 30_000);
+      reconnectTimer = setTimeout(() => setRetryCount((count) => count + 1), delay);
     };
 
     return () => {
       alive = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (socketRef.current === socket) socketRef.current = null;
       pendingHistoryRef.current.clear();
       for (const timeoutId of historyTimeoutsRef.current.values()) window.clearTimeout(timeoutId);

@@ -68,6 +68,7 @@ export function useMarketData() {
   const [candlesByKey, setCandlesByKey] = useState<Record<string, MarketCandle[]>>({});
   const [connection, setConnection] = useState("Connecting to Deriv market data");
   const [selectedSymbol, setSelectedSymbol] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const marketSequenceRef = useRef(100);
   const historyRequestsRef = useRef(new Map<number, string>());
@@ -76,6 +77,7 @@ export function useMarketData() {
   const candleSequenceRef = useRef(50_000);
   const candleRequestsRef = useRef(new Map<number, { key: string; symbol: string; granularity: number }>());
   const requestedCandleKeysRef = useRef(new Set<string>());
+  const selectedSymbolRef = useRef("");
 
   const requestMarket = useCallback((symbol: string) => {
     const activeSocket = socketRef.current;
@@ -103,6 +105,7 @@ export function useMarketData() {
   }, []);
 
   const selectMarket = useCallback((symbol: string) => {
+    selectedSymbolRef.current = symbol;
     setSelectedSymbol(symbol);
     requestMarket(symbol);
   }, [requestMarket]);
@@ -133,6 +136,8 @@ export function useMarketData() {
     let alive = true;
     let socket: WebSocket;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
 
     const startPing = () => {
       if (pingTimer) clearInterval(pingTimer);
@@ -193,7 +198,11 @@ export function useMarketData() {
       const chosen = [...preferred, ...rest];
       if (!alive) return;
       setMarkets(chosen);
-      setSelectedSymbol((current) => chosen.some((item) => item.symbol === current) ? current : chosen[0]?.symbol ?? "");
+      setSelectedSymbol((current) => {
+        const next = chosen.some((item) => item.symbol === current) ? current : chosen[0]?.symbol ?? "";
+        selectedSymbolRef.current = next;
+        return next;
+      });
       if (chosen.length === 0) {
         setConnection("Deriv returned no eligible markets");
         return;
@@ -208,6 +217,13 @@ export function useMarketData() {
           if (alive) requestMarket(market.symbol);
         }, index * 50);
       });
+      const selected = selectedSymbolRef.current;
+      if (selected && !PREFERRED_SYMBOLS.includes(selected)) {
+        setTimeout(() => {
+          if (alive) requestMarket(selected);
+        }, PREFERRED_SYMBOLS.length * 50);
+      }
+      reconnectAttempts = 0;
       setConnection("Live market stream connected");
     };
 
@@ -226,6 +242,9 @@ export function useMarketData() {
 
     socket.onopen = () => {
       if (!alive) return;
+      subscribedSymbolsRef.current.clear();
+      historyRequestsRef.current.clear();
+      requestedCandleKeysRef.current.clear();
       startPing();
       setConnection("Loading available markets");
       socket.send(JSON.stringify({
@@ -338,12 +357,20 @@ export function useMarketData() {
     };
     socket.onclose = () => {
       if (pingTimer) clearInterval(pingTimer);
-      if (alive) setConnection("Market stream disconnected");
+      if (socketRef.current === socket) socketRef.current = null;
+      if (!alive) return;
+      setConnection("Market stream disconnected; reconnecting");
+      reconnectAttempts += 1;
+      const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts - 1, 5), 30_000);
+      reconnectTimer = setTimeout(() => {
+        if (alive) setRetryCount((count) => count + 1);
+      }, delay);
     };
 
     return () => {
       alive = false;
       if (pingTimer) clearInterval(pingTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (socketRef.current === socket) socketRef.current = null;
       candleRequestsRef.current.clear();
       requestedCandleKeysRef.current.clear();
@@ -351,7 +378,7 @@ export function useMarketData() {
       subscribedSymbolsRef.current.clear();
       socket.close();
     };
-  }, []);
+  }, [retryCount, requestMarket]);
 
   const selectedMarket = useMemo(
     () => markets.find((market) => market.symbol === selectedSymbol) ?? markets[0] ?? null,

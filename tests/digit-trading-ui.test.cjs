@@ -51,6 +51,18 @@ test("digit quote barrier validation rejects invalid Over/Under and missing matc
   assert.match(tradingHook, /"DIGITEVEN".*input\.barrier !== undefined/s);
 });
 
+test("market streams reconnect and restore subscriptions after WebSocket close", () => {
+  const strategy = read("src/components/trading/DigitStrategyPanel.tsx");
+  const forex = read("src/components/trading/ForexAnalyst.tsx");
+  assert.match(marketData, /Market stream disconnected; reconnecting/);
+  assert.match(marketData, /setRetryCount/);
+  assert.match(marketData, /subscribedSymbolsRef\.current\.clear\(\)/);
+  assert.match(strategy, /socket\.onclose =/);
+  assert.match(strategy, /setRetryCount/);
+  assert.match(forex, /Market-data connection disconnected; reconnecting/);
+  assert.match(forex, /setRetryCount/);
+});
+
 test("market discovery and market labels are aligned with digit trading", () => {
   assert.match(marketData, /contract_type: \["DIGITOVER", "DIGITUNDER", "DIGITEVEN", "DIGITODD", "DIGITMATCH", "DIGITDIFF"\]/);
   assert.doesNotMatch(marketData, /contract_type: \["CALL", "PUT"\]/);
