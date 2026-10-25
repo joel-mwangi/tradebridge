@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./TradingWorkspace.module.css";
+import { Skeleton, SkeletonCard } from "./Skeleton";
 import type { DemoQuote, DerivAccount, DigitContractMode, DigitContractType, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
 
 const PREDICTIONS: Record<DigitContractMode, Array<{ label: string; value: DigitPrediction }>> = {
@@ -137,6 +138,35 @@ export default function DemoTradeTicket({
       </div>
     </div>
 
+    {/* Skeleton: session is connecting and nothing useful to show yet */}
+    {!connected && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "4px 0" }} aria-label="Connecting to trading session">
+        <Skeleton size="sm" width="w55" />
+        <SkeletonCard rows={2} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <SkeletonCard rows={2} />
+          <SkeletonCard rows={2} />
+        </div>
+        <Skeleton size="btn" width="full" />
+      </div>
+    )}
+
+    {/* Skeleton: connected but session not yet established */}
+    {connected && account && sessionState !== expectedSessionState && !isRealAccount && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "4px 0" }} aria-label="Opening trading session">
+        <Skeleton size="xs" width="w70" />
+        <SkeletonCard rows={2} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <SkeletonCard rows={2} />
+          <SkeletonCard rows={2} />
+        </div>
+        <Skeleton size="btn" width="full" />
+        <p style={{ margin: 0, fontSize: 10, color: "var(--muted)", textAlign: "center" }}>{sessionState}</p>
+      </div>
+    )}
+
+    {/* Real content: session established */}
+    {(connected && (isRealAccount || sessionState === expectedSessionState)) && (<>
     {isRealAccount && <div className={styles.accountModeNotice} role="note">
       <strong>{realTradingEnabled ? "Real-money account" : "Live trading is locked"}</strong>
       <span>{realTradingEnabled
@@ -217,5 +247,6 @@ export default function DemoTradeTicket({
     {!connected && <p className={styles.inlineHint}>Connect Deriv to enable Buy.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an account to continue.</p>}
     {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Waiting for verified daily P/L before enabling live orders.</p>}
+    </>)}
   </section>;
 }

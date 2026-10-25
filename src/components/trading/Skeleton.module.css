@@ -1,0 +1,49 @@
+/* Shared skeleton shimmer — used across trading panels */
+
+.block {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--skeleton-bg, color-mix(in srgb, var(--ink) 8%, transparent));
+}
+
+.block::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--skeleton-highlight, color-mix(in srgb, var(--ink) 5%, transparent)),
+    transparent
+  );
+  animation: sk-shimmer 1.6s ease-in-out infinite;
+}
+
+/* Sizes */
+.xs  { height: 9px; }
+.sm  { height: 11px; }
+.md  { height: 16px; }
+.lg  { height: 24px; }
+.xl  { height: 36px; }
+.btn { height: 40px; border-radius: 10px; }
+.circle { border-radius: 50%; }
+.pill   { border-radius: 999px; }
+
+/* Width helpers */
+.w25  { width: 25%; }
+.w40  { width: 40%; }
+.w55  { width: 55%; }
+.w70  { width: 70%; }
+.w85  { width: 85%; }
+.full { width: 100%; }
+
+@keyframes sk-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block::after { animation: none; transform: none; opacity: 0.15; }
+}

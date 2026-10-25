@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { StrategyContractUpdate, StrategyExecutionStatus } from "./types";
+import { Skeleton } from "./Skeleton";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -509,8 +510,31 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
       )}
 
-      {status && (() => {
-        const qualification = status.qualification;
+      {!status && transport === "connecting" && (
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12, padding: 14, border: "1px solid var(--line)", borderRadius: 14 }} aria-label="Connecting to market feed">
+          <Skeleton size="xs" width="w55" />
+          <Skeleton size="lg" width="w70" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9 }}>
+            {[1, 2, 3].map((i) => (
+              <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                <Skeleton size="xs" width="w70" />
+                <Skeleton size="md" width="w85" />
+                <Skeleton size="xs" width="w55" />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 9 }}>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 9px", borderRadius: 9, border: "1px solid var(--line)" }}>
+                <Skeleton circle style={{ width: 14, height: 14, flexShrink: 0 }} />
+                <Skeleton size="xs" width="w70" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {status && (() => {        const qualification = status.qualification;
         const selectedDirection = status.requested_direction === "under" ? "under" : "over";
         const directionChecks = selectedDirection === "over"
           ? [
@@ -630,7 +654,15 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           const height = Math.max(3, (count / maxCount) * 35);
           const chosen = selectedDigit === digit;
           const color = rankColor(digit);
-          return <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={`Digit ${digit}: ${count} backend-observed ticks`} style={{ border: `1px solid ${chosen ? "var(--teal)" : hasFrequency ? color : "var(--line)"}`, borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "color-mix(in srgb, var(--teal) 8%, transparent)" : rankBackground(digit), color, minWidth: 0, cursor: "pointer" }}>
+          return !hasFrequency && transport !== "connected" ? (
+            <div key={digit} style={{ border: "1px solid var(--line)", borderRadius: 9, padding: "7px 2px 5px" }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 800, color: "var(--muted)" }}>{digit}</span>
+              <span style={{ height: 38, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}>
+                <Skeleton style={{ width: "58%", maxWidth: 16, height: 3, borderRadius: 4 }} />
+              </span>
+              <Skeleton size="xs" width="w70" style={{ margin: "0 auto" }} />
+            </div>
+          ) : <button key={digit} type="button" onClick={() => setSelectedDigit(chosen ? null : digit)} aria-label={`Digit ${digit}: ${count} backend-observed ticks`} style={{ border: `1px solid ${chosen ? "var(--teal)" : hasFrequency ? color : "var(--line)"}`, borderRadius: 9, padding: "7px 2px 5px", background: chosen ? "color-mix(in srgb, var(--teal) 8%, transparent)" : rankBackground(digit), color, minWidth: 0, cursor: "pointer" }}>
             <span style={{ display: "block", fontSize: 11, fontWeight: 800 }}>{digit}</span>
             <span style={{ height: 38, display: "flex", alignItems: "end", justifyContent: "center", margin: "4px 0" }}><span style={{ width: "58%", maxWidth: 16, height: hasFrequency ? height : 3, borderRadius: 4, background: hasFrequency ? color : "var(--line)", transition: "height .18s ease" }} /></span>
             <span style={{ display: "block", fontSize: 9 }}>{hasFrequency ? percentage(count) : "—"}</span>

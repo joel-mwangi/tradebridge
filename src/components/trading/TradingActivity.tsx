@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "./TradingWorkspace.module.css";
+import { Skeleton } from "./Skeleton";
 import type { AccountActivity, OpenPosition } from "./types";
 
 type Props = {
@@ -74,7 +75,20 @@ export default function TradingActivity({
         <div><p className={styles.eyebrow}>{liveAccount ? "LIVE ACCOUNT" : "DEMO ACCOUNT"}</p><h2>Open positions <span className={styles.countPill}>{positions.length}</span></h2><p className={styles.panelSubtext}>Open Deriv contracts · current profit/loss updates when available.</p></div>
         <button type="button" className={styles.panelActionButton} onClick={onRefresh} disabled={busy || activityLoading}>Refresh</button>
       </div>
-      {positions.length === 0 ? <div className={styles.emptyState}>
+      {positions.length === 0 && busy && !accountDataUnavailable ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 0" }} aria-label="Loading positions">
+          {[1, 2].map((i) => (
+            <div key={i} style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 0", borderTop: "1px solid var(--line)" }}>
+              <Skeleton size="xl" width="w25" style={{ flexShrink: 0, borderRadius: 10, height: 44 }} />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                <Skeleton size="sm" width="w70" />
+                <Skeleton size="xs" width="w55" />
+              </div>
+              <Skeleton size="btn" style={{ flexShrink: 0, width: 80 }} />
+            </div>
+          ))}
+        </div>
+      ) : positions.length === 0 ? <div className={styles.emptyState}>
         <span className={styles.emptyIcon}>◷</span><strong>{accountDataUnavailable ? "Live positions unavailable" : "No open positions"}</strong><p>{accountDataUnavailable ? "TradeBridge currently keeps real-account WebSocket sessions disabled until order execution can be enforced server-side. No live position data has been loaded here; check Deriv directly." : "After Deriv confirms an order, active contracts appear here with their current status and profit/loss."}</p>
       </div> : <div className={styles.positionList}>
         {positions.map((position) => <article className={styles.positionRow} key={position.contractId}>
@@ -96,7 +110,23 @@ export default function TradingActivity({
           <button type="button" className={styles.panelActionButton} onClick={exportStatement} disabled={activity.length === 0}>Export CSV</button>
         </div>
       </div>
-      {activity.length === 0 ? <div className={styles.emptyState}>
+      {activity.length === 0 && activityLoading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }} aria-label="Loading activity">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 0", borderTop: "1px solid var(--line)" }}>
+              <Skeleton circle style={{ flexShrink: 0, width: 28, height: 28 }} />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
+                <Skeleton size="sm" width="w55" />
+                <Skeleton size="xs" width="w85" />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+                <Skeleton size="sm" style={{ width: 70 }} />
+                <Skeleton size="xs" style={{ width: 55 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : activity.length === 0 ? <div className={styles.emptyState}>
         <span className={styles.emptyIcon}>↺</span><strong>{accountDataUnavailable ? "Live statement unavailable" : "No transactions returned yet"}</strong><p>{accountDataUnavailable ? "TradeBridge has not opened a live-account data session. Review your real-account statement directly in Deriv; no sample transactions are shown." : "Purchases, sales, and other account events appear after Deriv returns a statement. No sample trades are shown."}</p>
       </div> : <div className={styles.activityList}>
         {activity.map((item) => <article key={item.id} className={styles.activityRow}>
@@ -110,7 +140,7 @@ export default function TradingActivity({
           {activityLoading ? "Loading transactions…" : "Load older transactions"}
         </button>
       </div>}
-      {activityLoading && activity.length === 0 && <p className={styles.statementFootnote}>Loading statement from Deriv…</p>}
+      {activityLoading && activity.length === 0 && <span aria-live="polite" className="sr-only">Loading statement from Deriv…</span>}
       <p className={styles.statementFootnote}>Export includes the transactions currently loaded from Deriv, not the account&apos;s full lifetime archive.</p>
     </section>
     )}

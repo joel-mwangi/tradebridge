@@ -15,6 +15,7 @@ import PriceChart from "./PriceChart";
 import ForexAnalyst from "./ForexAnalyst";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { MostTradedMarkets } from "./MostTradedMarkets";
+import { Skeleton } from "./Skeleton";
 import { logger } from "../../lib/logger.mjs";
 import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/client";
 
@@ -418,18 +419,24 @@ export default function TradingWorkspace() {
                 <section className={styles.statsGrid} aria-label="Selected account summary">
                   <article className={styles.statCard}>
                     <div className={styles.statLabel}><span className={styles.metricAccent}>◉</span> {activeAccountIsDemo ? "Demo balance" : activeAccountIsReal ? "Real balance" : "Account balance"}</div>
-                    <strong className={styles.statValue}>{connected && activeAccount ? formatMoney(liveBalance, currency) : "—"}</strong>
-                    <p className={styles.statSub}>{activeAccount ? activeAccount.account_id + (activeAccountIsReal ? " · real money" : activeAccountIsDemo ? " · virtual funds" : " · trading disabled") : "Connect and select a linked account"}</p>
+                    {connected && activeAccount && liveBalance === null && trading.sessionState !== "Demo trading connected" && trading.sessionState !== "Real trading connected"
+                      ? <><Skeleton size="lg" width="w55" style={{ margin: "4px 0" }} /><Skeleton size="xs" width="w70" /></>
+                      : <><strong className={styles.statValue}>{connected && activeAccount ? formatMoney(liveBalance, currency) : "—"}</strong>
+                        <p className={styles.statSub}>{activeAccount ? activeAccount.account_id + (activeAccountIsReal ? " · real money" : activeAccountIsDemo ? " · virtual funds" : " · trading disabled") : "Connect and select a linked account"}</p></>}
                   </article>
                   <article className={styles.statCard}>
                     <div className={styles.statLabel}><span className={styles.metricAccent}>▤</span> Open positions</div>
-                    <strong className={styles.statValue}>{accountSessionReady ? trading.positions.length : "—"}</strong>
-                    <p className={styles.statSub}>{accountSessionReady ? "Active contracts" : trading.sessionState}</p>
+                    {connected && !accountSessionReady
+                      ? <><Skeleton size="lg" width="w25" style={{ margin: "4px 0" }} /><Skeleton size="xs" width="w55" /></>
+                      : <><strong className={styles.statValue}>{accountSessionReady ? trading.positions.length : "—"}</strong>
+                        <p className={styles.statSub}>{accountSessionReady ? "Active contracts" : trading.sessionState}</p></>}
                   </article>
                   <article className={styles.statCard}>
                     <div className={styles.statLabel}><span className={styles.metricAccent}>↗</span> Realized P/L today</div>
-                    <strong className={styles.statValue}>{accountSessionReady && trading.realizedProfit !== null ? formatMoney(trading.realizedProfit, currency) : "—"}</strong>
-                    <p className={styles.statSub}>{accountSessionReady ? "Read from account ledger" : "Available after the selected account session connects"}</p>
+                    {connected && accountSessionReady && trading.realizedProfit === null
+                      ? <><Skeleton size="lg" width="w55" style={{ margin: "4px 0" }} /><Skeleton size="xs" width="w85" /></>
+                      : <><strong className={styles.statValue}>{accountSessionReady && trading.realizedProfit !== null ? formatMoney(trading.realizedProfit, currency) : "—"}</strong>
+                        <p className={styles.statSub}>{accountSessionReady ? "Read from account ledger" : "Available after the selected account session connects"}</p></>}
                   </article>
                 </section>
 
