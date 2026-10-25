@@ -118,6 +118,7 @@ export default function TradingWorkspace() {
 
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [authMessage, setAuthMessage] = useState("Checking your Deriv connection…");
   const [liveTradingEnabled, setLiveTradingEnabled] = useState(false);
@@ -235,6 +236,7 @@ export default function TradingWorkspace() {
       .then(async (response) => {
         const data = await response.json() as AccountsResponse;
         if (!active) return;
+        setAccountsLoading(false);
         setConnected(Boolean(data.connected));
         const returnedAccounts = data.accounts ?? [];
         setAccounts(returnedAccounts);
@@ -250,6 +252,7 @@ export default function TradingWorkspace() {
       })
       .catch(() => {
         if (active) {
+          setAccountsLoading(false);
           setConnected(false);
           setAccounts([]);
           setAuthMessage("Could not verify the FastAPI trading session. Confirm the backend URL, allowed origin, and Deriv connection.");
@@ -317,14 +320,18 @@ export default function TradingWorkspace() {
             <span className={styles.brandWord}>tradebridge<span>.</span></span>
             <span className={styles.workspaceContext}>
               <strong>{PAGE_TITLES[page]}</strong>
-              <small>{activeAccountIsReal ? "Real account · read-only by default" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>
+              {accountsLoading
+                ? <Skeleton size="xs" width="w55" style={{ marginTop: 3 }} />
+                : <small>{activeAccountIsReal ? "Real account · read-only by default" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>}
             </span>
           </Link>
           <div className={styles.topActions}>
             <button className={styles.secondaryButton} type="button" onClick={toggleTheme} aria-label="Toggle theme">
               {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
             </button>
-            {accounts.length > 0 && (
+            {accountsLoading ? (
+              <Skeleton size="btn" style={{ width: 180, borderRadius: 8 }} />
+            ) : accounts.length > 0 && (
               <label className={styles.activeAccountWrap}>
                 <span className={styles.accountLabel}>ACCOUNT</span>
                 <select className={styles.accountSelect} aria-label="Select trading account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
@@ -336,7 +343,9 @@ export default function TradingWorkspace() {
                 </select>
               </label>
             )}
-            {connected ? (
+            {accountsLoading ? (
+              <Skeleton size="btn" style={{ width: 100, borderRadius: 8 }} />
+            ) : connected ? (
               <form action="/api/auth/deriv/disconnect" method="post">
                 <button className={styles.secondaryButton} type="submit">Disconnect</button>
               </form>
