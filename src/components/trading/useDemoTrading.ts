@@ -782,6 +782,30 @@ export function useTradingSession(
     });
   }
 
+  function startStrategy(params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake?: number; duration?: number; currency?: string }) {
+    const activeSocket = socketRef.current;
+    if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
+    if ((account?.account_type ?? "").toLowerCase() !== "demo") return;
+    activeSocket.send(JSON.stringify({
+      strategy: {
+        action: "start",
+        symbol: params.symbol,
+        window_size: params.windowSize,
+        barrier: params.barrier,
+        direction: params.direction,
+        ...(params.stake !== undefined ? { stake: params.stake } : {}),
+        ...(params.duration !== undefined ? { duration: params.duration } : {}),
+        ...(params.currency !== undefined ? { currency: params.currency } : {}),
+      },
+    }));
+  }
+
+  function stopStrategy() {
+    const activeSocket = socketRef.current;
+    if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
+    activeSocket.send(JSON.stringify({ strategy: { action: "stop" } }));
+  }
+
   function requestQuote(input: TradeInput) {
     const persistedResolution = readOrderResolution(orderResolutionKey);
     if (persistedResolution || orderResolutionRequired || autoTradeRef.current !== null || buyRequestRef.current !== null || sellRequestRef.current !== null) {
@@ -1015,6 +1039,6 @@ export function useTradingSession(
     orderResolutionRequired, acknowledgeOrderResolution,
     activityHasMore, activityLoading, loadMoreActivity,
     requestQuote, confirmQuote, dismissQuote, sellPosition, refreshAccount: refreshAccountNow,
-    executeDemoStrategyTrade,
+    executeDemoStrategyTrade, startStrategy, stopStrategy,
   };
 }

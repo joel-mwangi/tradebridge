@@ -90,7 +90,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under" }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const [retryCount, setRetryCount] = useState(0);
@@ -264,11 +264,12 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (!active || !symbol || !Number.isInteger(windowSize)) return;
     if (status?.symbol === symbol && status?.digit_window_size === windowSize && status?.barrier === barrier && status?.requested_direction === direction.toLowerCase()) return;
     // Configuration changes invalidate the active run. Never silently start a replacement session.
+    onStrategyStop?.();
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
     socket.send(JSON.stringify({ strategy: { action: "stop" } }));
-  }, [symbol, windowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier, status?.requested_direction]);
+  }, [symbol, windowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier, status?.requested_direction, onStrategyStop]);
 
   useEffect(() => {
     if (!lastTickAt) return;
@@ -287,6 +288,12 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (action === "start" && !symbol) return;
     if (action === "start") {
       setStatus(null);
+      // Start the strategy on the authenticated backend trading proxy simultaneously
+      // so execution fires the moment the signal is detected — no re-auth round-trip.
+      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" });
+    }
+    if (action === "stop") {
+      onStrategyStop?.();
     }
     setBusy(true);
     socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } : { action } }));
@@ -385,6 +392,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
               <span>·</span>
               <Icon name="shield" size={12} />
               <span aria-label="Execution status received from authenticated trading session">Execution</span>
+              {sessionConnected === false && <span title="Authenticated trading session not connected — execution will not fire" style={{ color: "#f4b740" }}>⚠</span>}
+              {sessionConnected === true && !executionStatus && <span title="Authenticated trading session connected" style={{ color: "#35d6a0" }}>✓</span>}
             </div>
           </div>
         </div>
