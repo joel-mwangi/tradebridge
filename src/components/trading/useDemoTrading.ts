@@ -118,6 +118,7 @@ export function useTradingSession(
   const closedContractIdsRef = useRef<Set<string>>(new Set());
   const subscribedContractIdsRef = useRef<Set<string>>(new Set());
   const refreshAccountRef = useRef<(() => void) | null>(null);
+  const lastStrategyParamsRef = useRef<Parameters<typeof startStrategy>[0] | null>(null);
 
   // Persist unresolved provider outcomes across tabs and browser restarts. The
   // "storage" event keeps other open tabs locked when one tab submits an order.
@@ -237,6 +238,10 @@ export function useTradingSession(
     const sessionLabel = isRealAccount ? "Live trading" : "Demo trading";
     setSessionState("Opening secure " + sessionLabel.toLowerCase() + " session");
 
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     async function connect() {
       try {
         let socketUrl = "";
@@ -300,6 +305,7 @@ export function useTradingSession(
           setStatus(isRealAccount
             ? "Connected to your selected real Deriv account. Live orders use real funds; review every order carefully."
             : "Connected to your selected Deriv demo account. Quotes and balances come from Deriv.");
+          reconnectAttempts = 0; // reset on successful connection
           send({ balance: 1, subscribe: 1, req_id: nextId() });
           // Deriv's transaction stream pushes account events as they happen.
           // The statement remains the source for paginated historical records.
@@ -308,6 +314,22 @@ export function useTradingSession(
           refreshAccount();
           refreshTimer = window.setInterval(refreshAccount, 15_000);
           pingTimer = window.setInterval(() => send({ ping: 1 }), 30_000);
+          // Re-arm strategy on reconnect so execution resumes automatically.
+          const lastParams = lastStrategyParamsRef.current;
+          if (lastParams && (account?.account_type ?? "").toLowerCase() === "demo") {
+            send({
+              strategy: {
+                action: "start",
+                symbol: lastParams.symbol,
+                window_size: lastParams.windowSize,
+                barrier: lastParams.barrier,
+                direction: lastParams.direction,
+                ...(lastParams.stake !== undefined ? { stake: lastParams.stake } : {}),
+                ...(lastParams.duration !== undefined ? { duration: lastParams.duration } : {}),
+                ...(lastParams.currency !== undefined ? { currency: lastParams.currency } : {}),
+              },
+            });
+          }
         };
 
         localSocket.onmessage = (event) => {
@@ -678,8 +700,6 @@ export function useTradingSession(
             pending.reject(new Error("Trading connection closed during Demo strategy execution; reconciliation required"));
           }
           if (buyRequestRef.current !== null || sellRequestRef.current !== null) {
-            // A socket closing while an order is in-flight leaves its outcome
-            // ambiguous, regardless of whether it was a buy or early sale.
             if (orderResolutionKey) writeOrderResolution(orderResolutionKey, "unknown");
             setOrderResolutionRequired(true);
             setQuote(null);
@@ -692,7 +712,21 @@ export function useTradingSession(
             setBusy(false);
             setStatus("The connection closed before the request was confirmed. Check Deriv directly; the order outcome may be unknown.");
           }
-          setSessionState(isRealAccount ? "Real trading disconnected" : "Demo trading disconnected");
+
+          // Reconnect with exponential backoff unless an order is unresolved.
+          const hasUnresolved = Boolean(
+            readOrderResolution(orderResolutionKey) || orderResolutionRequired
+          );
+          if (!hasUnresolved && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts += 1;
+            const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts - 1, 5), 30_000);
+            setSessionState("Demo trading reconnecting…");
+            reconnectTimer = setTimeout(() => {
+              if (!cancelled) void connect();
+            }, delay);
+          } else {
+            setSessionState(isRealAccount ? "Real trading disconnected" : "Demo trading disconnected");
+          }
         };
       } catch (error) {
         logger.error("deriv.session.connect_failed", {
@@ -712,6 +746,7 @@ export function useTradingSession(
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
       if (pingTimer) window.clearInterval(pingTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       refreshAccountRef.current = null;
       statementRequestRef.current = null;
       if (buyRequestRef.current !== null && orderResolutionKey) {
@@ -786,6 +821,7 @@ export function useTradingSession(
     const activeSocket = socketRef.current;
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
     if ((account?.account_type ?? "").toLowerCase() !== "demo") return;
+    lastStrategyParamsRef.current = params;
     activeSocket.send(JSON.stringify({
       strategy: {
         action: "start",
@@ -802,6 +838,7 @@ export function useTradingSession(
 
   function stopStrategy() {
     const activeSocket = socketRef.current;
+    lastStrategyParamsRef.current = null;
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
     activeSocket.send(JSON.stringify({ strategy: { action: "stop" } }));
   }
