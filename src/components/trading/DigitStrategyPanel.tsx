@@ -94,6 +94,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
 export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under" }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
+  const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under" } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
   const [status, setStatus] = useState<StrategyStatus | null>(null);
@@ -194,6 +195,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     }
     let alive = true;
     let socket: WebSocket;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectAttempts = 0;
     try {
@@ -207,16 +209,39 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       if (!alive) return;
       reconnectAttempts = 0;
       setTransport("connected");
-      socket.send(JSON.stringify({ strategy: { action: "status" } }));
+      if (pingTimer) clearInterval(pingTimer);
+      pingTimer = setInterval(() => {
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ ping: 1 }));
+        }
+      }, 30_000);
+      const lastParams = lastStrategyParamsRef.current;
+      if (lastParams && lastParams.symbol === symbol) {
+        socket.send(JSON.stringify({
+          strategy: {
+            action: "start",
+            symbol: lastParams.symbol,
+            window_size: lastParams.windowSize,
+            barrier: lastParams.barrier,
+            direction: lastParams.direction,
+          },
+        }));
+      } else {
+        socket.send(JSON.stringify({ strategy: { action: "status" } }));
+      }
     };
     socket.onmessage = (event) => {
       if (!alive) return;
       try {
         const message = JSON.parse(String(event.data)) as StrategyStatus & TickMessage;
+        if ((message as any).msg_type === "ping" || (message as any).ping === "pong") return;
         if (message.type === "strategy_status") {
           setStatus(message);
           setBusy(false);
           setTransport("connected");
+          if (["stopped", "completed", "blocked"].includes(message.state ?? "")) {
+            lastStrategyParamsRef.current = null;
+          }
           setEvents((current) => [{ key: "status-" + Date.now(), kind: "status" as const, time: Date.now() }, ...current].slice(0, 12));
           return;
         }
@@ -247,6 +272,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     socket.onerror = () => { if (alive) setTransport("disconnected"); };
     socket.onclose = () => {
       if (!alive) return;
+      if (pingTimer) clearInterval(pingTimer);
       setTransport("disconnected");
       reconnectAttempts += 1;
       const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts - 1, 5), 30_000);
@@ -254,6 +280,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     };
     return () => {
       alive = false;
+      if (pingTimer) clearInterval(pingTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (socketRef.current === socket) socketRef.current = null;
       socket.close();
@@ -268,6 +295,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     // expected when the user changes barrier/direction. The backend keeps running.
     const executionRunning = ["waiting_proposal", "waiting_buy", "waiting_settlement"].includes(executionStatus?.state ?? "");
     if (executionRunning) return;
+    lastStrategyParamsRef.current = null;
     onStrategyStop?.();
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -292,11 +320,13 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (action === "start" && !symbol) return;
     if (action === "start") {
       setStatus(null);
+      lastStrategyParamsRef.current = { symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
       onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" });
     }
     if (action === "stop") {
+      lastStrategyParamsRef.current = null;
       onStrategyStop?.();
     }
     setBusy(true);
