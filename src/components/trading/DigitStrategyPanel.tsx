@@ -66,6 +66,7 @@ type ContractsForItem = {
   max_stake?: number | string;
 };
 
+// The market WebSocket may also return Deriv metadata frames alongside ticks/status.
 type ContractsForMessage = {
   contracts_for?: {
     available?: ContractsForItem[];
