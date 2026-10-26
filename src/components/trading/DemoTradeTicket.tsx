@@ -43,6 +43,10 @@ type Props = {
   mode: DigitContractMode;
   prediction: DigitPrediction;
   onPredictionChange: (prediction: DigitPrediction) => void;
+  stake: string;
+  onStakeChange: (stake: string) => void;
+  duration: string;
+  onDurationChange: (duration: string) => void;
   target: number;
   sessionState: string;
   status: string;
@@ -56,10 +60,8 @@ type Props = {
 export default function DemoTradeTicket({
   connected, account, realTradingEnabled, maxRealStake, maxDailyLoss, realizedProfit,
   orderResolutionRequired, acknowledgeOrderResolution,
-  market, snapshot, windowSize, mode, prediction, onPredictionChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote, dismissQuote,
+  market, snapshot, windowSize, mode, prediction, onPredictionChange, stake, onStakeChange, duration, onDurationChange, target, sessionState, status, busy, quote, requestQuote, confirmQuote, dismissQuote,
 }: Props) {
-  const [stake, setStake] = useState("1");
-  const [duration, setDuration] = useState("5");
   const [now, setNow] = useState(Date.now());
   const accountType = (account?.account_type ?? "").toLowerCase();
   const isDemo = accountType === "demo";
@@ -91,10 +93,6 @@ export default function DemoTradeTicket({
     const value = recentFrequency?.percentages[String(digit)];
     return typeof value === "number" ? value.toFixed(1) + "%" : "—";
   };
-
-  useEffect(() => {
-    setDuration("5");
-  }, [mode]);
 
   useEffect(() => {
     if (!quote) return;
@@ -223,20 +221,20 @@ export default function DemoTradeTicket({
         <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake</label>
         <div className={styles.inputShell}>
           <span>{account?.currency ?? "—"}</span>
-          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => setStake(event.target.value)} disabled={!ready || busy} />
+          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => onStakeChange(event.target.value)} disabled={!ready || busy} />
         </div>
         <div className={styles.presets + " " + styles.compactPresets} aria-label="Stake presets">
-          {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value}</button>)}
+          {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => onStakeChange(String(value))} disabled={!ready || busy}>{value}</button>)}
         </div>
       </div>
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Duration</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} disabled={!ready || busy} />
+          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => onDurationChange(event.target.value)} disabled={!ready || busy} />
           <span>ticks</span>
         </div>
         <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
-          {[{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
+          {[{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => onDurationChange(value.value)} disabled={!ready || busy}>{value.label}</button>)}
         </div>
       </div>
     </div>

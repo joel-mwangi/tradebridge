@@ -131,6 +131,8 @@ export default function TradingWorkspace() {
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [tradeView, setTradeView] = useState<"analyse" | "charts" | "strategy">("analyse");
   const [digitWindowSize, setDigitWindowSize] = useState(1000);
+  const [tradeStake, setTradeStake] = useState("1");
+  const [tradeDuration, setTradeDuration] = useState("5");
 
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
@@ -655,6 +657,10 @@ export default function TradingWorkspace() {
                           mode={digitMode}
                           prediction={digitPrediction}
                           onPredictionChange={setPredictionAndValidateTarget}
+                          stake={tradeStake}
+                          onStakeChange={setTradeStake}
+                          duration={tradeDuration}
+                          onDurationChange={setTradeDuration}
                           target={digitTarget}
                           sessionState={trading.sessionState}
                           status={trading.status}
@@ -684,7 +690,7 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} />
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} stake={Number(tradeStake)} duration={Number(tradeDuration)} currency={activeAccount?.currency ?? "USD"} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} />
                 )}
 
                 {tradeView === "charts" && (
@@ -714,6 +720,10 @@ export default function TradingWorkspace() {
                           mode={digitMode}
                           prediction={digitPrediction}
                           onPredictionChange={setPredictionAndValidateTarget}
+                          stake={tradeStake}
+                          onStakeChange={setTradeStake}
+                          duration={tradeDuration}
+                          onDurationChange={setTradeDuration}
                           target={digitTarget}
                           sessionState={trading.sessionState}
                           status={trading.status}

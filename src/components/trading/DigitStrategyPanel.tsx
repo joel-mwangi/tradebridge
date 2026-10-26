@@ -92,7 +92,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under" }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected, stake, duration, currency }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number; duration: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under" } | null>(null);
@@ -324,7 +324,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       lastStrategyParamsRef.current = { symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
-      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" });
+      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under", stake, duration, currency });
     }
     if (action === "stop") {
       lastStrategyParamsRef.current = null;
@@ -334,6 +334,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } : { action } }));
   }
 
+  const executionSettingsValid = Number.isFinite(stake) && stake >= 1 && stake <= 1000
+    && Number.isInteger(duration) && duration >= 1 && duration <= 10;
   const state = status?.state ?? "idle";
   const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(state));
   const healthColor = transport === "connected" ? "#35d6a0" : transport === "stale" ? "#f4b740" : "#f06f79";
@@ -437,7 +439,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           </div>
         </div>
         <div style={{ display: "flex", gap: 7 }}>
-          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
+          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active || !executionSettingsValid} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active || !executionSettingsValid ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
           <button type="button" onClick={() => send("stop")} disabled={busy || !active} aria-label="Stop observation" title="Stop" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy || !active ? .4 : 1, cursor: "pointer" }}><Icon name="stop" /></button>
           <button type="button" onClick={() => send("status")} disabled={busy} aria-label="Refresh status" title="Refresh" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy ? .5 : 1, cursor: "pointer" }}><Icon name="refresh" /></button>
         </div>
@@ -460,6 +462,11 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
             </button>;
           })}
         </div>
+      </div>
+
+      <div aria-label="Strategy execution settings from Buy panel" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 10, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
+        <span style={{ color: "var(--muted)", fontSize: 10 }}>Execution settings · from Buy panel</span>
+        <strong style={{ color: "var(--ink)", fontSize: 11 }}>{currency} {Number.isFinite(stake) ? stake : "—"} · {Number.isInteger(duration) ? duration : "—"} {duration === 1 ? "tick" : "ticks"} per buy</strong>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 12, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
