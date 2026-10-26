@@ -26,6 +26,7 @@ const TIMEFRAMES = [
 ] as const;
 const CANDLE_LIMIT = 180;
 const VIEW_LIMIT = 100;
+const EMPTY_CANDLES: ForexCandle[] = [];
 
 type ForexPair = { symbol: string; name: string; pipSize?: number };
 type LiveQuote = { price: number; epoch: number; pipSize?: number };
@@ -203,6 +204,10 @@ export default function ForexAnalyst() {
   }, []);
 
   useEffect(() => {
+    const pendingHistory = pendingHistoryRef.current;
+    const historyTimeouts = historyTimeoutsRef.current;
+    const subscribedSymbols = subscribedSymbolsRef.current;
+    const subscriptionsBySymbol = subscriptionsBySymbolRef.current;
     let alive = true;
     let socket: WebSocket | null = null;
     let connectionOpened = false;
@@ -416,11 +421,11 @@ export default function ForexAnalyst() {
       alive = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (socketRef.current === socket) socketRef.current = null;
-      pendingHistoryRef.current.clear();
-      for (const timeoutId of historyTimeoutsRef.current.values()) window.clearTimeout(timeoutId);
-      historyTimeoutsRef.current.clear();
-      subscribedSymbolsRef.current.clear();
-      subscriptionsBySymbolRef.current.clear();
+      pendingHistory.clear();
+      for (const timeoutId of historyTimeouts.values()) window.clearTimeout(timeoutId);
+      historyTimeouts.clear();
+      subscribedSymbols.clear();
+      subscriptionsBySymbol.clear();
       activeTickSymbolRef.current = "";
       socket?.close();
     };
@@ -451,7 +456,7 @@ export default function ForexAnalyst() {
   const activePair = pairs.find((pair) => pair.symbol === selectedSymbol) ?? null;
   const liveQuote = quotesBySymbol[selectedSymbol] ?? null;
   const activeHistoryKey = keyFor(selectedSymbol, timeframe);
-  const candles = candlesByKey[activeHistoryKey] ?? [];
+  const candles = candlesByKey[activeHistoryKey] ?? EMPTY_CANDLES;
   const historyLoad = historyByKey[activeHistoryKey];
   const hasUsableHistory = historyLoad?.status === "loaded" && historyLoad.count >= 10;
   const currentBucket = Math.floor(Date.now() / 1000 / timeframe) * timeframe;
