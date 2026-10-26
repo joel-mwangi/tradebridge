@@ -119,6 +119,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const [busy, setBusy] = useState(false);
   const [stakeInput, setStakeInput] = useState("1");
   const [stakeLimits, setStakeLimits] = useState<{ min: number; max: number } | null>(null);
+  const [stakeLimitsError, setStakeLimitsError] = useState<string | null>(null);
   const [tape, setTape] = useState<TapeDigit[]>([]);
   const [lastTickAt, setLastTickAt] = useState<number | null>(null);
   const [selectedDigit, setSelectedDigit] = useState<number | null>(null);
@@ -228,6 +229,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       if (!alive) return;
       reconnectAttempts = 0;
       setTransport("connected");
+      setStakeLimitsError(null);
       socket.send(JSON.stringify({ contracts_for: symbol }));
       if (pingTimer) clearInterval(pingTimer);
       pingTimer = setInterval(() => {
@@ -262,9 +264,13 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           const contract = available?.find((item) => item.contract_type === wanted && item.underlying_symbol === symbol);
           const min = Number(contract?.min_stake);
           const max = Number(contract?.max_stake);
-          setStakeLimits(Number.isFinite(min) && min > 0
-            ? { min, max: Number.isFinite(max) && max >= min ? max : 1000 }
-            : null);
+          if (Number.isFinite(min) && min > 0) {
+            setStakeLimits({ min, max: Number.isFinite(max) && max >= min ? max : 1000 });
+            setStakeLimitsError(null);
+          } else {
+            setStakeLimits(null);
+            setStakeLimitsError(`Deriv did not return a valid minimum stake for ${wanted} on ${symbol}.`);
+          }
           return;
         }
         if (message.type === "strategy_status") {
@@ -279,6 +285,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         }
         if (message.error?.message) {
           setBusy(false);
+          if (!stakeLimits) setStakeLimitsError(message.error.message);
           setEvents((current) => [{ key: "warning-" + Date.now(), kind: "warning" as const, time: Date.now() }, ...current].slice(0, 12));
           return;
         }
@@ -369,11 +376,31 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
 
   useEffect(() => {
     setStakeLimits(null);
+    setStakeLimitsError(null);
     const socket = socketRef.current;
     if (socket?.readyState === WebSocket.OPEN && symbol) {
       socket.send(JSON.stringify({ contracts_for: symbol }));
     }
   }, [symbol, direction]);
+
+  useEffect(() => {
+    if (!symbol || stakeLimits || stakeLimitsError) return;
+    const timer = window.setTimeout(() => {
+      setStakeLimitsError("Deriv stake limits did not arrive within 8 seconds.");
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [symbol, direction, stakeLimits, stakeLimitsError, retryCount]);
+
+  function retryStakeLimits() {
+    const socket = socketRef.current;
+    if (!symbol || !socket || socket.readyState !== WebSocket.OPEN) {
+      setStakeLimitsError("Market connection is not ready. Reconnect and try again.");
+      return;
+    }
+    setStakeLimits(null);
+    setStakeLimitsError(null);
+    socket.send(JSON.stringify({ contracts_for: symbol }));
+  }
 
   const stake = Number(stakeInput);
   const stakeValid = Number.isFinite(stake) && stake > 0 && stake <= 1000
@@ -509,8 +536,9 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       <div aria-label="Strategy stake selection" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 12, padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "grid", gap: 3 }}>
           <label htmlFor="tradebridge-strategy-stake" style={{ color: "var(--ink)", fontSize: 11, fontWeight: 800 }}>Stake per buy</label>
-          <span style={{ color: "var(--muted)", fontSize: 10 }}>{stakeLimits ? `Deriv minimum ${stakeLimits.min} · maximum ${stakeLimits.max}` : "Loading stake limits from Deriv…"}</span>
+          <span role={stakeLimitsError ? "alert" : undefined} style={{ color: stakeLimitsError ? "#f4b740" : "var(--muted)", fontSize: 10 }}>{stakeLimits ? `Deriv minimum ${stakeLimits.min} · maximum ${stakeLimits.max}` : stakeLimitsError ?? "Loading stake limits from Deriv…"}</span>
         </div>
+        {stakeLimitsError && <button type="button" onClick={retryStakeLimits} style={{ minHeight: 34, border: "1px solid var(--line)", borderRadius: 8, padding: "6px 9px", background: "var(--surface)", color: "var(--ink)", fontSize: 10, fontWeight: 750, cursor: "pointer" }}>Retry limits</button>}
         <input id="tradebridge-strategy-stake" aria-label="Strategy stake per buy" type="number" min={stakeLimits?.min ?? 0.01} max={stakeLimits?.max ?? 1000} step="0.01" inputMode="decimal" value={stakeInput} disabled={isExecutionActive || busy} onChange={(event) => setStakeInput(event.target.value)} style={{ width: 120, minHeight: 36, border: "1px solid var(--line)", borderRadius: 8, padding: "7px 9px", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 750 }} />
       </div>
 
