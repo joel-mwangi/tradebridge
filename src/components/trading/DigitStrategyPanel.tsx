@@ -92,15 +92,16 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under" }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
-  const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under" } | null>(null);
+  const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
   const [status, setStatus] = useState<StrategyStatus | null>(null);
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [stakeInput, setStakeInput] = useState("1");
   const [tape, setTape] = useState<TapeDigit[]>([]);
   const [lastTickAt, setLastTickAt] = useState<number | null>(null);
   const [selectedDigit, setSelectedDigit] = useState<number | null>(null);
@@ -225,6 +226,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
             window_size: lastParams.windowSize,
             barrier: lastParams.barrier,
             direction: lastParams.direction,
+            stake: lastParams.stake,
           },
         }));
       } else {
@@ -319,19 +321,21 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       return;
     }
     if (action === "start" && !symbol) return;
+    const stake = Number(stakeInput);
+    if (action === "start" && (!Number.isFinite(stake) || stake < 1 || stake > 1000)) return;
     if (action === "start") {
       setStatus(null);
-      lastStrategyParamsRef.current = { symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" };
+      lastStrategyParamsRef.current = { symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under", stake };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
-      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" });
+      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under", stake });
     }
     if (action === "stop") {
       lastStrategyParamsRef.current = null;
       onStrategyStop?.();
     }
     setBusy(true);
-    socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } : { action } }));
+    socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase(), stake } : { action } }));
   }
 
   const state = status?.state ?? "idle";
@@ -437,7 +441,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           </div>
         </div>
         <div style={{ display: "flex", gap: 7 }}>
-          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
+          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active || !Number.isFinite(Number(stakeInput)) || Number(stakeInput) < 1 || Number(stakeInput) > 1000} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active || !Number.isFinite(Number(stakeInput)) || Number(stakeInput) < 1 || Number(stakeInput) > 1000 ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
           <button type="button" onClick={() => send("stop")} disabled={busy || !active} aria-label="Stop observation" title="Stop" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy || !active ? .4 : 1, cursor: "pointer" }}><Icon name="stop" /></button>
           <button type="button" onClick={() => send("status")} disabled={busy} aria-label="Refresh status" title="Refresh" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy ? .5 : 1, cursor: "pointer" }}><Icon name="refresh" /></button>
         </div>
@@ -460,6 +464,14 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
             </button>;
           })}
         </div>
+      </div>
+
+      <div aria-label="Strategy stake selection" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 12, padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
+        <div style={{ display: "grid", gap: 3 }}>
+          <label htmlFor="tradebridge-strategy-stake" style={{ color: "var(--ink)", fontSize: 11, fontWeight: 800 }}>Stake per buy</label>
+          <span style={{ color: "var(--muted)", fontSize: 10 }}>Minimum 1 · Maximum 1,000 · validated again by the backend</span>
+        </div>
+        <input id="tradebridge-strategy-stake" aria-label="Strategy stake per buy" type="number" min="1" max="1000" step="0.01" inputMode="decimal" value={stakeInput} disabled={isExecutionActive || busy} onChange={(event) => setStakeInput(event.target.value)} style={{ width: 120, minHeight: 36, border: "1px solid var(--line)", borderRadius: 8, padding: "7px 9px", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 750 }} />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 12, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
