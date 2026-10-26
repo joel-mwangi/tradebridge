@@ -11,9 +11,18 @@ const analysis = read("src/components/trading/DigitAnalysis.tsx");
 const workspaceCss = read("src/components/trading/TradingWorkspace.module.css");
 const workspace = read("src/components/trading/TradingWorkspace.tsx");
 const tradingHook = read("src/components/trading/useDemoTrading.ts");
+const strategyPanel = read("src/components/trading/DigitStrategyPanel.tsx");
 const marketData = read("src/components/trading/useMarketData.ts");
 const marketWatch = read("src/components/trading/MarketWatch.tsx");
 const types = read("src/components/trading/types.ts");
+
+test("strategy can be re-armed after a completed sequence or the two-loss stop", () => {
+  assert.match(strategyPanel, /const executionTerminal = executionStatus\?\.state === "completed"/);
+  assert.match(strategyPanel, /executionStatus\.consecutive_losses \?\? 0\) >= 2/);
+  assert.match(strategyPanel, /executionStatus\.active_contract_id == null/);
+  assert.match(strategyPanel, /includes\(state\)\)\s*&& !executionTerminal/);
+  assert.match(tradingHook, /setStrategyExecutionStatus\(null\);[\s\S]*setStrategyContractUpdate\(null\);[\s\S]*lastStrategyParamsRef\.current = params;/);
+});
 
 test("manual ticket exposes digit prediction modes without Higher/Lower price direction", () => {
   assert.match(ticket, /"over-under": \[\{ label: "Over".*\{ label: "Under"/);

@@ -337,7 +337,16 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const executionSettingsValid = Number.isFinite(stake) && stake >= 1 && stake <= 1000
     && Number.isInteger(duration) && duration >= 1 && duration <= 10;
   const state = status?.state ?? "idle";
-  const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(state));
+  // The public observation socket stays selected after it emits a signal, while
+  // execution completion arrives on the authenticated socket. Let a completed
+  // three-buy run or the two-consecutive-loss stop re-arm observation without
+  // treating an unresolved/manual stop as safe to restart.
+  const executionTerminal = executionStatus?.state === "completed"
+    || (executionStatus?.state === "stopped"
+      && (executionStatus.consecutive_losses ?? 0) >= 2
+      && executionStatus.active_contract_id == null);
+  const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(state))
+    && !executionTerminal;
   const healthColor = transport === "connected" ? "#35d6a0" : transport === "stale" ? "#f4b740" : "#f06f79";
   const tickAge = lastTickAt ? Math.max(0, Math.floor((Date.now() - lastTickAt) / 1000)) : null;
   const frequencyWindow = frequency?.symbol === symbol ? frequency.windows?.[String(windowSize)] : undefined;
