@@ -462,6 +462,11 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
       </div>
 
+      <div aria-label="Strategy execution settings from Buy panel" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 10, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
+        <span style={{ color: "var(--muted)", fontSize: 10 }}>Execution settings · from Buy panel</span>
+        <strong style={{ color: "var(--ink)", fontSize: 11 }}>{currency} {Number.isFinite(stake) ? stake : "—"} · {Number.isInteger(duration) ? duration : "—"} {duration === 1 ? "tick" : "ticks"} per buy</strong>
+      </div>
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 12, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "grid", gap: 3 }}>
           <span style={{ color: "var(--ink)", fontSize: 11, fontWeight: 800 }}>Audio cues</span>
