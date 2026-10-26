@@ -334,6 +334,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } : { action } }));
   }
 
+  const executionSettingsValid = Number.isFinite(stake) && stake >= 1 && stake <= 1000
+    && Number.isInteger(duration) && duration >= 1 && duration <= 10;
   const state = status?.state ?? "idle";
   const active = Boolean(status && ["observing", "waiting_for_more_data", "selected"].includes(state));
   const healthColor = transport === "connected" ? "#35d6a0" : transport === "stale" ? "#f4b740" : "#f06f79";
@@ -437,7 +439,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           </div>
         </div>
         <div style={{ display: "flex", gap: 7 }}>
-          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
+          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active || !executionSettingsValid} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active || !executionSettingsValid ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
           <button type="button" onClick={() => send("stop")} disabled={busy || !active} aria-label="Stop observation" title="Stop" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy || !active ? .4 : 1, cursor: "pointer" }}><Icon name="stop" /></button>
           <button type="button" onClick={() => send("status")} disabled={busy} aria-label="Refresh status" title="Refresh" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy ? .5 : 1, cursor: "pointer" }}><Icon name="refresh" /></button>
         </div>
