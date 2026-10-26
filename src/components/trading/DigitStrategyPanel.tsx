@@ -59,6 +59,19 @@ type TickMessage = {
   ping?: string | number;
 };
 
+type ContractsForItem = {
+  contract_type?: string;
+  underlying_symbol?: string;
+  min_stake?: number | string;
+  max_stake?: number | string;
+};
+
+type ContractsForMessage = {
+  contracts_for?: {
+    available?: ContractsForItem[];
+  };
+};
+
 type TapeDigit = { digit: number; key: string; time: number };
 
 function lastDigit(quote: number | string, pipSize?: number): number | null {
@@ -94,6 +107,8 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
 
 export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
+  const directionRef = useRef(direction);
+  directionRef.current = direction;
   const seenTicksRef = useRef(new Set<string>());
   const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -238,14 +253,12 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     socket.onmessage = (event) => {
       if (!alive) return;
       try {
-        const message = JSON.parse(String(event.data)) as StrategyStatus & TickMessage;
+        const message = JSON.parse(String(event.data)) as StrategyStatus & TickMessage & ContractsForMessage;
         if (message.msg_type === "ping" || message.ping === "pong") return;
         if (message.msg_type === "contracts_for") {
-          const available = (message as any).contracts_for?.available;
-          const wanted = direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER";
-          const contract = Array.isArray(available)
-            ? available.find((item: any) => item?.contract_type === wanted && item?.underlying_symbol === symbol)
-            : undefined;
+          const available = message.contracts_for?.available;
+          const wanted = directionRef.current === "UNDER" ? "DIGITUNDER" : "DIGITOVER";
+          const contract = available?.find((item) => item.contract_type === wanted && item.underlying_symbol === symbol);
           const min = Number(contract?.min_stake);
           const max = Number(contract?.max_stake);
           setStakeLimits(Number.isFinite(min) && min > 0
