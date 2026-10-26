@@ -130,7 +130,7 @@ export default function TradingWorkspace() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [tradeView, setTradeView] = useState<"analyse" | "charts" | "strategy">("analyse");
-  const [digitWindowSize, setDigitWindowSize] = useState(100);
+  const [digitWindowSize, setDigitWindowSize] = useState(1000);
 
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");
   const [digitPrediction, setDigitPrediction] = useState<DigitPrediction>("OVER");
