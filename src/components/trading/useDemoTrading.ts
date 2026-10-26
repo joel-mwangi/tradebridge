@@ -821,6 +821,10 @@ export function useTradingSession(
     const activeSocket = socketRef.current;
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
     if ((account?.account_type ?? "").toLowerCase() !== "demo") return;
+    // A fresh Run starts a new sequence; do not let the previous terminal
+    // execution status keep the observation button unlocked or display stale P/L.
+    setStrategyExecutionStatus(null);
+    setStrategyContractUpdate(null);
     lastStrategyParamsRef.current = params;
     activeSocket.send(JSON.stringify({
       strategy: {
