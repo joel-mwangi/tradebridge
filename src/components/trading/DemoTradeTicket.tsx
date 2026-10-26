@@ -224,7 +224,7 @@ export default function DemoTradeTicket({
           <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => onStakeChange(event.target.value)} disabled={!ready || busy} />
         </div>
         <div className={styles.presets + " " + styles.compactPresets} aria-label="Stake presets">
-          {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => setStake(String(value))} disabled={!ready || busy}>{value}</button>)}
+          {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => onStakeChange(String(value))} disabled={!ready || busy}>{value}</button>)}
         </div>
       </div>
       <div className={styles.compactFieldGroup}>
@@ -234,7 +234,7 @@ export default function DemoTradeTicket({
           <span>ticks</span>
         </div>
         <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
-          {[{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => setDuration(value.value)} disabled={!ready || busy}>{value.label}</button>)}
+          {[{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => onDurationChange(value.value)} disabled={!ready || busy}>{value.label}</button>)}
         </div>
       </div>
     </div>
