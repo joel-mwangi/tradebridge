@@ -47,9 +47,7 @@ export default function DigitAnalysis({
   const even = digits.filter((p) => p.digit % 2 === 0).length;
   const odd = localTotal - even;
   const above = digits.filter((p) => p.digit > target).length;
-  const below = digits.filter((p) => p.digit < target).length;
   const matches = counts[target];
-  const differs = total - matches;
   const percent = (digit: number) => {
     const value = frequency?.percentages[String(digit)];
     return typeof value === "number" ? value.toFixed(1) + "%" : "—";

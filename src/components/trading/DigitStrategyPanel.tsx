@@ -56,6 +56,7 @@ type TickMessage = {
     pip_size?: number;
   };
   error?: { message?: string };
+  ping?: string | number;
 };
 
 type TapeDigit = { digit: number; key: string; time: number };
@@ -234,7 +235,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       if (!alive) return;
       try {
         const message = JSON.parse(String(event.data)) as StrategyStatus & TickMessage;
-        if ((message as any).msg_type === "ping" || (message as any).ping === "pong") return;
+        if (message.msg_type === "ping" || message.ping === "pong") return;
         if (message.type === "strategy_status") {
           setStatus(message);
           setBusy(false);
