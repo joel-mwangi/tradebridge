@@ -92,7 +92,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under" }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number; duration: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under" } | null>(null);
@@ -324,7 +324,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       lastStrategyParamsRef.current = { symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
-      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" });
+      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under", stake, duration, currency });
     }
     if (action === "stop") {
       lastStrategyParamsRef.current = null;
