@@ -216,7 +216,9 @@ export default function ForexAnalyst() {
   const [timeframe, setTimeframe] = useState<number>(900);
   const [chartViewCount, setChartViewCount] = useState<number>(VIEW_LIMIT);
   const [chartViewOffset, setChartViewOffset] = useState<number>(0);
+  const [isChartDragging, setIsChartDragging] = useState(false);
   const chartDragRef = useRef<{ pointerId: number; startX: number; startOffset: number } | null>(null);
+  const lastViewportTailRef = useRef<{ key: string; epoch: number } | null>(null);
   const [candlesByKey, setCandlesByKey] = useState<Record<string, ForexCandle[]>>({});
   const [historyByKey, setHistoryByKey] = useState<Record<string, HistoryLoad>>({});
   const [quotesBySymbol, setQuotesBySymbol] = useState<Record<string, LiveQuote>>({});
@@ -519,8 +521,19 @@ export default function ForexAnalyst() {
   useEffect(() => {
     setChartViewCount(VIEW_LIMIT);
     setChartViewOffset(0);
+    setIsChartDragging(false);
     chartDragRef.current = null;
   }, [selectedSymbol, timeframe]);
+
+  useEffect(() => {
+    const tail = candles[candles.length - 1];
+    const previous = lastViewportTailRef.current;
+    if (previous?.key === activeHistoryKey && tail && tail.epoch > previous.epoch && chartViewOffset > 0) {
+      const advancedBy = Math.max(1, Math.round((tail.epoch - previous.epoch) / timeframe));
+      setChartViewOffset((current) => Math.min(Math.max(0, candles.length - chartViewCount), current + advancedBy));
+    }
+    lastViewportTailRef.current = { key: activeHistoryKey, epoch: tail?.epoch ?? 0 };
+  }, [activeHistoryKey, candles, timeframe, chartViewOffset, chartViewCount]);
 
   const activeInstrument = instruments.find((pair) => pair.symbol === selectedSymbol) ?? null;
   const activePair = activeInstrument;
@@ -722,7 +735,7 @@ export default function ForexAnalyst() {
               viewBox={"0 0 " + chart.width + " " + chart.height}
               role="img"
               aria-label={activePair?.name + " candlestick chart with automatic analysis. Use mouse wheel to zoom and drag to pan."}
-              className={chartDragRef.current ? styles.chartDragging : styles.chartInteractive}
+              className={isChartDragging ? styles.chartDragging : styles.chartInteractive}
               onWheel={(event) => {
                 event.preventDefault();
                 if (candles.length < 2) return;
@@ -743,6 +756,7 @@ export default function ForexAnalyst() {
               onPointerDown={(event) => {
                 if (event.button !== 0 || candles.length <= safeViewCount) return;
                 chartDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startOffset: safeViewOffset };
+                setIsChartDragging(true);
                 event.currentTarget.setPointerCapture(event.pointerId);
               }}
               onPointerMove={(event) => {
@@ -758,9 +772,12 @@ export default function ForexAnalyst() {
                 setChartViewOffset(next.viewOffset);
               }}
               onPointerUp={(event) => {
-                if (chartDragRef.current?.pointerId === event.pointerId) chartDragRef.current = null;
+                if (chartDragRef.current?.pointerId === event.pointerId) {
+                  chartDragRef.current = null;
+                  setIsChartDragging(false);
+                }
               }}
-              onPointerCancel={() => { chartDragRef.current = null; }}
+              onPointerCancel={() => { chartDragRef.current = null; setIsChartDragging(false); }}
             >
               {[0, 1, 2, 3, 4].map((step) => {
                 const y = chart.top + step * (chart.plotHeight / 4);
