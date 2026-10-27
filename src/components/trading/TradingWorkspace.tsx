@@ -49,7 +49,7 @@ const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
 const PAGE_TITLES: Record<WorkspacePage, string> = {
   dashboard: "Dashboard",
   markets: "Markets",
-  "forex-analyst": "Forex AI Analyst",
+  "forex-analyst": "AI Chart Analyst",
   trade: "Trade",
   portfolio: "Portfolio & History",
   settings: "Settings",

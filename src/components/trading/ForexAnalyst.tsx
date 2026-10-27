@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
-import { buildForexCandleHistoryRequest, isForexMarket } from "../../lib/forex-market-data.mjs";
+import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs";
 import {
   analyzeForexCandles,
   findSwingPoints,
@@ -14,10 +14,41 @@ import {
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DEFAULT_SYMBOL = "frxEURUSD";
-const PAIR_PRIORITY = [
-  "frxEURUSD", "frxGBPUSD", "frxUSDJPY", "frxAUDUSD", "frxUSDCAD",
-  "frxUSDCHF", "frxNZDUSD", "frxEURGBP", "frxEURJPY", "frxGBPJPY",
+
+type MarketCategory = "all" | "forex" | "commodities" | "indices" | "cryptocurrency" | "synthetic_index";
+
+const CATEGORIES: Array<{ id: MarketCategory; label: string; icon: string }> = [
+  { id: "all", label: "All Markets", icon: "🌐" },
+  { id: "forex", label: "Forex", icon: "💱" },
+  { id: "commodities", label: "Commodities", icon: "🪙" },
+  { id: "indices", label: "Stock Indices", icon: "📈" },
+  { id: "cryptocurrency", label: "Crypto", icon: "₿" },
+  { id: "synthetic_index", label: "Synthetics", icon: "⚡" },
 ];
+
+const CATEGORY_DEFAULT_SYMBOL: Record<MarketCategory, string> = {
+  all: "frxEURUSD",
+  forex: "frxEURUSD",
+  commodities: "frxXAUUSD",
+  indices: "OTC_DJI",
+  cryptocurrency: "cryBTCUSD",
+  synthetic_index: "1HZ100V",
+};
+
+const SYMBOL_PRIORITY: Record<string, number> = {
+  // Forex
+  frxEURUSD: 1, frxGBPUSD: 2, frxUSDJPY: 3, frxAUDUSD: 4, frxUSDCAD: 5,
+  frxUSDCHF: 6, frxNZDUSD: 7, frxEURGBP: 8, frxEURJPY: 9, frxGBPJPY: 10,
+  // Commodities
+  frxXAUUSD: 20, frxXAGUSD: 21, frxXPDUSD: 22,
+  // Indices
+  OTC_DJI: 30, OTC_NDX: 31, OTC_SPC: 32, OTC_AS51: 33, OTC_AEX: 34,
+  // Crypto
+  cryBTCUSD: 40, cryETHUSD: 41,
+  // Synthetics
+  "1HZ100V": 50, "1HZ75V": 51, "1HZ50V": 52, "R_100": 53, "R_50": 54,
+};
+
 const TIMEFRAMES = [
   { label: "M1", seconds: 60 },
   { label: "M5", seconds: 300 },
@@ -28,7 +59,13 @@ const CANDLE_LIMIT = 180;
 const VIEW_LIMIT = 100;
 const EMPTY_CANDLES: ForexCandle[] = [];
 
-type ForexPair = { symbol: string; name: string; pipSize?: number };
+type AnalystInstrument = {
+  symbol: string;
+  name: string;
+  market: string;
+  marketDisplayName?: string;
+  pipSize?: number;
+};
 type LiveQuote = { price: number; epoch: number; pipSize?: number };
 type PendingHistory = { key: string; symbol: string; seconds: number };
 type HistoryLoad = { status: "loading" | "loaded" | "insufficient" | "error"; count: number; message?: string };
@@ -92,10 +129,32 @@ function normalizeFeedCandles(values: NonNullable<FeedMessage["candles"]>): Fore
   return [...byEpoch.values()].sort((a, b) => a.epoch - b.epoch).slice(-CANDLE_LIMIT);
 }
 
-function formatPrice(price: number, symbol: string) {
-  const digits = symbol.includes("JPY") ? 3 : 5;
+function getDecimals(symbol: string, pipSize?: number): number {
+  if (typeof pipSize === "number" && pipSize > 0) {
+    if (pipSize < 1) {
+      const str = pipSize.toString();
+      if (str.includes("e-")) {
+        const exp = parseInt(str.split("e-")[1], 10);
+        return Math.min(Math.max(exp, 1), 6);
+      }
+      const decimals = str.split(".")[1]?.length ?? 2;
+      return Math.min(Math.max(decimals, 1), 6);
+    }
+  }
+  if (symbol.startsWith("frx")) {
+    if (symbol.includes("XAU") || symbol.includes("XPD")) return 2;
+    if (symbol.includes("XAG")) return 4;
+    return symbol.includes("JPY") ? 3 : 5;
+  }
+  if (symbol.startsWith("OTC_")) return 2;
+  if (symbol.startsWith("cry")) return symbol.includes("BTC") ? 2 : 4;
+  return 2;
+}
+
+function formatPrice(price: number, symbol: string, pipSize?: number) {
+  const digits = getDecimals(symbol, pipSize);
   return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: symbol.startsWith("frx") ? digits : 2,
+    minimumFractionDigits: Math.min(digits, 2),
     maximumFractionDigits: digits,
   }).format(price);
 }
@@ -144,13 +203,14 @@ function buildSwingLabels(swings: SwingPoint[], atr: number) {
   return labels;
 }
 
-function nearestZone(zones: PriceZone[], symbol: string) {
+function nearestZone(zones: PriceZone[], symbol: string, pipSize?: number) {
   const zone = zones[0];
-  return zone ? { ...zone, priceText: formatPrice(zone.price, symbol) } : null;
+  return zone ? { ...zone, priceText: formatPrice(zone.price, symbol, pipSize) } : null;
 }
 
 export default function ForexAnalyst() {
-  const [pairs, setPairs] = useState<ForexPair[]>([]);
+  const [instruments, setInstruments] = useState<AnalystInstrument[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("all");
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
   const [timeframe, setTimeframe] = useState<number>(900);
   const [candlesByKey, setCandlesByKey] = useState<Record<string, ForexCandle[]>>({});
@@ -284,37 +344,36 @@ export default function ForexAnalyst() {
       }
 
       if (message.msg_type === "active_symbols" && message.active_symbols) {
-        const symbols = message.active_symbols
+        const symbols: AnalystInstrument[] = message.active_symbols
           .map((item) => {
             const symbol = item.underlying_symbol ?? item.symbol ?? "";
             return {
               symbol,
               name: item.underlying_symbol_name ?? item.display_name ?? symbol,
               market: (item.market ?? "").trim().toLowerCase(),
-              marketDisplayName: (item.market_display_name ?? "").trim().toLowerCase(),
+              marketDisplayName: (item.market_display_name ?? "").trim(),
+              pipSize: typeof item.pip === "number" ? item.pip : undefined,
               isTradingSuspended: item.is_trading_suspended === 1,
             };
           })
           .filter((item) =>
             item.symbol &&
             !item.isTradingSuspended &&
-            isForexMarket(item.market, item.marketDisplayName)
+            (item.market === "forex" || item.market === "commodities" || item.market === "indices" || item.market === "cryptocurrency" || item.market === "synthetic_index")
           );
 
-        const bySymbol = new Map<string, ForexPair>();
-        symbols.forEach((item) => bySymbol.set(item.symbol, { symbol: item.symbol, name: item.name }));
+        const bySymbol = new Map<string, AnalystInstrument>();
+        symbols.forEach((item) => bySymbol.set(item.symbol, item));
         const available = [...bySymbol.values()].sort((a, b) => {
-          const aRank = PAIR_PRIORITY.indexOf(a.symbol);
-          const bRank = PAIR_PRIORITY.indexOf(b.symbol);
-          const ar = aRank < 0 ? Number.MAX_SAFE_INTEGER : aRank;
-          const br = bRank < 0 ? Number.MAX_SAFE_INTEGER : bRank;
-          return ar - br || a.name.localeCompare(b.name);
+          const aRank = SYMBOL_PRIORITY[a.symbol] ?? 1000;
+          const bRank = SYMBOL_PRIORITY[b.symbol] ?? 1000;
+          return aRank - bRank || a.name.localeCompare(b.name);
         });
 
-        setPairs(available);
+        setInstruments(available);
         if (!available.length) {
           setFeedReady(false);
-          setFeedStatus("The feed did not return eligible forex pairs");
+          setFeedStatus("The feed did not return eligible instruments");
           return;
         }
         setSelectedSymbol((current) =>
@@ -323,7 +382,7 @@ export default function ForexAnalyst() {
             : available.find((pair) => pair.symbol === DEFAULT_SYMBOL)?.symbol ?? available[0].symbol
         );
         setFeedReady(true);
-        setFeedStatus("Forex symbols loaded · waiting for live quotes");
+        setFeedStatus("Markets loaded · waiting for live quotes");
         return;
       }
 
@@ -453,7 +512,31 @@ export default function ForexAnalyst() {
     requestCandles(selectedSymbol, timeframe);
   }, [feedReady, selectedSymbol, timeframe, requestCandles]);
 
-  const activePair = pairs.find((pair) => pair.symbol === selectedSymbol) ?? null;
+  const activeInstrument = instruments.find((pair) => pair.symbol === selectedSymbol) ?? null;
+  const activePair = activeInstrument;
+
+  const filteredInstruments = useMemo(() => {
+    if (selectedCategory === "all") return instruments;
+    return instruments.filter((inst) => inst.market === selectedCategory);
+  }, [instruments, selectedCategory]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: instruments.length };
+    for (const inst of instruments) {
+      counts[inst.market] = (counts[inst.market] ?? 0) + 1;
+    }
+    return counts;
+  }, [instruments]);
+
+  const handleCategorySelect = (category: MarketCategory) => {
+    setSelectedCategory(category);
+    const matching = category === "all" ? instruments : instruments.filter((inst) => inst.market === category);
+    if (!matching.some((item) => item.symbol === selectedSymbol)) {
+      const defaultForCat = CATEGORY_DEFAULT_SYMBOL[category];
+      const next = matching.find((item) => item.symbol === defaultForCat) ?? matching[0];
+      if (next) setSelectedSymbol(next.symbol);
+    }
+  };
   const liveQuote = quotesBySymbol[selectedSymbol] ?? null;
   const activeHistoryKey = keyFor(selectedSymbol, timeframe);
   const candles = candlesByKey[activeHistoryKey] ?? EMPTY_CANDLES;
@@ -466,8 +549,8 @@ export default function ForexAnalyst() {
   );
   const analysis = useMemo(() => analyzeForexCandles(closedCandles), [closedCandles]);
   const visibleCandles = candles.slice(-VIEW_LIMIT);
-  const support = nearestZone(analysis.support, selectedSymbol);
-  const resistance = nearestZone(analysis.resistance, selectedSymbol);
+  const support = nearestZone(analysis.support, selectedSymbol, activeInstrument?.pipSize);
+  const resistance = nearestZone(analysis.resistance, selectedSymbol, activeInstrument?.pipSize);
   const latestClosed = closedCandles[closedCandles.length - 1];
   const latestPattern = latestClosed
     ? analysis.patterns.find((pattern) => pattern.epoch === latestClosed.epoch) ?? null
@@ -517,13 +600,57 @@ export default function ForexAnalyst() {
         </button>
       </header>
 
-      <section className={styles.marketBar} aria-label="Forex chart controls">
+      <div className={styles.categoryBar} role="tablist" aria-label="Market categories">
+        {CATEGORIES.map((cat) => {
+          const count = categoryCounts[cat.id] ?? 0;
+          if (cat.id !== "all" && count === 0) return null;
+          const isActive = selectedCategory === cat.id;
+          return (
+            <button
+              key={cat.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={isActive ? styles.categoryTabActive : styles.categoryTab}
+              onClick={() => handleCategorySelect(cat.id)}
+            >
+              <span>{cat.icon}</span>
+              <span>{cat.label}</span>
+              <span className={styles.categoryCount}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <section className={styles.marketBar} aria-label="Chart controls">
         <label className={styles.pairSelector}>
-          <span>FOREX PAIR</span>
-          <select value={selectedSymbol} onChange={(event) => setSelectedSymbol(event.target.value)} disabled={!pairs.length}>
-            {pairs.length
-              ? pairs.map((pair) => <option key={pair.symbol} value={pair.symbol}>{pair.name} · {pair.symbol}</option>)
-              : <option value={selectedSymbol}>Discovering available pairs…</option>}
+          <span>INSTRUMENT ({filteredInstruments.length})</span>
+          <select value={selectedSymbol} onChange={(event) => setSelectedSymbol(event.target.value)} disabled={!instruments.length}>
+            {filteredInstruments.length ? (
+              selectedCategory === "all" ? (
+                CATEGORIES.filter((c) => c.id !== "all").map((cat) => {
+                  const group = instruments.filter((inst) => inst.market === cat.id);
+                  if (!group.length) return null;
+                  return (
+                    <optgroup key={cat.id} label={cat.label}>
+                      {group.map((item) => (
+                        <option key={item.symbol} value={item.symbol}>
+                          {item.name} · {item.symbol}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })
+              ) : (
+                filteredInstruments.map((item) => (
+                  <option key={item.symbol} value={item.symbol}>
+                    {item.name} · {item.symbol}
+                  </option>
+                ))
+              )
+            ) : (
+              <option value={selectedSymbol}>Discovering available markets…</option>
+            )}
           </select>
         </label>
         <div className={styles.timeframeGroup} role="group" aria-label="Chart timeframe">
@@ -542,7 +669,7 @@ export default function ForexAnalyst() {
         </div>
         <div className={styles.quoteBox}>
           <span>LAST PRICE</span>
-          <strong>{liveQuote ? formatPrice(liveQuote.price, selectedSymbol) : "—"}</strong>
+          <strong>{liveQuote ? formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize) : "—"}</strong>
           <small className={statusIsLive ? styles.liveText : styles.mutedText}>{liveQuote ? quoteAgeText : feedReady ? "Waiting for ticks" : feedStatus}</small>
         </div>
       </section>
@@ -575,7 +702,7 @@ export default function ForexAnalyst() {
                 const price = chart.max - step * ((chart.max - chart.min) / 4);
                 return <g key={step}>
                   <line x1={chart.left} y1={y} x2={chart.width - chart.right} y2={y} className={styles.gridLine} />
-                  <text x={chart.left - 10} y={y + 4} textAnchor="end" className={styles.axisLabel}>{formatPrice(price, selectedSymbol)}</text>
+                  <text x={chart.left - 10} y={y + 4} textAnchor="end" className={styles.axisLabel}>{formatPrice(price, selectedSymbol, activeInstrument?.pipSize)}</text>
                 </g>;
               })}
 
@@ -650,7 +777,7 @@ export default function ForexAnalyst() {
               {liveQuote && <g>
                 <line x1={chart.left} y1={chart.yFor(liveQuote.price)} x2={chart.width - chart.right} y2={chart.yFor(liveQuote.price)} className={styles.lastPriceLine} />
                 <rect x={chart.width - chart.right + 3} y={chart.yFor(liveQuote.price) - 10} width={chart.right - 9} height="20" rx="4" className={styles.lastPriceTag} />
-                <text x={chart.width - chart.right + (chart.right - 9) / 2 + 3} y={chart.yFor(liveQuote.price) + 4} textAnchor="middle" className={styles.lastPriceText}>{formatPrice(liveQuote.price, selectedSymbol)}</text>
+                <text x={chart.width - chart.right + (chart.right - 9) / 2 + 3} y={chart.yFor(liveQuote.price) + 4} textAnchor="middle" className={styles.lastPriceText}>{formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize)}</text>
               </g>}
             </svg>
           </div>

@@ -130,3 +130,51 @@
   .panelCount { white-space: normal; }
 }
 
+
+
+/* Market Category Bar */
+.categoryBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 6px;
+  scrollbar-width: thin;
+}
+.categoryTab, .categoryTabActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--fx-border);
+  border-radius: 8px;
+  background: var(--fx-panel);
+  color: var(--fx-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s ease;
+}
+.categoryTab:hover {
+  color: var(--fx-ink);
+  border-color: var(--teal, #10b981);
+}
+.categoryTabActive {
+  background: var(--teal-soft, rgba(16,185,129,.12));
+  border-color: color-mix(in srgb, var(--teal, #10b981) 60%, var(--fx-line));
+  color: var(--teal, #10b981);
+}
+.categoryCount {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  background: var(--fx-surface);
+  color: var(--fx-muted);
+}
+.categoryTabActive .categoryCount {
+  background: color-mix(in srgb, var(--teal, #10b981) 25%, transparent);
+  color: var(--teal, #10b981);
+}
