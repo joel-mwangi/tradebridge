@@ -293,11 +293,18 @@ export function useTradingSession(
 
         localSocket.onopen = () => {
           if (cancelled) return;
-          setSessionState(isRealAccount ? "Real trading connected" : "Demo trading connected");
+          setSessionState(isRealAccount && realTradingEnabled
+            ? "Confirming Real trading authorization"
+            : isRealAccount ? "Real trading connected" : "Demo trading connected");
           setStatus(isRealAccount
-            ? "Connected to your selected real Deriv account. Live orders use real funds; review every order carefully."
+            ? realTradingEnabled
+              ? "Verifying this account's server-side Real trading consent and risk limits…"
+              : "Connected to your selected Real account in read-only mode. Enable Real trading in Settings to place orders."
             : "Connected to your selected Deriv demo account. Quotes and balances come from Deriv.");
           reconnectAttempts = 0; // reset on successful connection
+          if (isRealAccount && realTradingEnabled) {
+            send({ real_trading: { action: "confirm", confirmation: "ENABLE REAL TRADING" } });
+          }
           send({ balance: 1, subscribe: 1, req_id: nextId() });
           // Deriv's transaction stream pushes account events as they happen.
           // The statement remains the source for paginated historical records.
@@ -337,6 +344,14 @@ export function useTradingSession(
             return;
           }
 
+          if (message.type === "real_trading_status") {
+            if (message.enabled === true && message.account_type === "real") {
+              setSessionState("Real trading connected");
+              setStatus("Real trading is enabled for this account after server verification. Order and daily-loss limits remain active.");
+            }
+            return;
+          }
+
           if (message.type === "strategy_execution_status") {
             setStrategyExecutionStatus({
               type: "strategy_execution_status",
@@ -351,6 +366,12 @@ export function useTradingSession(
 
           if (message.error) {
             const errorMessage = message.error.message ?? "";
+            if (message.error.code?.startsWith("REAL_")) {
+              setSessionState("Real trading authorization unavailable");
+              setStatus(errorMessage || "The backend could not verify Real trading authorization and risk limits.");
+              setBusy(false);
+              return;
+            }
             // Profit-table is a background account summary. Do not surface provider
             // rate-limit details in the trade ticket; keep live trading gated until
             // a fresh daily P/L value can be verified.
