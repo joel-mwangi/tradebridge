@@ -12,7 +12,6 @@ type Props = {
   lastPrice?: number;
   bid?: number;
   ask?: number;
-  quoteEpoch?: number;
   pipSize?: number;
   quoteFresh: boolean;
 };
@@ -44,7 +43,6 @@ export default function ForexOrderPanel({
   lastPrice,
   bid,
   ask,
-  quoteEpoch,
   pipSize,
   quoteFresh,
 }: Props) {
