@@ -185,3 +185,112 @@
   background: color-mix(in srgb, var(--teal, #10b981) 25%, transparent);
   color: var(--teal, #10b981);
 }
+
+
+/* Live quote and spread panel */
+.marketQuotePanel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--fx-line);
+  border-radius: 13px;
+  background: var(--fx-panel);
+}
+.marketQuoteHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.marketQuoteHeader h2 {
+  margin: 0;
+  color: var(--fx-ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+.quoteFresh, .quoteUnavailable {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.quoteFresh {
+  background: rgba(34, 201, 133, .12);
+  color: #22c985;
+}
+.quoteUnavailable {
+  background: rgba(244, 187, 85, .12);
+  color: #f4bb55;
+}
+.marketQuoteGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--fx-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.marketQuoteCell {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  padding: 13px;
+}
+.marketQuoteCell + .marketQuoteCell {
+  border-left: 1px solid var(--fx-line);
+}
+.marketQuoteCell > span {
+  color: var(--fx-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+}
+.marketQuoteCell strong {
+  overflow-wrap: anywhere;
+  color: var(--fx-ink);
+  font-size: clamp(16px, 2vw, 23px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.marketQuoteCell small {
+  color: var(--fx-muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.marketQuoteCell .quoteUnavailableValue {
+  color: var(--fx-muted);
+  font-size: 15px;
+}
+.quoteDisclosure {
+  margin: 0;
+  color: var(--fx-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+@media (max-width: 760px) {
+  .marketQuoteGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .marketQuoteCell:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--fx-line);
+  }
+  .marketQuoteCell:nth-child(4) {
+    border-top: 1px solid var(--fx-line);
+  }
+}
+@media (max-width: 420px) {
+  .marketQuotePanel { padding: 11px; }
+  .marketQuoteCell { padding: 10px; }
+  .marketQuoteHeader { align-items: flex-start; }
+}
+
+.marketQuoteCell .bidValue { color: #ff7b87; }
+.marketQuoteCell .askValue { color: #22c985; }
+.marketQuoteCell .spreadValue { color: var(--fx-ink); }
