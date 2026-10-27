@@ -754,7 +754,7 @@ export default function ForexAnalyst() {
           </div>
         </div>
         <p className={styles.quoteDisclosure}>
-          Bid, Ask and spread are shown only when supplied by the provider in the same tick and the prices are valid. Spread is displayed in price units; it is not converted to pips because the feed's pip-size semantics have not yet been independently verified. Buy/Sell order execution is not provided by this panel.
+          Bid, Ask and spread are shown only when supplied by the provider in the same tick and the prices are valid. Spread is displayed in price units; it is not converted to pips because the feed&apos;s pip-size semantics have not yet been independently verified. Buy/Sell order execution is not provided by this panel.
         </p>
       </section>
 
