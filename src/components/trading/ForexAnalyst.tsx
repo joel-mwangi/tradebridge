@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
+import ForexOrderPanel from "./ForexOrderPanel";
 import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs";
 import { panChartViewport, zoomChartViewport } from "../../lib/forex-chart-viewport.mjs";
 import {
@@ -775,6 +776,8 @@ export default function ForexAnalyst() {
         </p>
       </section>
 
+      <div className={styles.analysisLayout}>
+        <div className={styles.analysisMain}>
       <section className={styles.chartPanel} aria-label="Annotated candlestick chart">
         <div className={styles.chartHeading}>
           <div>
@@ -1013,6 +1016,17 @@ export default function ForexAnalyst() {
       <footer className={styles.disclaimer}>
         <strong>Analysis, not a trading signal.</strong> Levels and pattern labels are deterministic interpretations of the received OHLC bars, not predictions. No orders are placed. Verify prices against your Deriv MT5 terminal before using this page for market decisions.
       </footer>
+        </div>
+        <ForexOrderPanel
+          symbol={selectedSymbol}
+          instrumentName={activePair?.name ?? selectedSymbol}
+          lastPrice={liveQuote?.price}
+          bid={liveQuote?.bid}
+          ask={liveQuote?.ask}
+          quoteEpoch={liveQuote?.epoch}
+          pipSize={activeInstrument?.pipSize}
+        />
+      </div>
     </section>
   );
 }

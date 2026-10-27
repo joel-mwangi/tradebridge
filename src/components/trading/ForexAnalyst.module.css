@@ -294,3 +294,24 @@
 .marketQuoteCell .bidValue { color: #ff7b87; }
 .marketQuoteCell .askValue { color: #22c985; }
 .marketQuoteCell .spreadValue { color: var(--fx-ink); }
+
+
+/* Analyst chart + order ticket layout */
+.analysisLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(285px, 330px);
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+}
+.analysisMain {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+}
+@media (max-width: 1120px) {
+  .analysisLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
