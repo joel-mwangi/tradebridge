@@ -94,12 +94,46 @@ export async function POST(request: NextRequest) {
   }
 
   if (body.enabled) {
-    // Acknowledgement alone is not a risk control. Never record new consent
-    // while TradeBridge cannot enforce stake/loss limits on the server.
-    return NextResponse.json({
-      error: "real_execution_gateway_unavailable",
-      message: "Real-money consent cannot be enabled until a server-side execution gateway enforces risk limits.",
-    }, { status: 503, headers });
+    const backendUrl = process.env.TRADEBRIDGE_BACKEND_URL?.trim();
+    if (!backendUrl) {
+      // Acknowledgement alone is not a risk control. Never record new consent
+      // while TradeBridge cannot enforce stake/loss limits on the server.
+      return NextResponse.json({
+        error: "real_execution_gateway_unavailable",
+        message: "Real-money consent cannot be enabled until a server-side execution gateway enforces risk limits.",
+      }, { status: 503, headers });
+    }
+
+    const maxStakeRaw = Number(body.max_stake);
+    const maxDailyLossRaw = Number(body.max_daily_loss);
+    const maxStake = Number.isFinite(maxStakeRaw) && maxStakeRaw >= 1 && maxStakeRaw <= 10000 ? maxStakeRaw : 10;
+    const maxDailyLoss = Number.isFinite(maxDailyLossRaw) && maxDailyLossRaw >= 1 && maxDailyLossRaw <= 100000 ? maxDailyLossRaw : 25;
+
+    try {
+      const admin = createAdminClient();
+      const { error } = await admin
+        .from("deriv_live_trading_consents")
+        .upsert({
+          user_id: context.userId,
+          deriv_account_id: accountId,
+          enabled: true,
+          acknowledgement_version: ACKNOWLEDGEMENT_VERSION,
+          acknowledged_at: new Date().toISOString(),
+          max_stake: maxStake,
+          max_daily_loss: maxDailyLoss,
+        }, { onConflict: "user_id,deriv_account_id" });
+
+      if (error) return NextResponse.json({ error: "live_consent_write_failed" }, { status: 503, headers });
+      return NextResponse.json({
+        enabled: true,
+        acknowledgement_version: ACKNOWLEDGEMENT_VERSION,
+        acknowledged_at: new Date().toISOString(),
+        max_stake: maxStake,
+        max_daily_loss: maxDailyLoss,
+      }, { headers });
+    } catch {
+      return NextResponse.json({ error: "live_consent_write_unavailable" }, { status: 503, headers });
+    }
   }
 
   try {

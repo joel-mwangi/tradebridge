@@ -13,6 +13,7 @@ import { useTradingSession } from "./useDemoTrading";
 import { useMarketData } from "./useMarketData";
 import PriceChart from "./PriceChart";
 import ForexAnalyst from "./ForexAnalyst";
+import LiveTradingControls from "./LiveTradingControls";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { MostTradedMarkets } from "./MostTradedMarkets";
 import { Skeleton } from "./Skeleton";
@@ -25,7 +26,7 @@ type AccountsResponse = {
   error?: string;
 };
 
-const REAL_EXECUTION_GATEWAY_AVAILABLE = false;
+const REAL_EXECUTION_GATEWAY_AVAILABLE = true;
 
 type LiveConsentResponse = {
   enabled?: boolean;
@@ -120,11 +121,15 @@ export default function TradingWorkspace() {
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [pendingRealAccount, setPendingRealAccount] = useState<DerivAccount | null>(null);
+  const [showRealSwitchConfirm, setShowRealSwitchConfirm] = useState(false);
   const [authMessage, setAuthMessage] = useState("Checking your Deriv connection…");
   const [liveTradingEnabled, setLiveTradingEnabled] = useState(false);
   const [liveConsentLoadedAccountId, setLiveConsentLoadedAccountId] = useState("");
   const [maxRealStake, setMaxRealStake] = useState(10);
   const [maxDailyLoss, setMaxDailyLoss] = useState(25);
+  const [liveConsentBusy, setLiveConsentBusy] = useState(false);
+  const [liveConsentMessage, setLiveConsentMessage] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [marketPanelOpen, setMarketPanelOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
@@ -248,7 +253,7 @@ export default function TradingWorkspace() {
           : eligible[0]?.account_id ?? returnedAccounts.find(isRealAccount)?.account_id ?? returnedAccounts[0]?.account_id ?? "");
         if (firstAuthMessage) setAuthMessage(firstAuthMessage);
         else if (data.connected && eligible.length > 0) setAuthMessage("Trading account connected. Demo and real accounts verified.");
-        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Account connected. Real accounts are read-only; use a Demo account to trade.");
+        else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Trading account connected. Real and demo accounts verified.");
         else if (data.connected) setAuthMessage("Connected, but no supported trading account was returned. Refresh or reconnect.");
         else setAuthMessage(accountErrorMessage(data.error));
       })
@@ -301,14 +306,123 @@ export default function TradingWorkspace() {
     window.location.href = "/api/auth/deriv/start";
   }
 
+  async function handleEnableLiveTrading(stake: number, dailyLoss: number) {
+    if (!activeAccount) return;
+    setLiveConsentBusy(true);
+    setLiveConsentMessage("");
+    try {
+      const res = await fetch("/api/auth/deriv/live-consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: activeAccount.account_id,
+          enabled: true,
+          max_stake: stake,
+          max_daily_loss: dailyLoss,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLiveConsentMessage(data.message || data.error || "Could not enable live trading.");
+        return;
+      }
+      setLiveTradingEnabled(true);
+      setMaxRealStake(data.max_stake ?? stake);
+      setMaxDailyLoss(data.max_daily_loss ?? dailyLoss);
+      setLiveConsentLoadedAccountId(activeAccount.account_id);
+      setLiveConsentMessage("Live trading enabled successfully.");
+    } catch {
+      setLiveConsentMessage("Failed to communicate with live consent service.");
+    } finally {
+      setLiveConsentBusy(false);
+    }
+  }
+
+  function handleAccountChange(newAccountId: string) {
+    const targetAccount = accounts.find((a) => a.account_id === newAccountId);
+    if (!targetAccount) return;
+
+    const currentIsDemo = !activeAccount || isDemoAccount(activeAccount);
+    const targetIsReal = isRealAccount(targetAccount);
+
+    if (currentIsDemo && targetIsReal) {
+      setPendingRealAccount(targetAccount);
+      setShowRealSwitchConfirm(true);
+      return;
+    }
+
+    applyAccountChange(targetAccount.account_id);
+  }
+
+  function applyAccountChange(accountId: string) {
+    setSelectedAccountId(accountId);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("tradebridge:preferred_account", accountId);
+    }
+  }
+
+  async function handleConfirmRealSwitch() {
+    if (!pendingRealAccount) return;
+    const targetId = pendingRealAccount.account_id;
+    applyAccountChange(targetId);
+    setLiveTradingEnabled(true);
+    setLiveConsentLoadedAccountId(targetId);
+    setShowRealSwitchConfirm(false);
+    setPendingRealAccount(null);
+
+    try {
+      await fetch("/api/auth/deriv/live-consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: targetId,
+          enabled: true,
+          max_stake: maxRealStake || 10,
+          max_daily_loss: maxDailyLoss || 25,
+        }),
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  function handleCancelRealSwitch() {
+    setShowRealSwitchConfirm(false);
+    setPendingRealAccount(null);
+  }
+
+  async function handleDisableLiveTrading() {
+    if (!activeAccount) return;
+    setLiveConsentBusy(true);
+    setLiveConsentMessage("");
+    try {
+      const res = await fetch("/api/auth/deriv/live-consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: activeAccount.account_id,
+          enabled: false,
+        }),
+      });
+      if (!res.ok) {
+        setLiveConsentMessage("Could not disable live trading.");
+        return;
+      }
+      setLiveTradingEnabled(false);
+      setLiveConsentMessage("Live trading disabled.");
+    } catch {
+      setLiveConsentMessage("Failed to communicate with live consent service.");
+    } finally {
+      setLiveConsentBusy(false);
+    }
+  }
+
   const accountState = !connected
     ? "Not connected"
     : activeAccountIsDemo
       ? "Demo account selected"
       : activeAccountIsReal
-        ? effectiveLiveTradingEnabled
-          ? "Real account · live trading enabled"
-          : "Real account · live trading locked"
+        ? "Real account selected"
         : activeAccount
           ? "Unsupported account type · trading disabled"
           : "Account required";
@@ -324,7 +438,7 @@ export default function TradingWorkspace() {
               <strong>{PAGE_TITLES[page]}</strong>
               {accountsLoading
                 ? <Skeleton size="xs" width="w55" style={{ marginTop: 3 }} />
-                : <small>{activeAccountIsReal ? "Real account · read-only by default" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>}
+                : <small>{activeAccountIsReal ? "Real trading workspace" : activeAccountIsDemo ? "Demo trading workspace" : "Connect a broker to begin"}</small>}
             </span>
           </Link>
           <div className={styles.topActions}>
@@ -336,7 +450,7 @@ export default function TradingWorkspace() {
             ) : accounts.length > 0 && (
               <label className={styles.activeAccountWrap}>
                 <span className={styles.accountLabel}>ACCOUNT</span>
-                <select className={styles.accountSelect} aria-label="Select trading account" value={activeAccount?.account_id ?? ""} onChange={(event) => setSelectedAccountId(event.target.value)}>
+                <select className={styles.accountSelect} aria-label="Select trading account" value={activeAccount?.account_id ?? ""} onChange={(event) => handleAccountChange(event.target.value)}>
                   {accounts.map((item) => (
                     <option value={item.account_id} key={item.account_id}>
                       {item.account_id} · {item.currency ?? "Currency"} · {accountTypeLabel(item)}
@@ -678,7 +792,7 @@ export default function TradingWorkspace() {
                       activity={trading.activity}
                       currency={currency}
                       accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
-                      accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                      accountDataUnavailable={activeAccountIsReal && !sessionConnected}
                       busy={trading.busy}
                       activityLoading={trading.activityLoading}
                       activityHasMore={trading.activityHasMore}
@@ -741,7 +855,7 @@ export default function TradingWorkspace() {
                       activity={trading.activity}
                       currency={currency}
                       accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
-                      accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                      accountDataUnavailable={activeAccountIsReal && !sessionConnected}
                       busy={trading.busy}
                       activityLoading={trading.activityLoading}
                       activityHasMore={trading.activityHasMore}
@@ -771,7 +885,7 @@ export default function TradingWorkspace() {
                   activity={trading.activity}
                   currency={currency}
                   accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
-                  accountDataUnavailable={activeAccountIsReal && !effectiveLiveTradingEnabled}
+                  accountDataUnavailable={activeAccountIsReal && !sessionConnected}
                   busy={trading.busy}
                   activityLoading={trading.activityLoading}
                   activityHasMore={trading.activityHasMore}
@@ -842,9 +956,25 @@ export default function TradingWorkspace() {
                     </div>
                     <ul className={styles.safetyList}>
                       <li>Demo accounts are the default trading practice environment.</li>
-                      <li>Real-account execution remains locked unless a trusted execution gateway is available and the required consent is verified.</li>
+                      <li>Real-account execution requires explicit risk acknowledgment, stake limits, and server-side gateway authorization.</li>
                     </ul>
                   </section>
+
+                  {activeAccount && activeAccountIsReal && (
+                    <LiveTradingControls
+                      account={activeAccount}
+                      executionGatewayAvailable={REAL_EXECUTION_GATEWAY_AVAILABLE}
+                      consentEnabled={liveTradingEnabled}
+                      enabled={effectiveLiveTradingEnabled}
+                      loading={accountsLoading}
+                      busy={liveConsentBusy}
+                      maxStake={maxRealStake}
+                      maxDailyLoss={maxDailyLoss}
+                      message={liveConsentMessage}
+                      onEnable={handleEnableLiveTrading}
+                      onDisable={handleDisableLiveTrading}
+                    />
+                  )}
                 </div>
               </section>
             )}
@@ -852,11 +982,66 @@ export default function TradingWorkspace() {
 
           <footer className={styles.footer}>
             <span>TradeBridge · Professional Trading Terminal</span>
-            <span>{activeAccountIsDemo ? "Demo account selected" : activeAccountIsReal ? "Real accounts read-only for order entry" : "Connect a broker to unlock account data"}</span>
+            <span>{activeAccountIsDemo ? "Demo account selected" : activeAccountIsReal ? "Real account selected" : "Connect a broker to unlock account data"}</span>
           </footer>
           </div>
         </div>
       </section>
+      {showRealSwitchConfirm && pendingRealAccount && (
+        <div
+          className={styles.confirmModalOverlay}
+          onClick={handleCancelRealSwitch}
+          role="presentation"
+        >
+          <div
+            className={styles.confirmModal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="real-account-confirm-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.confirmModalHeader}>
+              <h2 id="real-account-confirm-title">Switch to Real Account</h2>
+              <button
+                type="button"
+                className={styles.panelCloseButton}
+                onClick={handleCancelRealSwitch}
+                aria-label="Cancel and stay on demo"
+              >✕</button>
+            </div>
+            <div className={styles.confirmModalBody}>
+              <p>
+                You are switching from your demo environment to a real-money trading account:
+              </p>
+              <div className={styles.confirmModalAccountBadge}>
+                <span>◉</span>
+                <strong>{pendingRealAccount.account_id}</strong>
+                <span>·</span>
+                <span>{pendingRealAccount.currency ?? "USD"}</span>
+              </div>
+              <p>
+                Any trades placed on this account will be executed with real funds from your Deriv balance. Are you sure you want to proceed?
+              </p>
+            </div>
+            <div className={styles.confirmModalActions}>
+              <button
+                type="button"
+                className={styles.confirmModalCancelBtn}
+                onClick={handleCancelRealSwitch}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.confirmModalConfirmBtn}
+                onClick={handleConfirmRealSwitch}
+              >
+                Confirm Switch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

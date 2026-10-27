@@ -1274,3 +1274,123 @@
   .chartPanel .chartQuote { max-width: 55%; }
   .chartPanel .tickMoveUp, .chartPanel .tickMoveDown, .chartPanel .tickMoveNeutral { white-space: normal; }
 }
+
+
+/* Shift to Real Account Confirmation Modal */
+.confirmModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn .15s ease;
+}
+
+.confirmModal {
+  width: min(460px, 94vw);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: scaleIn .18s ease;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.confirmModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.confirmModalHeader h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.confirmModalBody {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirmModalBody p {
+  margin: 0;
+}
+
+.confirmModalBody strong {
+  color: var(--ink);
+}
+
+.confirmModalAccountBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.confirmModalActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.confirmModalConfirmBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: var(--teal);
+  color: #fff;
+  transition: opacity .15s ease;
+}
+.confirmModalConfirmBtn:hover {
+  opacity: 0.9;
+}
+
+.confirmModalCancelBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  transition: background .15s ease;
+}
+.confirmModalCancelBtn:hover {
+  background: var(--surface);
+}

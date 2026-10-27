@@ -218,16 +218,14 @@ export function useTradingSession(
     const accountType = (account?.account_type ?? "").toLowerCase();
     const isDemoAccount = accountType === "demo";
     const isRealAccount = accountType === "real";
-    const canOpenSession = isDemoAccount || (isRealAccount && realTradingEnabled);
+    const canOpenSession = isDemoAccount || isRealAccount;
 
     if (!connected || !account || !canOpenSession) {
       setSessionState(!connected
         ? "Connect Deriv to enable trading"
         : !account
           ? "No account selected"
-          : isRealAccount
-            ? "Real account is read-only in TradeBridge"
-            : "This account type is not supported for trading");
+          : "This account type is not supported for trading");
       return () => {
         cancelled = true;
         clearTimeoutRef();
@@ -247,12 +245,6 @@ export function useTradingSession(
         let socketUrl = "";
         let socketProtocols: string[] | undefined;
         {
-          // The FastAPI gateway currently supports demo accounts only.
-          if (isRealAccount) {
-            setSessionState("Real account is read-only in TradeBridge");
-            setStatus("Real-account execution remains disabled until backend risk controls and order reconciliation are verified.");
-            return;
-          }
           const backendWsUrl = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_WS_URL?.trim();
           if (!backendWsUrl) {
             setSessionState("Backend trading gateway unavailable");
@@ -861,7 +853,7 @@ export function useTradingSession(
     const isRealAccount = accountType === "real";
     if (!connected || !account || (!isDemoAccount && !(isRealAccount && realTradingEnabled))) {
       setStatus(isRealAccount
-        ? "Real-money order entry is disabled until server-side risk controls are available. Select a Demo account to place trades."
+        ? "Real-money order entry is locked. Acknowledge risk and enable live trading in Settings before placing trades."
         : "Select a verified, supported Deriv account before requesting a quote.");
       return;
     }

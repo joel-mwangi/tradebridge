@@ -132,7 +132,7 @@ export default function DemoTradeTicket({
   return <section className={styles.ticketPanel + " " + styles.ticketPanelCompact} id="ticket">
     <div className={styles.panelHeading}>
       <div>
-        <h2>{isRealAccount ? "Real account · read-only" : "Buy"}</h2>
+        <h2>Buy</h2>
       </div>
     </div>
 
@@ -150,7 +150,7 @@ export default function DemoTradeTicket({
     )}
 
     {/* Skeleton: connected but session not yet established */}
-    {connected && account && sessionState !== expectedSessionState && !isRealAccount && (
+    {connected && account && sessionState !== expectedSessionState && !canTrade && (
       <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "4px 0" }} aria-label="Opening trading session">
         <Skeleton size="xs" width="w70" />
         <SkeletonCard rows={2} />
@@ -165,12 +165,6 @@ export default function DemoTradeTicket({
 
     {/* Real content: session established */}
     {(connected && (isRealAccount || sessionState === expectedSessionState)) && (<>
-    {isRealAccount && <div className={styles.accountModeNotice} role="note">
-      <strong>{realTradingEnabled ? "Real-money account" : "Live trading is locked"}</strong>
-      <span>{realTradingEnabled
-        ? "Real-money order entry is disabled until server-side risk controls are available. Use a Demo account to place trades."
-        : "This linked Real account is read-only in TradeBridge. Select a Demo account to place trades."}</span>
-    </div>}
     {orderResolutionRequired && <div className={styles.riskStopNotice} role="alert">
       <strong>Previous order outcome unknown — entry paused</strong>
       <span>The previous order status is unconfirmed. Reconcile recent transactions and open contracts on your account before retrying.</span>
@@ -244,7 +238,6 @@ export default function DemoTradeTicket({
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv to enable Buy.</p>}
     {connected && !account && <p className={styles.inlineHint}>Select an account to continue.</p>}
-    {connected && isRealAccount && realTradingEnabled && realizedProfit === null && <p className={styles.inlineHint}>Waiting for verified daily P/L before enabling live orders.</p>}
     </>)}
   </section>;
 }
