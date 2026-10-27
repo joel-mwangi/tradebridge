@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "./ForexOrderPanel.module.css";
 
 type OrderSide = "buy" | "sell";
@@ -13,7 +13,7 @@ type Props = {
   bid?: number;
   ask?: number;
   pipSize?: number;
-  quoteFresh: boolean;
+  quoteEpoch?: number;
 };
 
 function formatPrice(value: number | undefined, symbol: string, pipSize?: number) {
@@ -44,8 +44,14 @@ export default function ForexOrderPanel({
   bid,
   ask,
   pipSize,
-  quoteFresh,
+  quoteEpoch,
 }: Props) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const quoteFresh = typeof quoteEpoch === "number" && now >= quoteEpoch * 1000 - 5000 && now - quoteEpoch * 1000 < 60_000;
   const [side, setSide] = useState<OrderSide>("buy");
   const [orderType, setOrderType] = useState<OrderType>("market");
   const [volume, setVolume] = useState("0.10");
