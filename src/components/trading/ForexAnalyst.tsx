@@ -1025,7 +1025,6 @@ export default function ForexAnalyst() {
           ask={liveQuote?.ask}
           quoteEpoch={liveQuote?.epoch}
           pipSize={activeInstrument?.pipSize}
-          quoteFresh={Boolean(statusIsLive)}
         />
       </div>
     </section>
