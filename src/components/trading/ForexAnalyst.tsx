@@ -738,7 +738,7 @@ export default function ForexAnalyst() {
               className={isChartDragging ? styles.chartDragging : styles.chartInteractive}
               onWheel={(event) => {
                 event.preventDefault();
-                if (candles.length < 2) return;
+                if (candles.length < 2 || event.deltaY === 0) return;
                 const bounds = event.currentTarget.getBoundingClientRect();
                 if (!bounds.width) return;
                 const svgX = ((event.clientX - bounds.left) / bounds.width) * chart.width;
@@ -856,7 +856,7 @@ export default function ForexAnalyst() {
               <text x={chart.width - chart.right} y={chart.height - 10} textAnchor="end" className={styles.axisLabel}>
                 {visibleCandles.length ? formatTime(visibleCandles[visibleCandles.length - 1].epoch, true) : ""}
               </text>
-              {liveQuote && <g>
+              {liveQuote && safeViewOffset === 0 && <g>
                 <line x1={chart.left} y1={chart.yFor(liveQuote.price)} x2={chart.width - chart.right} y2={chart.yFor(liveQuote.price)} className={styles.lastPriceLine} />
                 <rect x={chart.width - chart.right + 3} y={chart.yFor(liveQuote.price) - 10} width={chart.right - 9} height="20" rx="4" className={styles.lastPriceTag} />
                 <text x={chart.width - chart.right + (chart.right - 9) / 2 + 3} y={chart.yFor(liveQuote.price) + 4} textAnchor="middle" className={styles.lastPriceText}>{formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize)}</text>
