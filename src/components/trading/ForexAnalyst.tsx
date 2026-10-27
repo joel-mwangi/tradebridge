@@ -525,16 +525,6 @@ export default function ForexAnalyst() {
     chartDragRef.current = null;
   }, [selectedSymbol, timeframe]);
 
-  useEffect(() => {
-    const tail = candles[candles.length - 1];
-    const previous = lastViewportTailRef.current;
-    if (previous?.key === activeHistoryKey && tail && tail.epoch > previous.epoch && chartViewOffset > 0) {
-      const advancedBy = Math.max(1, Math.round((tail.epoch - previous.epoch) / timeframe));
-      setChartViewOffset((current) => Math.min(Math.max(0, candles.length - chartViewCount), current + advancedBy));
-    }
-    lastViewportTailRef.current = { key: activeHistoryKey, epoch: tail?.epoch ?? 0 };
-  }, [activeHistoryKey, candles, timeframe, chartViewOffset, chartViewCount]);
-
   const activeInstrument = instruments.find((pair) => pair.symbol === selectedSymbol) ?? null;
   const activePair = activeInstrument;
 
@@ -563,6 +553,16 @@ export default function ForexAnalyst() {
   const liveQuote = quotesBySymbol[selectedSymbol] ?? null;
   const activeHistoryKey = keyFor(selectedSymbol, timeframe);
   const candles = candlesByKey[activeHistoryKey] ?? EMPTY_CANDLES;
+  useEffect(() => {
+    const tail = candles[candles.length - 1];
+    const previous = lastViewportTailRef.current;
+    if (previous?.key === activeHistoryKey && tail && tail.epoch > previous.epoch && chartViewOffset > 0) {
+      const advancedBy = Math.max(1, Math.round((tail.epoch - previous.epoch) / timeframe));
+      setChartViewOffset((current) => Math.min(Math.max(0, candles.length - chartViewCount), current + advancedBy));
+    }
+    lastViewportTailRef.current = { key: activeHistoryKey, epoch: tail?.epoch ?? 0 };
+  }, [activeHistoryKey, candles, timeframe, chartViewOffset, chartViewCount]);
+
   const historyLoad = historyByKey[activeHistoryKey];
   const hasUsableHistory = historyLoad?.status === "loaded" && historyLoad.count >= 10;
   const currentBucket = Math.floor(Date.now() / 1000 / timeframe) * timeframe;
