@@ -67,6 +67,19 @@ type AnalystInstrument = {
   marketDisplayName?: string;
   pipSize?: number;
 };
+function normalizeOptionalQuotePrice(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : undefined;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : undefined;
+}
+
+function calculateQuoteSpread(bid: number | undefined, ask: number | undefined): number | undefined {
+  if (typeof bid !== "number" || !Number.isFinite(bid) || bid <= 0 ||
+      typeof ask !== "number" || !Number.isFinite(ask) || ask <= 0 || ask < bid) return undefined;
+  return ask - bid;
+}
+
 type LiveQuote = { price: number; epoch: number; pipSize?: number; bid?: number; ask?: number };
 type PendingHistory = { key: string; symbol: string; seconds: number };
 type HistoryLoad = { status: "loading" | "loaded" | "insufficient" | "error"; count: number; message?: string };
@@ -458,8 +471,8 @@ export default function ForexAnalyst() {
           price,
           epoch,
           pipSize: message.tick.pip_size ?? message.pip_size,
-          bid: Number.isFinite(Number(message.tick.bid)) && message.tick.bid !== undefined ? Number(message.tick.bid) : undefined,
-          ask: Number.isFinite(Number(message.tick.ask)) && message.tick.ask !== undefined ? Number(message.tick.ask) : undefined,
+          bid: normalizeOptionalQuotePrice(message.tick.bid),
+          ask: normalizeOptionalQuotePrice(message.tick.ask),
         };
         latestTickRef.current = { symbol, quote };
         setQuotesBySymbol((current) => ({ ...current, [symbol]: quote }));
@@ -717,8 +730,12 @@ export default function ForexAnalyst() {
             <span className={styles.sectionEyebrow}>LIVE MARKET QUOTE</span>
             <h2>Bid / Ask / Spread</h2>
           </div>
-          <span className={liveQuote && liveQuote.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid ? styles.quoteFresh : styles.quoteUnavailable}>
-            {liveQuote ? "Live tick received" : "Waiting for quote"}
+          <span className={liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined ? styles.quoteFresh : styles.quoteUnavailable}>
+            {liveQuote
+              ? calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
+                ? "Live Bid / Ask available"
+                : "Tick received · Bid / Ask unavailable"
+              : "Waiting for quote"}
           </span>
         </div>
         <div className={styles.marketQuoteGrid}>
@@ -743,12 +760,12 @@ export default function ForexAnalyst() {
           </div>
           <div className={styles.marketQuoteCell}>
             <span>Spread</span>
-            <strong className={liveQuote?.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid ? styles.spreadValue : styles.quoteUnavailableValue}>
-              {liveQuote?.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid
-                ? formatPrice(liveQuote.ask - liveQuote.bid, selectedSymbol, activeInstrument?.pipSize)
+            <strong className={liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined ? styles.spreadValue : styles.quoteUnavailableValue}>
+              {liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
+                ? formatPrice(calculateQuoteSpread(liveQuote.bid, liveQuote.ask)!, selectedSymbol, activeInstrument?.pipSize)
                 : "Unavailable"}
             </strong>
-            <small>{liveQuote?.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid
+            <small>{liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
               ? "Ask − Bid · price units"
               : "Requires valid Bid and Ask"}</small>
           </div>
