@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
-import { buildForexCandleHistoryRequest, normalizeOptionalQuotePrice, calculateQuoteSpread } from "../../lib/forex-market-data.mjs";
+import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs";
 import { panChartViewport, zoomChartViewport } from "../../lib/forex-chart-viewport.mjs";
 import {
   analyzeForexCandles,
@@ -67,6 +67,19 @@ type AnalystInstrument = {
   marketDisplayName?: string;
   pipSize?: number;
 };
+function normalizeOptionalQuotePrice(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : undefined;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : undefined;
+}
+
+function calculateQuoteSpread(bid: number | undefined, ask: number | undefined): number | undefined {
+  if (typeof bid !== "number" || !Number.isFinite(bid) || bid <= 0 ||
+      typeof ask !== "number" || !Number.isFinite(ask) || ask <= 0 || ask < bid) return undefined;
+  return ask - bid;
+}
+
 type LiveQuote = { price: number; epoch: number; pipSize?: number; bid?: number; ask?: number };
 type PendingHistory = { key: string; symbol: string; seconds: number };
 type HistoryLoad = { status: "loading" | "loaded" | "insufficient" | "error"; count: number; message?: string };
