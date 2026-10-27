@@ -707,6 +707,43 @@ export default function ForexAnalyst() {
         <span className={styles.connectionRight}>{activePair?.name ?? "Forex symbols"} · {timeframe === 60 ? "1 minute" : timeframe === 300 ? "5 minutes" : timeframe === 900 ? "15 minutes" : "1 hour"}</span>
       </div>
 
+      <section className={styles.marketQuotePanel} aria-label="Market quote and spread">
+        <div className={styles.marketQuoteHeader}>
+          <div>
+            <span className={styles.sectionEyebrow}>LIVE MARKET QUOTE</span>
+            <h2>Bid / Ask / Spread</h2>
+          </div>
+          <span className={liveQuote ? styles.quoteFresh : styles.quoteUnavailable}>
+            {liveQuote ? "Quote received" : "Waiting for quote"}
+          </span>
+        </div>
+        <div className={styles.marketQuoteGrid}>
+          <div className={styles.marketQuoteCell}>
+            <span>Last quote</span>
+            <strong>{liveQuote ? formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize) : "—"}</strong>
+            <small>{liveQuote ? "Provider tick · " + formatTime(liveQuote.epoch) : "No live tick received"}</small>
+          </div>
+          <div className={styles.marketQuoteCell}>
+            <span>Bid · Sell price</span>
+            <strong className={styles.quoteUnavailableValue}>Unavailable</strong>
+            <small>Not supplied by the current feed</small>
+          </div>
+          <div className={styles.marketQuoteCell}>
+            <span>Ask · Buy price</span>
+            <strong className={styles.quoteUnavailableValue}>Unavailable</strong>
+            <small>Not supplied by the current feed</small>
+          </div>
+          <div className={styles.marketQuoteCell}>
+            <span>Spread</span>
+            <strong className={styles.quoteUnavailableValue}>—</strong>
+            <small>Cannot calculate without Bid and Ask</small>
+          </div>
+        </div>
+        <p className={styles.quoteDisclosure}>
+          The live feed currently provides a single quote, not a verified Bid/Ask pair. TradeBridge will not estimate a spread or present Buy/Sell order controls as executable until a supported quote source and a separately verified forex execution flow are available.
+        </p>
+      </section>
+
       <section className={styles.chartPanel} aria-label="Annotated candlestick chart">
         <div className={styles.chartHeading}>
           <div>
