@@ -52,8 +52,14 @@
 .bearSwatch { background: #ed6674; }
 .supportSwatch { background: #16a879; }
 .resistSwatch { background: #f59e0b; }
+.chartInteractionBar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; padding: 0 16px 10px; color: var(--fx-muted); font-size: 10px; }
+.chartInteractionActions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.returnLiveButton { min-height: 29px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--teal, #10b981) 55%, var(--fx-line)); border-radius: 7px; background: var(--teal-soft, rgba(16,185,129,.12)); color: var(--teal, #10b981); font-size: 10px; font-weight: 800; }
+.returnLiveButton:hover { border-color: var(--teal, #10b981); }
 .chartViewport { width: 100%; min-width: 0; padding: 2px 10px 0; overflow-x: auto; }
-.chartViewport svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.chartViewport svg { display: block; width: 100%; min-width: 620px; height: auto; touch-action: none; user-select: none; }
+.chartInteractive { cursor: grab; }
+.chartDragging { cursor: grabbing; }
 .gridLine { stroke: var(--fx-line); stroke-width: 1; stroke-dasharray: 3 5; }
 .axisLabel { fill: var(--fx-muted); font-size: 10px; }
 .bullWick { stroke: #16a879; stroke-width: 1.4; }
@@ -127,6 +133,7 @@
   .insightGrid { grid-template-columns: minmax(0, 1fr); }
   .insightCard { min-height: 130px; }
   .chartFooter { align-items: flex-start; flex-direction: column; }
+  .chartInteractionBar { align-items: flex-start; flex-direction: column; }
   .panelCount { white-space: normal; }
 }
 

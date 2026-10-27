@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
 import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs";
+import { panChartViewport, zoomChartViewport } from "../../lib/forex-chart-viewport.mjs";
 import {
   analyzeForexCandles,
   findSwingPoints,
@@ -213,6 +214,11 @@ export default function ForexAnalyst() {
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("all");
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
   const [timeframe, setTimeframe] = useState<number>(900);
+  const [chartViewCount, setChartViewCount] = useState<number>(VIEW_LIMIT);
+  const [chartViewOffset, setChartViewOffset] = useState<number>(0);
+  const [isChartDragging, setIsChartDragging] = useState(false);
+  const chartDragRef = useRef<{ pointerId: number; startX: number; startOffset: number } | null>(null);
+  const lastViewportTailRef = useRef<{ key: string; epoch: number } | null>(null);
   const [candlesByKey, setCandlesByKey] = useState<Record<string, ForexCandle[]>>({});
   const [historyByKey, setHistoryByKey] = useState<Record<string, HistoryLoad>>({});
   const [quotesBySymbol, setQuotesBySymbol] = useState<Record<string, LiveQuote>>({});
@@ -512,6 +518,13 @@ export default function ForexAnalyst() {
     requestCandles(selectedSymbol, timeframe);
   }, [feedReady, selectedSymbol, timeframe, requestCandles]);
 
+  useEffect(() => {
+    setChartViewCount(VIEW_LIMIT);
+    setChartViewOffset(0);
+    setIsChartDragging(false);
+    chartDragRef.current = null;
+  }, [selectedSymbol, timeframe]);
+
   const activeInstrument = instruments.find((pair) => pair.symbol === selectedSymbol) ?? null;
   const activePair = activeInstrument;
 
@@ -540,6 +553,16 @@ export default function ForexAnalyst() {
   const liveQuote = quotesBySymbol[selectedSymbol] ?? null;
   const activeHistoryKey = keyFor(selectedSymbol, timeframe);
   const candles = candlesByKey[activeHistoryKey] ?? EMPTY_CANDLES;
+  useEffect(() => {
+    const tail = candles[candles.length - 1];
+    const previous = lastViewportTailRef.current;
+    if (previous?.key === activeHistoryKey && tail && tail.epoch > previous.epoch && chartViewOffset > 0) {
+      const advancedBy = Math.max(1, Math.round((tail.epoch - previous.epoch) / timeframe));
+      setChartViewOffset((current) => Math.min(Math.max(0, candles.length - chartViewCount), current + advancedBy));
+    }
+    lastViewportTailRef.current = { key: activeHistoryKey, epoch: tail?.epoch ?? 0 };
+  }, [activeHistoryKey, candles, timeframe, chartViewOffset, chartViewCount]);
+
   const historyLoad = historyByKey[activeHistoryKey];
   const hasUsableHistory = historyLoad?.status === "loaded" && historyLoad.count >= 10;
   const currentBucket = Math.floor(Date.now() / 1000 / timeframe) * timeframe;
@@ -548,7 +571,11 @@ export default function ForexAnalyst() {
     [candles, timeframe, currentBucket],
   );
   const analysis = useMemo(() => analyzeForexCandles(closedCandles), [closedCandles]);
-  const visibleCandles = candles.slice(-VIEW_LIMIT);
+  const safeViewCount = Math.max(1, Math.min(chartViewCount, candles.length || chartViewCount));
+  const maxViewOffset = Math.max(0, candles.length - safeViewCount);
+  const safeViewOffset = Math.min(chartViewOffset, maxViewOffset);
+  const visibleEnd = candles.length - safeViewOffset;
+  const visibleCandles = candles.slice(Math.max(0, visibleEnd - safeViewCount), visibleEnd);
   const support = nearestZone(analysis.support, selectedSymbol, activeInstrument?.pipSize);
   const resistance = nearestZone(analysis.resistance, selectedSymbol, activeInstrument?.pipSize);
   const latestClosed = closedCandles[closedCandles.length - 1];
@@ -695,8 +722,63 @@ export default function ForexAnalyst() {
         </div>
 
         {hasUsableHistory && visibleCandles.length > 1 ? (
+          <>
+          <div className={styles.chartInteractionBar}>
+            <span>Scroll to zoom · drag to pan · live ticks continue in the background</span>
+            <div className={styles.chartInteractionActions}>
+              <span>{safeViewOffset > 0 ? "Historical view" : "Live edge"} · {visibleCandles.length} bars</span>
+              {safeViewOffset > 0 && <button type="button" className={styles.returnLiveButton} onClick={() => setChartViewOffset(0)}>Return to live ↗</button>}
+            </div>
+          </div>
           <div className={styles.chartViewport}>
-            <svg viewBox={"0 0 " + chart.width + " " + chart.height} role="img" aria-label={activePair?.name + " candlestick chart with automatic analysis"}>
+            <svg
+              viewBox={"0 0 " + chart.width + " " + chart.height}
+              role="img"
+              aria-label={activePair?.name + " candlestick chart with automatic analysis. Use mouse wheel to zoom and drag to pan."}
+              className={isChartDragging ? styles.chartDragging : styles.chartInteractive}
+              onWheel={(event) => {
+                event.preventDefault();
+                if (candles.length < 2 || event.deltaY === 0) return;
+                const bounds = event.currentTarget.getBoundingClientRect();
+                if (!bounds.width) return;
+                const svgX = ((event.clientX - bounds.left) / bounds.width) * chart.width;
+                const cursorRatio = Math.max(0, Math.min(1, (svgX - chart.left) / chart.plotWidth));
+                const next = zoomChartViewport({
+                  candlesLength: candles.length,
+                  viewCount: safeViewCount,
+                  viewOffset: safeViewOffset,
+                  cursorRatio,
+                  deltaY: event.deltaY,
+                });
+                setChartViewCount(next.viewCount);
+                setChartViewOffset(next.viewOffset);
+              }}
+              onPointerDown={(event) => {
+                if (event.button !== 0 || candles.length <= safeViewCount) return;
+                chartDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startOffset: safeViewOffset };
+                setIsChartDragging(true);
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onPointerMove={(event) => {
+                const drag = chartDragRef.current;
+                if (!drag || drag.pointerId !== event.pointerId) return;
+                const deltaBars = Math.round(((event.clientX - drag.startX) / Math.max(1, event.currentTarget.getBoundingClientRect().width)) * chart.width * safeViewCount / chart.plotWidth);
+                const next = panChartViewport({
+                  candlesLength: candles.length,
+                  viewCount: safeViewCount,
+                  viewOffset: drag.startOffset,
+                  deltaBars,
+                });
+                setChartViewOffset(next.viewOffset);
+              }}
+              onPointerUp={(event) => {
+                if (chartDragRef.current?.pointerId === event.pointerId) {
+                  chartDragRef.current = null;
+                  setIsChartDragging(false);
+                }
+              }}
+              onPointerCancel={() => { chartDragRef.current = null; setIsChartDragging(false); }}
+            >
               {[0, 1, 2, 3, 4].map((step) => {
                 const y = chart.top + step * (chart.plotHeight / 4);
                 const price = chart.max - step * ((chart.max - chart.min) / 4);
@@ -774,13 +856,14 @@ export default function ForexAnalyst() {
               <text x={chart.width - chart.right} y={chart.height - 10} textAnchor="end" className={styles.axisLabel}>
                 {visibleCandles.length ? formatTime(visibleCandles[visibleCandles.length - 1].epoch, true) : ""}
               </text>
-              {liveQuote && <g>
+              {liveQuote && safeViewOffset === 0 && <g>
                 <line x1={chart.left} y1={chart.yFor(liveQuote.price)} x2={chart.width - chart.right} y2={chart.yFor(liveQuote.price)} className={styles.lastPriceLine} />
                 <rect x={chart.width - chart.right + 3} y={chart.yFor(liveQuote.price) - 10} width={chart.right - 9} height="20" rx="4" className={styles.lastPriceTag} />
                 <text x={chart.width - chart.right + (chart.right - 9) / 2 + 3} y={chart.yFor(liveQuote.price) + 4} textAnchor="middle" className={styles.lastPriceText}>{formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize)}</text>
               </g>}
             </svg>
           </div>
+          </>
         ) : (
           <div className={styles.emptyChart}>
             <span className={styles.emptyIcon}>⌁</span>
