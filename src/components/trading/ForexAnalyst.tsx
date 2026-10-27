@@ -67,7 +67,7 @@ type AnalystInstrument = {
   marketDisplayName?: string;
   pipSize?: number;
 };
-type LiveQuote = { price: number; epoch: number; pipSize?: number };
+type LiveQuote = { price: number; epoch: number; pipSize?: number; bid?: number; ask?: number };
 type PendingHistory = { key: string; symbol: string; seconds: number };
 type HistoryLoad = { status: "loading" | "loaded" | "insufficient" | "error"; count: number; message?: string };
 type FeedMessage = {
@@ -88,6 +88,8 @@ type FeedMessage = {
     symbol?: string;
     underlying_symbol?: string;
     quote?: number | string;
+    bid?: number | string;
+    ask?: number | string;
     epoch?: number | string;
     pip_size?: number;
   };
@@ -456,6 +458,8 @@ export default function ForexAnalyst() {
           price,
           epoch,
           pipSize: message.tick.pip_size ?? message.pip_size,
+          bid: Number.isFinite(Number(message.tick.bid)) && message.tick.bid !== undefined ? Number(message.tick.bid) : undefined,
+          ask: Number.isFinite(Number(message.tick.ask)) && message.tick.ask !== undefined ? Number(message.tick.ask) : undefined,
         };
         latestTickRef.current = { symbol, quote };
         setQuotesBySymbol((current) => ({ ...current, [symbol]: quote }));
@@ -713,8 +717,8 @@ export default function ForexAnalyst() {
             <span className={styles.sectionEyebrow}>LIVE MARKET QUOTE</span>
             <h2>Bid / Ask / Spread</h2>
           </div>
-          <span className={liveQuote ? styles.quoteFresh : styles.quoteUnavailable}>
-            {liveQuote ? "Quote received" : "Waiting for quote"}
+          <span className={liveQuote && liveQuote.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid ? styles.quoteFresh : styles.quoteUnavailable}>
+            {liveQuote ? "Live tick received" : "Waiting for quote"}
           </span>
         </div>
         <div className={styles.marketQuoteGrid}>
@@ -725,22 +729,32 @@ export default function ForexAnalyst() {
           </div>
           <div className={styles.marketQuoteCell}>
             <span>Bid · Sell price</span>
-            <strong className={styles.quoteUnavailableValue}>Unavailable</strong>
-            <small>Not supplied by the current feed</small>
+            <strong className={liveQuote?.bid !== undefined ? styles.bidValue : styles.quoteUnavailableValue}>
+              {liveQuote?.bid !== undefined ? formatPrice(liveQuote.bid, selectedSymbol, activeInstrument?.pipSize) : "Unavailable"}
+            </strong>
+            <small>{liveQuote?.bid !== undefined ? "Provider-supplied Bid" : "Not present in this tick"}</small>
           </div>
           <div className={styles.marketQuoteCell}>
             <span>Ask · Buy price</span>
-            <strong className={styles.quoteUnavailableValue}>Unavailable</strong>
-            <small>Not supplied by the current feed</small>
+            <strong className={liveQuote?.ask !== undefined ? styles.askValue : styles.quoteUnavailableValue}>
+              {liveQuote?.ask !== undefined ? formatPrice(liveQuote.ask, selectedSymbol, activeInstrument?.pipSize) : "Unavailable"}
+            </strong>
+            <small>{liveQuote?.ask !== undefined ? "Provider-supplied Ask" : "Not present in this tick"}</small>
           </div>
           <div className={styles.marketQuoteCell}>
             <span>Spread</span>
-            <strong className={styles.quoteUnavailableValue}>—</strong>
-            <small>Cannot calculate without Bid and Ask</small>
+            <strong className={liveQuote?.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid ? styles.spreadValue : styles.quoteUnavailableValue}>
+              {liveQuote?.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid
+                ? formatPrice(liveQuote.ask - liveQuote.bid, selectedSymbol, activeInstrument?.pipSize)
+                : "Unavailable"}
+            </strong>
+            <small>{liveQuote?.bid !== undefined && liveQuote.ask !== undefined && liveQuote.ask >= liveQuote.bid
+              ? "Ask − Bid · price units"
+              : "Requires valid Bid and Ask"}</small>
           </div>
         </div>
         <p className={styles.quoteDisclosure}>
-          The live feed currently provides a single quote, not a verified Bid/Ask pair. TradeBridge will not estimate a spread or present Buy/Sell order controls as executable until a supported quote source and a separately verified forex execution flow are available.
+          Bid, Ask and spread are shown only when supplied by the provider in the same tick and the prices are valid. Spread is displayed in price units; it is not converted to pips because the feed's pip-size semantics have not yet been independently verified. Buy/Sell order execution is not provided by this panel.
         </p>
       </section>
 
