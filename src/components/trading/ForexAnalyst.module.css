@@ -290,3 +290,7 @@
   .marketQuoteCell { padding: 10px; }
   .marketQuoteHeader { align-items: flex-start; }
 }
+
+.marketQuoteCell .bidValue { color: #ff7b87; }
+.marketQuoteCell .askValue { color: #22c985; }
+.marketQuoteCell .spreadValue { color: var(--fx-ink); }
