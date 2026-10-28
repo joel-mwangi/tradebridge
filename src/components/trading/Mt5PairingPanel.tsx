@@ -201,7 +201,7 @@ export default function Mt5PairingPanel() {
         <ol>
           <li>Copy the one-time device credential above.</li>
           <li>Open <code>TradeBridgeMarketBridge.mq5</code> in MetaEditor and set <code>InpDeviceCredential</code> to that value.</li>
-          <li>Set the provider-to-broker mapping to match your broker's exact symbol, for example <code>frxEURUSD=EURUSD</code>.</li>
+          <li>Set the provider-to-broker mapping to match your broker&apos;s exact symbol, for example <code>frxEURUSD=EURUSD</code>.</li>
           <li>Compile the EA, allow WebRequest to <code>https://ai-tradingbridge.vercel.app</code>, and attach it to an MT5 chart.</li>
         </ol>
         <p>Revoking a device disables its future API access. This EA has no order-placement functions.</p>
