@@ -176,7 +176,7 @@ declare
   current_command public.mt5_commands%rowtype;
   final_command public.mt5_commands%rowtype;
 begin
-  if p_device_id is null or p_command_id is null or p_outcome not in ('acknowledged', 'rejected')
+  if p_device_id is null or p_command_id is null or p_outcome is null or p_outcome not in ('acknowledged', 'rejected')
      or (p_result_code is not null and char_length(p_result_code) > 80)
      or (p_result_message is not null and char_length(p_result_message) > 500) then
     raise exception 'invalid_acknowledgement' using errcode = '22023';
