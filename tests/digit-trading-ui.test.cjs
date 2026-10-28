@@ -80,7 +80,7 @@ test("market discovery and market labels are aligned with digit trading", () => 
 });
 
 test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
-  const chartStart = workspace.indexOf('{tradeView === "charts" && (');
+  const chartStart = workspace.indexOf('{tradeProduct === "options" && tradeView === "charts" && (');
   const chartEnd = workspace.indexOf('{page === "portfolio"', chartStart);
   assert.notEqual(chartStart, -1);
   assert.notEqual(chartEnd, -1);
@@ -88,6 +88,30 @@ test("chart mode keeps Chart left, Buy right, and Open Positions below", () => {
   assert.ok(chartView.indexOf("<PriceChart") < chartView.indexOf("<DemoTradeTicket"));
   assert.match(chartView, /<TradingActivity[\s\S]*?positionsOnly/);
   assert.doesNotMatch(chartView, /Automated bot execution|Open Bot Workspace/);
+});
+
+test("Real account consent is confirmed on the authenticated Options socket", () => {
+  assert.match(tradingHook, /isRealAccount && realTradingEnabled[\s\S]*real_trading:[\s\S]*ENABLE REAL TRADING/);
+  assert.match(tradingHook, /message\.type === "real_trading_status"/);
+  assert.match(tradingHook, /Real trading authorization unavailable/);
+  assert.match(workspace, /setLiveTradingEnabled\(true\)[\s\S]*setLiveConsentLoadedAccountId\(targetId\)/);
+});
+
+test("Multipliers product uses its own authenticated backend contract and account panel", () => {
+  const multipliersHook = read("src/components/trading/useMultipliersTrading.ts");
+  const multipliersTicket = read("src/components/trading/MultipliersTradeTicket.tsx");
+  assert.match(workspace, /tradeProduct === "multipliers"/);
+  assert.match(workspace, /<MultipliersTradeTicket/);
+  assert.match(workspace, /positions=\{multipliers\.positions\}/);
+  assert.match(multipliersHook, /\/deriv\/multipliers\/ws/);
+  assert.match(multipliersHook, /contract_type: input\.direction/);
+  assert.match(multipliersHook, /multiplier: input\.multiplier/);
+  assert.match(multipliersHook, /take_profit/);
+  assert.match(multipliersHook, /stop_loss/);
+  assert.match(multipliersHook, /cancellation/);
+  assert.match(multipliersTicket, /MULTUP/);
+  assert.match(multipliersTicket, /MULTDOWN/);
+  assert.match(multipliersTicket, /Confirm buy/);
 });
 
 test("digit frequency percentages are rendered from backend snapshots, not recalculated in the browser", () => {

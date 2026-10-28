@@ -830,6 +830,26 @@
   .workspace *, .workspace *::before, .workspace *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
+.tradeProductControl { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.tradeProductButton { min-height: 32px; padding: 0 11px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 700; }
+.tradeProductButtonActive { background: var(--teal); color: #0b1320; }
+.multiplierDirection { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.multiplierDirection button { min-height: 42px; border-radius: 8px; font-size: 12px; font-weight: 800; }
+.multiplierRiskField { min-width: 0; margin: 12px 0 0; padding: 0; border: 0; }
+.multiplierRiskField legend { margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 750; }
+.multiplierRiskModes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.multiplierRiskModes button { min-width: 0; min-height: 28px; padding: 0 5px; font-size: 9px; }
+.multipliersMarket { display: grid; gap: 3px; padding: 0 0 10px; border-bottom: 1px solid var(--line); }
+.multipliersMarket strong { color: var(--ink); font-size: 12px; }
+.multipliersMarket span, .multiplierSessionState { color: var(--muted); font-size: 10px; }
+.multiplierQuote { display: grid; gap: 7px; margin-top: 12px; padding: 12px; border: 1px solid var(--teal); border-radius: 8px; background: var(--teal-soft); }
+.multiplierQuote strong { color: var(--ink); font-size: 12px; }
+.multiplierQuote span, .multiplierQuote small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.multiplierQuoteActions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: center; }
+.multiplierQuoteActions button { min-height: 38px; }
+.multiplierSessionState { display: block; margin-top: 8px; overflow-wrap: anywhere; }
+.multiplierRiskField select { width: 100%; height: 36px; border: 0; outline: 0; background: transparent; color: var(--ink); }
+
 /* Compact order ticket: preserve controls while removing redundant vertical copy. */
 .ticketPanelCompact { padding: 14px; }
 .ticketPanelCompact .panelHeading { gap: 8px; margin-bottom: 8px; }

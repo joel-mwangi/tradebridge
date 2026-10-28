@@ -8,8 +8,10 @@ import MarketWatch from "./MarketWatch";
 import DigitAnalysis from "./DigitAnalysis";
 import DigitStrategyPanel from "./DigitStrategyPanel";
 import DemoTradeTicket from "./DemoTradeTicket";
+import MultipliersTradeTicket from "./MultipliersTradeTicket";
 import TradingActivity from "./TradingActivity";
 import { useTradingSession } from "./useDemoTrading";
+import { useMultipliersTrading } from "./useMultipliersTrading";
 import { useMarketData } from "./useMarketData";
 import PriceChart from "./PriceChart";
 import ForexAnalyst from "./ForexAnalyst";
@@ -135,6 +137,7 @@ export default function TradingWorkspace() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [marketPanelSearch, setMarketPanelSearch] = useState("");
   const [tradeView, setTradeView] = useState<"analyse" | "charts" | "strategy">("analyse");
+  const [tradeProduct, setTradeProduct] = useState<"options" | "multipliers">("options");
   const [digitWindowSize, setDigitWindowSize] = useState(1000);
   const [tradeStake, setTradeStake] = useState("1");
   const [tradeDuration, setTradeDuration] = useState("5");
@@ -206,7 +209,18 @@ export default function TradingWorkspace() {
     && liveTradingEnabled
     && liveConsentLoadedAccountId === activeAccount?.account_id;
   const trading = useTradingSession(connected, activeAccount, effectiveLiveTradingEnabled, maxRealStake, maxDailyLoss);
+  const multipliers = useMultipliersTrading(
+    page === "trade" && tradeProduct === "multipliers",
+    connected,
+    activeAccount,
+    effectiveLiveTradingEnabled,
+    maxRealStake,
+    maxDailyLoss,
+  );
   const sessionConnected = trading.sessionState === "Demo trading connected" || trading.sessionState === "Real trading connected";
+  const multipliersConnected = multipliers.sessionState === "Demo trading connected"
+    || multipliers.sessionState === "Real trading connected"
+    || multipliers.sessionState === "Real account connected in read-only mode";
   const accountSessionReady = connected && sessionConnected;
   const currency = activeAccountIsDemo || effectiveLiveTradingEnabled
     ? trading.balance.currency || activeAccount?.currency || "USD"
@@ -364,14 +378,10 @@ export default function TradingWorkspace() {
   async function handleConfirmRealSwitch() {
     if (!pendingRealAccount) return;
     const targetId = pendingRealAccount.account_id;
-    applyAccountChange(targetId);
-    setLiveTradingEnabled(true);
-    setLiveConsentLoadedAccountId(targetId);
-    setShowRealSwitchConfirm(false);
-    setPendingRealAccount(null);
-
+    setLiveConsentBusy(true);
+    setLiveConsentMessage("");
     try {
-      await fetch("/api/auth/deriv/live-consent", {
+      const response = await fetch("/api/auth/deriv/live-consent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -381,8 +391,23 @@ export default function TradingWorkspace() {
           max_daily_loss: maxDailyLoss || 25,
         }),
       });
+      const data = await response.json() as LiveConsentResponse;
+      if (!response.ok || data.enabled !== true) {
+        setLiveConsentMessage(data.error || "The server could not enable Real trading for this account.");
+        return;
+      }
+      applyAccountChange(targetId);
+      setLiveTradingEnabled(true);
+      setMaxRealStake(data.max_stake ?? maxRealStake ?? 10);
+      setMaxDailyLoss(data.max_daily_loss ?? maxDailyLoss ?? 25);
+      setLiveConsentLoadedAccountId(targetId);
+      setShowRealSwitchConfirm(false);
+      setPendingRealAccount(null);
+      setLiveConsentMessage("Real-account consent saved. Verifying server-side order controls…");
     } catch {
-      // Non-blocking
+      setLiveConsentMessage("Could not save Real-account consent. Your account selection has not changed.");
+    } finally {
+      setLiveConsentBusy(false);
     }
   }
 
@@ -609,8 +634,12 @@ export default function TradingWorkspace() {
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div className={styles.tradeProductControl} role="group" aria-label="Trading product">
+                      <button type="button" className={tradeProduct === "options" ? styles.tradeProductButtonActive : styles.tradeProductButton} onClick={() => setTradeProduct("options")} aria-pressed={tradeProduct === "options"}>Digit Options</button>
+                      <button type="button" className={tradeProduct === "multipliers" ? styles.tradeProductButtonActive : styles.tradeProductButton} onClick={() => setTradeProduct("multipliers")} aria-pressed={tradeProduct === "multipliers"}>Multipliers</button>
+                    </div>
                     {/* View toggle */}
-                    <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
+                    {tradeProduct === "options" && <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
                       <button
                         type="button"
                         onClick={() => setTradeView("analyse")}
@@ -646,7 +675,7 @@ export default function TradingWorkspace() {
                         }}
                         aria-pressed={tradeView === "strategy"}
                       >⌘ Strategy</button>
-                    </div>
+                    </div>}
                     <button
                       type="button"
                       className={styles.switchMarketButton}
@@ -738,7 +767,7 @@ export default function TradingWorkspace() {
                   </div>
                 </>}
 
-                {tradeView === "analyse" && (
+                {tradeProduct === "options" && tradeView === "analyse" && (
                   <>
                     <div className={styles.marketGrid}>
                       <div className={styles.marketColumn}>
@@ -803,11 +832,56 @@ export default function TradingWorkspace() {
                   </>
                 )}
 
-                {tradeView === "strategy" && (
+                {tradeProduct === "options" && tradeView === "strategy" && (
                   <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} stake={Number(tradeStake)} duration={Number(tradeDuration)} currency={activeAccount?.currency ?? "USD"} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} />
                 )}
 
-                {tradeView === "charts" && (
+                {tradeProduct === "multipliers" && (
+                  <>
+                    <div className={styles.marketGrid}>
+                      <div className={styles.marketColumn}>
+                        <PriceChart market={selectedMarket} snapshot={selectedMarket ? snapshots[selectedMarket.symbol] : undefined} candlesByKey={candlesByKey} onLoadCandles={requestCandles} />
+                      </div>
+                      <div className={styles.marketColumn}>
+                        <MultipliersTradeTicket
+                          connected={connected}
+                          account={activeAccount}
+                          realTradingEnabled={effectiveLiveTradingEnabled}
+                          realSessionConfirmed={multipliers.realSessionConfirmed}
+                          maxRealStake={maxRealStake}
+                          maxDailyLoss={maxDailyLoss}
+                          realizedProfit={multipliers.realizedProfit}
+                          orderResolutionRequired={multipliers.orderResolutionRequired}
+                          acknowledgeOrderResolution={multipliers.acknowledgeOrderResolution}
+                          market={selectedMarket}
+                          sessionState={multipliers.sessionState}
+                          status={multipliers.status}
+                          busy={multipliers.busy}
+                          quote={multipliers.quote}
+                          requestQuote={multipliers.requestQuote}
+                          confirmQuote={multipliers.confirmQuote}
+                          dismissQuote={multipliers.dismissQuote}
+                        />
+                      </div>
+                    </div>
+                    <TradingActivity
+                      positionsOnly
+                      positions={multipliers.positions}
+                      activity={multipliers.activity}
+                      currency={multipliers.balance.currency || activeAccount?.currency || "USD"}
+                      accountType={activeAccountIsReal ? "real" : activeAccountIsDemo ? "demo" : "other"}
+                      accountDataUnavailable={activeAccountIsReal && !multipliersConnected}
+                      busy={multipliers.busy}
+                      activityLoading={multipliers.activityLoading}
+                      activityHasMore={multipliers.activityHasMore}
+                      onSell={multipliers.sellPosition}
+                      onRefresh={multipliers.refreshAccount}
+                      onLoadMore={multipliers.loadMoreActivity}
+                    />
+                  </>
+                )}
+
+                {tradeProduct === "options" && tradeView === "charts" && (
                   <>
                     <div className={styles.marketGrid}>
                       <div className={styles.marketColumn}>
