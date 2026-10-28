@@ -140,6 +140,8 @@ export function useMultipliersTrading(
       return () => { cancelled = true; clearRequestTimer(); };
     }
 
+    const selectedAccount = account;
+
     if (isRealAccount && !realTradingEnabled) {
       setSessionState("Real account connected in read-only mode");
     } else {
@@ -153,7 +155,7 @@ export function useMultipliersTrading(
         const wsUrl = new URL(backendWs);
         wsUrl.pathname = wsUrl.pathname.replace(/\/deriv\/ws\/?$/, "") + "/deriv/multipliers/ws";
         wsUrl.search = "";
-        wsUrl.searchParams.set("account_id", account.account_id);
+        wsUrl.searchParams.set("account_id", selectedAccount.account_id);
         const backendOrigin = new URL(backendWs);
         backendOrigin.protocol = backendOrigin.protocol === "wss:" ? "https:" : "http:";
         backendOrigin.pathname = backendOrigin.pathname.replace(/\/deriv\/ws\/?$/, "") + "/deriv/ws-ticket";
@@ -232,7 +234,7 @@ export function useMultipliersTrading(
             return;
           }
           if (message.msg_type === "balance" && message.balance) {
-            setBalance({ balance: numeric(message.balance.balance), currency: message.balance.currency ?? account.currency ?? "" });
+            setBalance({ balance: numeric(message.balance.balance), currency: message.balance.currency ?? selectedAccount.currency ?? "" });
           } else if (message.msg_type === "portfolio" && message.portfolio) {
             const nextPositions = (message.portfolio.contracts ?? []).map(toPosition).filter((position): position is OpenPosition => Boolean(position));
             setPositions(nextPositions);
@@ -293,8 +295,10 @@ export function useMultipliersTrading(
             setStatus(`Multipliers contract ${contractId} accepted. Waiting for Deriv updates…`);
             send({ proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1, req_id: nextId() });
             refresh();
-          } else if (message.msg_type === "sell" && message.sell && sellRequestRef.current?.id === message.req_id) {
-            const expected = sellRequestRef.current.contractId;
+          } else if (message.msg_type === "sell" && message.sell) {
+            const sellRequest = sellRequestRef.current;
+            if (!sellRequest || sellRequest.id !== message.req_id) return;
+            const expected = sellRequest.contractId;
             sellRequestRef.current = null;
             clearRequestTimer();
             setBusy(false);

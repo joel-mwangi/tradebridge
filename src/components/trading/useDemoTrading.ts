@@ -50,6 +50,8 @@ type AutoTradePending = {
 
 type ApiMessage = {
   type?: string;
+  enabled?: boolean;
+  account_type?: string;
   state?: string;
   reason?: string;
   buy_count?: number;
