@@ -24,7 +24,7 @@ export type MultipliersQuote = {
   receivedAt: number;
 };
 
-type MultipliersInput = Omit<MultipliersQuote, "id" | "askPrice" | "receivedAt">;
+export type MultipliersInput = Omit<MultipliersQuote, "id" | "askPrice" | "receivedAt">;
 
 type ApiMessage = {
   type?: string;
