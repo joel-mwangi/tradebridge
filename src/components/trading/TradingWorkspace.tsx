@@ -15,6 +15,7 @@ import { useMultipliersTrading } from "./useMultipliersTrading";
 import { useMarketData } from "./useMarketData";
 import PriceChart from "./PriceChart";
 import ForexAnalyst from "./ForexAnalyst";
+import Mt5PairingPanel from "./Mt5PairingPanel";
 import LiveTradingControls from "./LiveTradingControls";
 import type { DerivAccount, DigitContractMode, DigitPrediction } from "./types";
 import { MostTradedMarkets } from "./MostTradedMarkets";
@@ -37,7 +38,7 @@ type LiveConsentResponse = {
   error?: string;
 };
 
-type WorkspacePage = "dashboard" | "markets" | "forex-analyst" | "trade" | "portfolio" | "settings";
+type WorkspacePage = "dashboard" | "markets" | "forex-analyst" | "trade" | "portfolio" | "settings" | "mt5";
 
 const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "dashboard", label: "Home", icon: "▦" },
@@ -46,6 +47,7 @@ const PRIMARY_NAV: Array<{ id: WorkspacePage; label: string; icon: string }> = [
   { id: "trade", label: "Trade", icon: "↗" },
   { id: "portfolio", label: "Portfolio & History", icon: "◷" },
   { id: "settings", label: "Settings", icon: "⚙" },
+  { id: "mt5", label: "MT5 Bridge", icon: "⇄" },
 ];
 
 const PAGE_TITLES: Record<WorkspacePage, string> = {
@@ -55,6 +57,7 @@ const PAGE_TITLES: Record<WorkspacePage, string> = {
   trade: "Trade",
   portfolio: "Portfolio & History",
   settings: "Settings",
+  mt5: "MT5 Market Bridge",
 };
 
 function authErrorMessage(error: string | null) {
@@ -969,7 +972,8 @@ export default function TradingWorkspace() {
                 />
               </section>
             )}
-{page === "settings" && (
+{page === "mt5" && <Mt5PairingPanel />}
+            {page === "settings" && (
               <section className={styles.workspaceSection} aria-label="Settings">
                 <div className={styles.intro}>
                   <div className={styles.introMain}>
