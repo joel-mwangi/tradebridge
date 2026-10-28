@@ -25,7 +25,7 @@ BEGIN
 
   -- Scenario 1: a valid acknowledgement succeeds and the same acknowledgement is idempotent.
   INSERT INTO public.mt5_devices (user_id, device_name, credential_hash, status)
-  VALUES (v_user_id, 'lease-test-valid-' || gen_random_uuid()::text, encode(gen_random_bytes(32), 'hex'), 'paired')
+  VALUES (v_user_id, 'lease-test-valid-' || gen_random_uuid()::text, repeat('a', 64), 'paired')
   RETURNING id INTO v_device_valid;
 
   INSERT INTO public.mt5_commands (device_id, user_id, provider_symbol, idempotency_key, expires_at)
@@ -53,7 +53,7 @@ BEGIN
 
   -- Scenario 2: an expired lease cannot be acknowledged.
   INSERT INTO public.mt5_devices (user_id, device_name, credential_hash, status)
-  VALUES (v_user_id, 'lease-test-expired-' || gen_random_uuid()::text, encode(gen_random_bytes(32), 'hex'), 'paired')
+  VALUES (v_user_id, 'lease-test-expired-' || gen_random_uuid()::text, repeat('a', 64), 'paired')
   RETURNING id INTO v_device_expired;
 
   INSERT INTO public.mt5_commands (device_id, user_id, provider_symbol, idempotency_key, expires_at)
@@ -79,7 +79,7 @@ BEGIN
 
   -- Scenario 3: re-leasing rotates the token; old token fails, new token succeeds.
   INSERT INTO public.mt5_devices (user_id, device_name, credential_hash, status)
-  VALUES (v_user_id, 'lease-test-released-' || gen_random_uuid()::text, encode(gen_random_bytes(32), 'hex'), 'paired')
+  VALUES (v_user_id, 'lease-test-released-' || gen_random_uuid()::text, repeat('a', 64), 'paired')
   RETURNING id INTO v_device_released;
 
   INSERT INTO public.mt5_commands (device_id, user_id, provider_symbol, idempotency_key, expires_at)
