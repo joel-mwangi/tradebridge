@@ -148,7 +148,8 @@ bool SelectBrokerMarket(const string broker_symbol, string &result_code, string 
       return false;
    }
 
-   if(!SymbolExist(broker_symbol, NULL))
+   bool is_custom_symbol = false;
+   if(!SymbolExist(broker_symbol, is_custom_symbol))
    {
       result_code = "BROKER_SYMBOL_NOT_FOUND";
       result_message = "Mapped broker symbol does not exist in this terminal: " + broker_symbol;
