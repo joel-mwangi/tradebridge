@@ -16,10 +16,19 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
 
   const { path } = await context.params;
   const routePath = path.join("/");
+  const UUID = "[0-9a-f-]{36}";
   const allowed =
-    (method === "GET" && routePath === "devices") ||
-    (method === "POST" && (routePath === "pairing-codes" || routePath === "pair")) ||
-    (method === "DELETE" && /^devices\/[0-9a-f-]{36}$/i.test(routePath));
+    // ── Pairing / device management ─────────────────────────────────────────
+    (method === "GET"    && routePath === "devices") ||
+    (method === "POST"   && (routePath === "pairing-codes" || routePath === "pair")) ||
+    (method === "DELETE" && new RegExp(`^devices/${UUID}$`, "i").test(routePath)) ||
+    // ── Trade order lifecycle (Phase 1 market orders) ────────────────────────
+    // Create a trade order for a device
+    (method === "POST"   && new RegExp(`^devices/${UUID}/trade-orders$`, "i").test(routePath)) ||
+    // Poll a specific order's status
+    (method === "GET"    && new RegExp(`^devices/${UUID}/trade-orders/${UUID}$`, "i").test(routePath)) ||
+    // Cancel a queued order
+    (method === "POST"   && new RegExp(`^devices/${UUID}/trade-orders/${UUID}/cancel$`, "i").test(routePath));
   if (!allowed) return NextResponse.json({ error: "not_found" }, { status: 404, headers });
 
   let body: string | undefined;

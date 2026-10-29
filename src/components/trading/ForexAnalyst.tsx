@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ForexAnalyst.module.css";
 import ForexOrderPanel from "./ForexOrderPanel";
+import { useMt5Device } from "./useMt5Device";
 import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs";
 import { panChartViewport, zoomChartViewport } from "../../lib/forex-chart-viewport.mjs";
 import {
@@ -226,6 +227,7 @@ function nearestZone(zones: PriceZone[], symbol: string, pipSize?: number) {
 }
 
 export default function ForexAnalyst() {
+  const { device: mt5Device } = useMt5Device();
   const [instruments, setInstruments] = useState<AnalystInstrument[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("all");
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
@@ -1025,6 +1027,8 @@ export default function ForexAnalyst() {
           ask={liveQuote?.ask}
           quoteEpoch={liveQuote?.epoch}
           pipSize={activeInstrument?.pipSize}
+          deviceId={mt5Device?.id}
+          accountType="demo"
         />
       </div>
     </section>

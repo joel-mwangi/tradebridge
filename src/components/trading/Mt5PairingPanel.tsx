@@ -121,7 +121,7 @@ export default function Mt5PairingPanel() {
         <div>
           <p className={styles.eyebrow}>BROKER CONNECTIVITY</p>
           <h1 id="mt5-title">MT5 Market Bridge</h1>
-          <p>Pair your MetaTrader 5 terminal with TradeBridge to select markets remotely. This bridge does not place or manage trades.</p>
+          <p>Pair your MetaTrader 5 terminal with TradeBridge to select markets and execute market orders remotely.</p>
         </div>
         <span className={styles.status}><span /> Market selection only</span>
       </div>
@@ -201,10 +201,12 @@ export default function Mt5PairingPanel() {
         <ol>
           <li>Copy the one-time device credential above.</li>
           <li>Open <code>TradeBridgeMarketBridge.mq5</code> in MetaEditor and set <code>InpDeviceCredential</code> to that value.</li>
-          <li>Set the provider-to-broker mapping to match your broker&apos;s exact symbol, for example <code>frxEURUSD=EURUSD</code>.</li>
+          <li>Set <code>InpAccountType</code> to <code>demo</code> or <code>real</code> to match the account the EA is connected to. The backend will block orders that don't match.</li>
+          <li>Set the provider-to-broker symbol mapping, for example <code>frxEURUSD=EURUSD</code>.</li>
           <li>Compile the EA, allow WebRequest to <code>https://ai-tradingbridge.vercel.app</code>, and attach it to an MT5 chart.</li>
+          <li>Once paired, return to the AI Analyst tab to place market orders via the order ticket.</li>
         </ol>
-        <p>Revoking a device disables its future API access. This EA has no order-placement functions.</p>
+        <p>Revoking a device disables its future API access. Phase 2 (pending limit/stop orders) is not yet available.</p>
       </article>
     </section>
   );
