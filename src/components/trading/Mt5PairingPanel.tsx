@@ -123,7 +123,7 @@ export default function Mt5PairingPanel() {
           <h1 id="mt5-title">MT5 Market Bridge</h1>
           <p>Pair your MetaTrader 5 terminal with TradeBridge to select markets and execute market orders remotely.</p>
         </div>
-        <span className={styles.status}><span /> Market selection only</span>
+        <span className={styles.status}><span /> Phase 1: Market orders</span>
       </div>
 
       {error && <div className={styles.alertError} role="alert">{error}</div>}
