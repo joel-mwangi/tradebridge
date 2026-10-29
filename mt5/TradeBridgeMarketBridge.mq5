@@ -11,8 +11,8 @@
 
 //── EA inputs ──────────────────────────────────────────────────────────────
 input string InpBackendBaseUrl     = "https://ai-tradingbridge.vercel.app";
-input string InpDeviceCredential   = "";      // Paste the one-time credential from /mt5/pair
-input string InpSymbolMappings     = "";      // e.g. "frxEURUSD=EURUSD;frxGBPUSD=GBPUSD"
+input string InpDeviceCredential   = "NQpjx8S-E5GTXJc27TCbjLIpP1zrM6IzwRuA6eG39Lu8GBBuAU1esemQL2C1lHbn";      // Paste the one-time credential from /mt5/pair
+input string InpSymbolMappings     = "frxEURUSD=EURUSD";      // e.g. "frxEURUSD=EURUSD;frxGBPUSD=GBPUSD"
 input int    InpPollSeconds        = 3;
 input int    InpHttpTimeoutMs      = 8000;
 // Safety: set this to "real" only when you are ready to trade a live account.
