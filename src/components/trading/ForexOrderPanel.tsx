@@ -276,6 +276,15 @@ export default function ForexOrderPanel({
   // ── Submit trade order ────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !deviceId) return;
+
+    // Extra confirmation for real-account orders
+    if (accountType === "real") {
+      const confirmed = window.confirm(
+        `⚠ REAL ACCOUNT — This will place a real-money ${orderType.replace("_", " ")} order for ${volume} lot(s) of ${brokerSymbol}. Losses are real. Proceed?`
+      );
+      if (!confirmed) return;
+    }
+
     setSubmitting(true);
     setSubmitError(null);
 
@@ -349,6 +358,16 @@ export default function ForexOrderPanel({
 
   const handlePosSubmit = useCallback(async () => {
     if (!canSubmitPos || !deviceId) return;
+
+    // Extra confirmation for real-account position commands
+    if (accountType === "real") {
+      const action = posCommandType === "close" ? `close position #${posTicket}` : `modify position #${posTicket}`;
+      const confirmed = window.confirm(
+        `⚠ REAL ACCOUNT — This will ${action} on a real-money account. Proceed?`
+      );
+      if (!confirmed) return;
+    }
+
     setPosSubmitting(true); setPosError(null);
     const idempotencyKey = `pos-${posCommandType}-${posTicket}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const body: Record<string, unknown> = {
