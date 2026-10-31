@@ -22,13 +22,19 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
     (method === "GET"    && routePath === "devices") ||
     (method === "POST"   && (routePath === "pairing-codes" || routePath === "pair")) ||
     (method === "DELETE" && new RegExp(`^devices/${UUID}$`, "i").test(routePath)) ||
-    // ── Trade order lifecycle (Phase 1 market orders) ────────────────────────
-    // Create a trade order for a device
+    // ── Trade order lifecycle (Phase 1 + Phase 2) ────────────────────────────
+    // Create a market or pending order for a device
     (method === "POST"   && new RegExp(`^devices/${UUID}/trade-orders$`, "i").test(routePath)) ||
+    // Order history list for a device
+    (method === "GET"    && new RegExp(`^devices/${UUID}/trade-orders$`, "i").test(routePath)) ||
     // Poll a specific order's status
     (method === "GET"    && new RegExp(`^devices/${UUID}/trade-orders/${UUID}$`, "i").test(routePath)) ||
     // Cancel a queued order
-    (method === "POST"   && new RegExp(`^devices/${UUID}/trade-orders/${UUID}/cancel$`, "i").test(routePath));
+    (method === "POST"   && new RegExp(`^devices/${UUID}/trade-orders/${UUID}/cancel$`, "i").test(routePath)) ||
+    // ── Position commands (Phase 2: close / modify) ───────────────────────
+    (method === "POST"   && new RegExp(`^devices/${UUID}/position-commands$`, "i").test(routePath)) ||
+    (method === "GET"    && new RegExp(`^devices/${UUID}/position-commands/${UUID}$`, "i").test(routePath)) ||
+    (method === "POST"   && new RegExp(`^devices/${UUID}/position-commands/${UUID}/cancel$`, "i").test(routePath));
   if (!allowed) return NextResponse.json({ error: "not_found" }, { status: 404, headers });
 
   let body: string | undefined;

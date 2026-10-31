@@ -621,7 +621,7 @@ export default function TradingWorkspace() {
 
             {page === "forex-analyst" && (
               <section className={styles.workspaceSection} aria-label="Forex AI chart analyst">
-                <ForexAnalyst />
+                <ForexAnalyst accountType={activeAccountIsReal ? "real" : "demo"} />
               </section>
             )}
 

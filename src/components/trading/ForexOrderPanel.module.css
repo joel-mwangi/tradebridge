@@ -64,3 +64,30 @@
   .header { flex-wrap: wrap; }
   .quoteGrid strong { font-size: 15px; }
 }
+
+/* ── Phase 2 additions ──────────────────────────────────────────────────── */
+.orderTypeBar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border: 1px solid var(--fx-line); border-radius: 10px; background: var(--fx-surface); }
+.orderTypeBtn { min-height: 32px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--fx-muted); font-size: 10px; font-weight: 750; }
+.orderTypeBtnActive { min-height: 32px; border: 1px solid var(--fx-border); border-radius: 7px; background: var(--fx-panel); color: var(--fx-ink); font-size: 10px; font-weight: 850; }
+.pendingRow { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 9px; border: 1px solid var(--fx-border); border-radius: 8px; background: var(--fx-surface); }
+.pendingRowMeta { display: grid; gap: 3px; min-width: 0; }
+.pendingRowMeta strong { font-size: 10px; overflow-wrap: anywhere; }
+.pendingRowMeta span { color: var(--fx-muted); font-size: 9px; }
+.cancelPendingBtn { min-height: 28px; padding: 0 10px; border: 1px solid rgba(255,123,135,.35); border-radius: 6px; background: rgba(255,123,135,.10); color: #ff7b87; font-size: 9px; font-weight: 750; white-space: nowrap; }
+.historySection { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--fx-line); }
+.historyToggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: none; border: none; width: 100%; padding: 0; cursor: pointer; color: var(--fx-ink); }
+.historyToggle strong { font-size: 11px; }
+.historyToggle span { color: var(--fx-muted); font-size: 9px; }
+.historyRow { display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 8px; border-radius: 7px; border: 1px solid var(--fx-line); }
+.historyRowMeta { display: grid; gap: 2px; }
+.historyRowMeta strong { font-size: 10px; }
+.historyRowMeta span { color: var(--fx-muted); font-size: 9px; }
+.historyRowStatus { font-size: 9px; font-weight: 750; white-space: nowrap; align-self: start; }
+.posSection { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--fx-line); }
+.posHeading { font-size: 11px; font-weight: 850; }
+.posForm { display: grid; gap: 8px; }
+.posTypeBar { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid var(--fx-line); border-radius: 10px; background: var(--fx-surface); }
+.posTypeBtn { min-height: 30px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--fx-muted); font-size: 10px; font-weight: 750; }
+.posTypeBtnActive { min-height: 30px; border: 1px solid var(--fx-border); border-radius: 7px; background: var(--fx-panel); color: var(--fx-ink); font-size: 10px; font-weight: 850; }
+.posSubmitBtn { min-height: 38px; border: 0; border-radius: 9px; background: #f4bb55; color: #1a1000; font-size: 11px; font-weight: 900; }
+.posSubmitBtn:disabled { opacity: .45; cursor: not-allowed; }

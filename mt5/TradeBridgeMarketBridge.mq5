@@ -1,17 +1,17 @@
 //+------------------------------------------------------------------+
-//| TradeBridgeMarketBridge.mq5  — Phase 1 Market Orders            |
-//| Handles: market selection commands + buy/sell market orders.     |
-//| Phase 2 (pending orders) is NOT implemented.                     |
+//| TradeBridgeMarketBridge.mq5  — Phase 1 + Phase 2                |
+//| Phase 1: market selection commands + buy/sell market orders.     |
+//| Phase 2: pending orders (limit/stop), position close/modify.     |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "2.00"
-#property description "TradeBridge MT5 bridge — market selection and Phase 1 market-order execution."
+#property version   "3.00"
+#property description "TradeBridge MT5 bridge — market selection, Phase 1 market orders, Phase 2 pending orders and position commands."
 
 #include <Trade\Trade.mqh>
 
 //── EA inputs ──────────────────────────────────────────────────────────────
 input string InpBackendBaseUrl     = "https://ai-tradingbridge.vercel.app";
-input string InpDeviceCredential   = "NQpjx8S-E5GTXJc27TCbjLIpP1zrM6IzwRuA6eG39Lu8GBBuAU1esemQL2C1lHbn";      // Paste the one-time credential from /mt5/pair
+input string InpDeviceCredential   = "WLSuWYoG3Y_9Kwfh4D-UBvIqPHfMQwHsZs1ijL5sUgDMnUONnZG3RaBIF-WZ92OF";      // Paste the one-time credential from /mt5/pair
 input string InpSymbolMappings     = "frxEURUSD=EURUSD";      // e.g. "frxEURUSD=EURUSD;frxGBPUSD=GBPUSD"
 input int    InpPollSeconds        = 3;
 input int    InpHttpTimeoutMs      = 8000;
@@ -21,9 +21,46 @@ input string InpAccountType        = "demo";  // "demo" or "real"
 
 //── Globals ────────────────────────────────────────────────────────────────
 string   g_base_url;
-bool     g_poll_command_in_progress  = false;
-bool     g_poll_order_in_progress    = false;
+bool     g_poll_command_in_progress       = false;
+bool     g_poll_order_in_progress         = false;
+bool     g_poll_position_in_progress      = false;
 CTrade   g_trade;
+
+//── Phase 2: placed pending orders tracking ────────────────────────────────
+struct PlacedOrder {
+   string order_id;
+   string lease_token;
+   long   mt5_ticket;
+   string broker_symbol;
+};
+PlacedOrder g_placed_orders[];
+
+void AddPlacedOrder(const string order_id, const string lease_token,
+                    const long ticket, const string broker_symbol)
+{
+   int n = ArraySize(g_placed_orders);
+   ArrayResize(g_placed_orders, n + 1);
+   g_placed_orders[n].order_id      = order_id;
+   g_placed_orders[n].lease_token   = lease_token;
+   g_placed_orders[n].mt5_ticket    = ticket;
+   g_placed_orders[n].broker_symbol = broker_symbol;
+}
+
+void RemovePlacedOrder(const long ticket)
+{
+   int count = ArraySize(g_placed_orders);
+   for(int i = 0; i < count; i++)
+   {
+      if(g_placed_orders[i].mt5_ticket == ticket)
+      {
+         // Shift remaining entries down
+         for(int j = i; j < count - 1; j++)
+            g_placed_orders[j] = g_placed_orders[j + 1];
+         ArrayResize(g_placed_orders, count - 1);
+         return;
+      }
+   }
+}
 
 //──────────────────────────────────────────────────────────────────────────
 // Utility: bytes ↔ string
@@ -297,6 +334,19 @@ void AckAccepted(const string order_id, const string lease_token,
       Print("Could not ack accepted for order ", order_id);
 }
 
+// Ack: submitted → placed (Phase 2: pending order placed in broker book)
+void AckPlaced(const string order_id, const string lease_token,
+               const long ticket, const int retcode, const string retcode_desc)
+{
+   string body = "{\"lease_token\":\"" + JsonEscape(lease_token)
+               + "\",\"mt5_order_ticket\":" + IntegerToString(ticket)
+               + ",\"mt5_retcode\":" + IntegerToString(retcode)
+               + ",\"mt5_retcode_description\":\"" + JsonEscape(retcode_desc) + "\"}";
+   string resp; int status;
+   if(!HttpRequest("POST", "/mt5/ea/trade-orders/" + order_id + "/ack/placed", body, resp, status))
+      Print("Could not ack placed for order ", order_id);
+}
+
 // Ack: leased|submitted → rejected
 void AckRejected(const string order_id, const string lease_token,
                  const long ticket, const int retcode, const string retcode_desc,
@@ -311,6 +361,18 @@ void AckRejected(const string order_id, const string lease_token,
    string resp; int status;
    if(!HttpRequest("POST", "/mt5/ea/trade-orders/" + order_id + "/ack/rejected", body, resp, status))
       Print("Could not ack rejected for order ", order_id);
+}
+
+// Ack: placed → cancelled-pending (Phase 2: pending order cancelled before fill)
+void AckCancelledPending(const string order_id, const string lease_token,
+                         const string reject_reason)
+{
+   string body = "{\"lease_token\":\"" + JsonEscape(lease_token)
+               + (reject_reason != "" ? (",\"reject_reason\":\"" + JsonEscape(reject_reason) + "\"") : "")
+               + "}";
+   string resp; int st;
+   if(!HttpRequest("POST", "/mt5/ea/trade-orders/" + order_id + "/ack/cancelled-pending", body, resp, st))
+      Print("Could not ack cancelled-pending for order ", order_id);
 }
 
 // Ack: accepted → filled
@@ -347,6 +409,45 @@ void AckReconciled(const string order_id, const string lease_token,
    string resp; int status;
    if(!HttpRequest("POST", "/mt5/ea/trade-orders/" + order_id + "/ack/reconciled", body, resp, status))
       Print("Could not ack reconciled for order ", order_id);
+}
+
+//──────────────────────────────────────────────────────────────────────────
+// POSITION COMMAND ack helpers (Phase 2)
+//──────────────────────────────────────────────────────────────────────────
+
+void AckPositionSubmitted(const string cmd_id, const string lease_token,
+                          const int retcode, const string retcode_desc)
+{
+   string body = "{\"lease_token\":\"" + JsonEscape(lease_token)
+               + "\",\"mt5_retcode\":" + IntegerToString(retcode)
+               + ",\"mt5_retcode_description\":\"" + JsonEscape(retcode_desc) + "\"}";
+   string resp; int status;
+   if(!HttpRequest("POST", "/mt5/ea/position-commands/" + cmd_id + "/ack/submitted", body, resp, status))
+      Print("Could not ack position-submitted for cmd ", cmd_id);
+}
+
+void AckPositionDone(const string cmd_id, const string lease_token,
+                     const int retcode, const string retcode_desc)
+{
+   string body = "{\"lease_token\":\"" + JsonEscape(lease_token)
+               + "\",\"mt5_retcode\":" + IntegerToString(retcode)
+               + ",\"mt5_retcode_description\":\"" + JsonEscape(retcode_desc) + "\"}";
+   string resp; int status;
+   if(!HttpRequest("POST", "/mt5/ea/position-commands/" + cmd_id + "/ack/done", body, resp, status))
+      Print("Could not ack position-done for cmd ", cmd_id);
+}
+
+void AckPositionRejected(const string cmd_id, const string lease_token,
+                         const int retcode, const string retcode_desc,
+                         const string reject_reason)
+{
+   string body = "{\"lease_token\":\"" + JsonEscape(lease_token)
+               + "\",\"mt5_retcode\":" + IntegerToString(retcode)
+               + ",\"mt5_retcode_description\":\"" + JsonEscape(retcode_desc)
+               + "\",\"reject_reason\":\"" + JsonEscape(reject_reason) + "\"}";
+   string resp; int status;
+   if(!HttpRequest("POST", "/mt5/ea/position-commands/" + cmd_id + "/ack/rejected", body, resp, status))
+      Print("Could not ack position-rejected for cmd ", cmd_id);
 }
 
 //──────────────────────────────────────────────────────────────────────────
@@ -408,7 +509,7 @@ void ReconcileSubmittedOrder(const string order_id, const string lease_token,
 }
 
 //──────────────────────────────────────────────────────────────────────────
-// Execute a trade order: the core Phase 1 logic
+// Execute a trade order: the core Phase 1 logic (market orders)
 //──────────────────────────────────────────────────────────────────────────
 void ExecuteTradeOrder(const string order_id,
                        const string broker_symbol,
@@ -559,6 +660,138 @@ void ExecuteTradeOrder(const string order_id,
 }
 
 //──────────────────────────────────────────────────────────────────────────
+// Execute a pending (limit/stop) order — Phase 2
+//──────────────────────────────────────────────────────────────────────────
+void ExecutePendingOrder(const string order_id,
+                         const string broker_symbol,
+                         const string order_side,
+                         const string order_type_str,
+                         const double volume,
+                         const double entry_price,
+                         const double stop_loss,
+                         const double take_profit,
+                         const int    deviation_points,
+                         const int    magic_number,
+                         const string account_type_str,
+                         const string lease_token)
+{
+   // ── Safety: account type guard ────────────────────────────────────────
+   long account_mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+   bool is_demo_account = (account_mode == 0) || (account_mode == 1);
+   bool order_expects_demo = (account_type_str == "demo");
+
+   if(order_expects_demo != is_demo_account)
+   {
+      string reason = "Account type mismatch: order expects " + account_type_str
+                    + " but connected account mode=" + IntegerToString((int)account_mode);
+      Print("TradeBridge SAFETY BLOCK — ", reason);
+      AckRejected(order_id, lease_token, 0, 0, "ACCOUNT_TYPE_MISMATCH", reason);
+      return;
+   }
+
+   // ── Validate symbol ───────────────────────────────────────────────────
+   bool is_custom = false;
+   if(!SymbolExist(broker_symbol, is_custom))
+   {
+      AckRejected(order_id, lease_token, 0, 0, "SYMBOL_NOT_FOUND",
+                  "Symbol not found in terminal: " + broker_symbol);
+      return;
+   }
+   if(!SymbolSelect(broker_symbol, true))
+   {
+      AckRejected(order_id, lease_token, 0, 0, "SYMBOL_SELECT_FAILED",
+                  "SymbolSelect failed for " + broker_symbol
+                  + "; error=" + IntegerToString(GetLastError()));
+      return;
+   }
+
+   // ── Validate entry price ──────────────────────────────────────────────
+   if(entry_price <= 0)
+   {
+      AckRejected(order_id, lease_token, 0, 0, "INVALID_ENTRY_PRICE",
+                  "entry_price must be > 0 for pending orders, got: "
+                  + DoubleToString(entry_price, 8));
+      return;
+   }
+
+   // ── Validate volume ───────────────────────────────────────────────────
+   double min_lot  = SymbolInfoDouble(broker_symbol, SYMBOL_VOLUME_MIN);
+   double max_lot  = SymbolInfoDouble(broker_symbol, SYMBOL_VOLUME_MAX);
+   double lot_step = SymbolInfoDouble(broker_symbol, SYMBOL_VOLUME_STEP);
+   if(volume < min_lot || volume > max_lot)
+   {
+      AckRejected(order_id, lease_token, 0, 0, "INVALID_VOLUME",
+                  "Volume " + DoubleToString(volume, 4)
+                  + " outside broker range [" + DoubleToString(min_lot, 4)
+                  + ", " + DoubleToString(max_lot, 4) + "]");
+      return;
+   }
+   double snapped_volume = MathRound(volume / lot_step) * lot_step;
+
+   // ── Map order_type_str to ENUM_ORDER_TYPE ─────────────────────────────
+   ENUM_ORDER_TYPE order_type_enum;
+   if(order_type_str == "buy_limit")
+      order_type_enum = ORDER_TYPE_BUY_LIMIT;
+   else if(order_type_str == "sell_limit")
+      order_type_enum = ORDER_TYPE_SELL_LIMIT;
+   else if(order_type_str == "buy_stop")
+      order_type_enum = ORDER_TYPE_BUY_STOP;
+   else if(order_type_str == "sell_stop")
+      order_type_enum = ORDER_TYPE_SELL_STOP;
+   else
+   {
+      AckRejected(order_id, lease_token, 0, 0, "INVALID_ORDER_TYPE",
+                  "Unknown order_type: " + order_type_str
+                  + ". Expected: buy_limit, sell_limit, buy_stop, sell_stop");
+      return;
+   }
+
+   // ── Configure CTrade ─────────────────────────────────────────────────
+   g_trade.SetExpertMagicNumber(magic_number);
+   if(deviation_points >= 0)
+      g_trade.SetDeviationInPoints((ulong)deviation_points);
+   else
+      g_trade.SetDeviationInPoints(10);
+   g_trade.SetTypeFilling(ORDER_FILLING_FOK);
+
+   // ── Place pending order ───────────────────────────────────────────────
+   bool sent = g_trade.OrderOpen(broker_symbol, order_type_enum, snapped_volume,
+                                 0,            // stoplimit price (0 = unused)
+                                 entry_price,
+                                 stop_loss   > 0 ? stop_loss   : 0,
+                                 take_profit > 0 ? take_profit : 0,
+                                 ORDER_TIME_GTC,
+                                 0,
+                                 "TradeBridge " + order_id);
+
+   int    retcode      = (int)g_trade.ResultRetcode();
+   string retcode_desc = g_trade.ResultRetcodeDescription();
+   ulong  order_ticket = g_trade.ResultOrder();
+
+   Print("TradeBridge PendingOrder result: sent=", sent,
+         " type=", order_type_str,
+         " retcode=", retcode, " (", retcode_desc, ")",
+         " order=", order_ticket);
+
+   // ── Always ack submitted ──────────────────────────────────────────────
+   AckSubmitted(order_id, lease_token, (long)order_ticket, retcode, retcode_desc);
+
+   // ── Check success ─────────────────────────────────────────────────────
+   // TRADE_RETCODE_PLACED = 10008 — pending order accepted by broker
+   // TRADE_RETCODE_DONE  = 10009 — accepted (some brokers return this)
+   if(!sent || (retcode != 10008 && retcode != 10009))
+   {
+      AckRejected(order_id, lease_token, (long)order_ticket, retcode, retcode_desc,
+                  "OrderOpen failed: " + retcode_desc);
+      return;
+   }
+
+   // ── Pending order placed — track for async fill detection ─────────────
+   AckPlaced(order_id, lease_token, (long)order_ticket, retcode, retcode_desc);
+   AddPlacedOrder(order_id, lease_token, (long)order_ticket, broker_symbol);
+}
+
+//──────────────────────────────────────────────────────────────────────────
 // Poll the backend for the next pending trade order
 //──────────────────────────────────────────────────────────────────────────
 void PollForTradeOrder()
@@ -577,12 +810,14 @@ void PollForTradeOrder()
    string order_side     = JsonStringField(resp, "order_side");
    string lease_token    = JsonStringField(resp, "lease_token");
    string account_type   = JsonStringField(resp, "account_type");
+   string order_type     = JsonStringField(resp, "order_type");
 
    double volume          = JsonNumberField(resp, "volume");
    double stop_loss       = JsonNumberField(resp, "stop_loss");
    double take_profit     = JsonNumberField(resp, "take_profit");
    double deviation_d     = JsonNumberField(resp, "deviation_points");
    double magic_d         = JsonNumberField(resp, "magic_number");
+   double entry_price     = JsonNumberField(resp, "entry_price");
 
    if(broker_symbol == "" || order_side == "" || lease_token == "" || volume <= 0)
    {
@@ -594,18 +829,172 @@ void PollForTradeOrder()
    // null JSON fields come back as -1 from JsonNumberField; map to 0
    if(stop_loss   < 0) stop_loss   = 0;
    if(take_profit < 0) take_profit = 0;
+   if(entry_price < 0) entry_price = 0;
    int deviation_points = (deviation_d >= 0) ? (int)deviation_d : -1;
    int magic_number     = (magic_d    >= 0) ? (int)magic_d    : 0;
 
    Print("TradeBridge: executing trade order id=", order_id,
-         " symbol=", broker_symbol, " side=", order_side,
-         " volume=", volume, " sl=", stop_loss, " tp=", take_profit);
+         " symbol=", broker_symbol, " side=", order_side, " type=", order_type,
+         " volume=", volume, " sl=", stop_loss, " tp=", take_profit,
+         " entry=", entry_price);
 
-   ExecuteTradeOrder(order_id, broker_symbol, order_side, volume,
-                     stop_loss, take_profit, deviation_points, magic_number,
-                     account_type, lease_token);
+   // Route to market or pending execution
+   if(order_type == "" || order_type == "market")
+      ExecuteTradeOrder(order_id, broker_symbol, order_side, volume,
+                        stop_loss, take_profit, deviation_points, magic_number,
+                        account_type, lease_token);
+   else
+      ExecutePendingOrder(order_id, broker_symbol, order_side, order_type, volume,
+                          entry_price, stop_loss, take_profit, deviation_points,
+                          magic_number, account_type, lease_token);
 
    g_poll_order_in_progress = false;
+}
+
+//──────────────────────────────────────────────────────────────────────────
+// Execute a position close or modify command — Phase 2
+//──────────────────────────────────────────────────────────────────────────
+void ExecutePositionCommand(const string cmd_id,
+                            const string command_type,
+                            const long   position_ticket,
+                            const double volume,
+                            const double new_sl,
+                            const double new_tp,
+                            const string account_type_str,
+                            const string lease_token)
+{
+   // ── Safety: account type guard ────────────────────────────────────────
+   long account_mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+   bool is_demo_account = (account_mode == 0) || (account_mode == 1);
+   bool order_expects_demo = (account_type_str == "demo");
+
+   if(order_expects_demo != is_demo_account)
+   {
+      string reason = "Account type mismatch: command expects " + account_type_str
+                    + " but connected account mode=" + IntegerToString((int)account_mode);
+      Print("TradeBridge SAFETY BLOCK — ", reason);
+      // Always ack submitted first, then reject
+      AckPositionSubmitted(cmd_id, lease_token, 0, "ACCOUNT_TYPE_MISMATCH");
+      AckPositionRejected(cmd_id, lease_token, 0, "ACCOUNT_TYPE_MISMATCH", reason);
+      return;
+   }
+
+   // ── Always ack submitted ──────────────────────────────────────────────
+   AckPositionSubmitted(cmd_id, lease_token, 0, "");
+
+   bool sent = false;
+   if(command_type == "close")
+   {
+      if(volume > 0)
+         sent = g_trade.PositionClosePartial(position_ticket, volume);
+      else
+         sent = g_trade.PositionClose(position_ticket);
+   }
+   else if(command_type == "modify")
+   {
+      sent = g_trade.PositionModify(position_ticket, new_sl, new_tp);
+   }
+   else
+   {
+      string reason = "Unknown command_type: " + command_type;
+      Print("TradeBridge: ", reason);
+      AckPositionRejected(cmd_id, lease_token, 0, "UNKNOWN_COMMAND_TYPE", reason);
+      return;
+   }
+
+   int    retcode      = (int)g_trade.ResultRetcode();
+   string retcode_desc = g_trade.ResultRetcodeDescription();
+
+   Print("TradeBridge PositionCommand result: cmd=", command_type,
+         " ticket=", position_ticket, " sent=", sent,
+         " retcode=", retcode, " (", retcode_desc, ")");
+
+   // TRADE_RETCODE_DONE = 10009
+   if(retcode == 10009)
+      AckPositionDone(cmd_id, lease_token, retcode, retcode_desc);
+   else
+      AckPositionRejected(cmd_id, lease_token, retcode, retcode_desc,
+                          "Command failed: " + retcode_desc);
+}
+
+//──────────────────────────────────────────────────────────────────────────
+// Poll the backend for the next position command — Phase 2
+//──────────────────────────────────────────────────────────────────────────
+void PollForPositionCommand()
+{
+   if(g_poll_position_in_progress) return;
+   g_poll_position_in_progress = true;
+
+   string resp; int http_status;
+   if(!HttpRequest("GET", "/mt5/ea/position-commands/next?lease_seconds=30", "", resp, http_status))
+   { g_poll_position_in_progress = false; return; }
+
+   string cmd_id = JsonStringField(resp, "id");
+   if(cmd_id == "") { g_poll_position_in_progress = false; return; }
+
+   string command_type       = JsonStringField(resp, "command_type");
+   string account_type       = JsonStringField(resp, "account_type");
+   string lease_token        = JsonStringField(resp, "lease_token");
+   double position_ticket_d  = JsonNumberField(resp, "mt5_position_ticket");
+   double volume_d           = JsonNumberField(resp, "volume");
+   double new_sl             = JsonNumberField(resp, "new_stop_loss");
+   double new_tp             = JsonNumberField(resp, "new_take_profit");
+
+   if(position_ticket_d <= 0)
+   {
+      Print("TradeBridge: position command missing mt5_position_ticket.");
+      g_poll_position_in_progress = false;
+      return;
+   }
+
+   long position_ticket = (long)position_ticket_d;
+   // Treat negative/null values (JsonNumberField returns -1 for null) as 0
+   if(new_sl < 0) new_sl = 0;
+   if(new_tp < 0) new_tp = 0;
+   // volume -1 means null (full close); pass 0 to ExecutePositionCommand
+   double volume = (volume_d > 0) ? volume_d : 0;
+
+   Print("TradeBridge: position command id=", cmd_id,
+         " type=", command_type, " ticket=", position_ticket,
+         " volume=", volume, " sl=", new_sl, " tp=", new_tp);
+
+   ExecutePositionCommand(cmd_id, command_type, position_ticket, volume,
+                          new_sl, new_tp, account_type, lease_token);
+
+   g_poll_position_in_progress = false;
+}
+
+//──────────────────────────────────────────────────────────────────────────
+// OnTradeTransaction — detect fills of tracked pending orders (Phase 2)
+//──────────────────────────────────────────────────────────────────────────
+void OnTradeTransaction(const MqlTradeTransaction &trans,
+                        const MqlTradeRequest     &request,
+                        const MqlTradeResult      &result)
+{
+   if(trans.type != TRADE_TRANSACTION_DEAL_ADD) return;
+   long order_ticket = (long)trans.order;
+   if(order_ticket <= 0) return;
+
+   int count = ArraySize(g_placed_orders);
+   for(int i = 0; i < count; i++)
+   {
+      if(g_placed_orders[i].mt5_ticket == order_ticket)
+      {
+         string oid  = g_placed_orders[i].order_id;
+         string tok  = g_placed_orders[i].lease_token;
+         long   deal = (long)trans.deal;
+         double price = trans.price;
+         double vol   = trans.volume;
+
+         Print("TradeBridge: pending order filled via transaction. order_id=", oid,
+               " ticket=", order_ticket, " deal=", deal,
+               " price=", price, " volume=", vol);
+
+         AckFilled(oid, tok, order_ticket, deal, price, vol, 0, "FILLED_BY_TRANSACTION");
+         RemovePlacedOrder(order_ticket);
+         return;
+      }
+   }
 }
 
 //──────────────────────────────────────────────────────────────────────────
@@ -634,11 +1023,12 @@ int OnInit()
          StringSubstr(g_base_url, StringLen(g_base_url) - 1, 1) == "/")
       g_base_url = StringSubstr(g_base_url, 0, StringLen(g_base_url) - 1);
 
+   ArrayResize(g_placed_orders, 0);
    EventSetTimer(InpPollSeconds);
 
    long account_mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
    bool is_demo = (account_mode == 0) || (account_mode == 1);
-   Print("TradeBridge Phase 1 started. Account mode=", account_mode,
+   Print("TradeBridge Phase 1+2 v3.00 started. Account mode=", account_mode,
          " (", (is_demo ? "DEMO" : "REAL"), ").",
          " EA InpAccountType=", InpAccountType,
          " Backend=", g_base_url);
@@ -653,10 +1043,11 @@ void OnDeinit(const int reason)
 
 void OnTimer()
 {
-   // Market-selection commands and trade orders are polled on the same timer.
-   // Guard flags prevent re-entrant HTTP calls.
+   // Market-selection commands, trade orders, and position commands
+   // are polled on the same timer. Guard flags prevent re-entrant HTTP calls.
    PollForCommand();
    PollForTradeOrder();
+   PollForPositionCommand();
 }
 
 void OnTick()

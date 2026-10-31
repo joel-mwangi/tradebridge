@@ -226,7 +226,7 @@ function nearestZone(zones: PriceZone[], symbol: string, pipSize?: number) {
   return zone ? { ...zone, priceText: formatPrice(zone.price, symbol, pipSize) } : null;
 }
 
-export default function ForexAnalyst() {
+export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "demo" | "real" }) {
   const { device: mt5Device } = useMt5Device();
   const [instruments, setInstruments] = useState<AnalystInstrument[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("all");
@@ -1028,7 +1028,7 @@ export default function ForexAnalyst() {
           quoteEpoch={liveQuote?.epoch}
           pipSize={activeInstrument?.pipSize}
           deviceId={mt5Device?.id}
-          accountType="demo"
+          accountType={accountType}
         />
       </div>
     </section>
