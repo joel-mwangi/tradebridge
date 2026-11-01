@@ -91,3 +91,27 @@
 .posTypeBtnActive { min-height: 30px; border: 1px solid var(--fx-border); border-radius: 7px; background: var(--fx-panel); color: var(--fx-ink); font-size: 10px; font-weight: 850; }
 .posSubmitBtn { min-height: 38px; border: 0; border-radius: 9px; background: #f4bb55; color: #1a1000; font-size: 11px; font-weight: 900; }
 .posSubmitBtn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── New simplified form additions ─────────────────────────────────────── */
+.fieldHint { color: var(--fx-muted); font-size: 9px; font-weight: 500; }
+.volumePresets { display: flex; flex-wrap: wrap; gap: 4px; }
+.presetBtn, .presetBtnActive { min-height: 28px; padding: 0 8px; border-radius: 6px; font-size: 10px; font-weight: 800; }
+.presetBtn { border: 1px solid var(--fx-border); background: transparent; color: var(--fx-muted); }
+.presetBtn:hover:not(:disabled) { background: var(--fx-surface); color: var(--fx-ink); }
+.presetBtnActive { border: 1px solid color-mix(in srgb, var(--teal, #10b981) 55%, var(--fx-border)); background: var(--teal-soft, rgba(16,185,129,.12)); color: var(--teal, #10b981); }
+.presetBtn:disabled, .presetBtnActive:disabled { opacity: .5; cursor: not-allowed; }
+.slTpSection { display: grid; gap: 8px; }
+.slTpHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.slTpTitle { color: var(--fx-muted); font-size: 10px; font-weight: 750; }
+.slTpModeToggle { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--fx-line); border-radius: 8px; background: var(--fx-surface); }
+.modeBtn, .modeActive { min-height: 24px; padding: 0 9px; border-radius: 5px; font-size: 9px; font-weight: 800; }
+.modeBtn { border: 1px solid transparent; background: transparent; color: var(--fx-muted); }
+.modeBtn:hover:not(:disabled) { color: var(--fx-ink); }
+.modeActive { border: 1px solid var(--fx-border); background: var(--fx-panel); color: var(--fx-ink); }
+.modeBtn:disabled, .modeActive:disabled { opacity: .5; cursor: not-allowed; }
+.slTpField { display: grid; gap: 3px; min-width: 0; }
+.slPreview { color: #ff7b87; font-size: 9px; font-weight: 750; }
+.tpPreview { color: #22c985; font-size: 9px; font-weight: 750; }
+.advancedSection { display: grid; gap: 0; }
+.advancedToggle { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border: none; background: none; color: var(--fx-muted); font-size: 9px; font-weight: 800; cursor: pointer; width: 100%; }
+.advancedToggle:hover { color: var(--fx-ink); }
