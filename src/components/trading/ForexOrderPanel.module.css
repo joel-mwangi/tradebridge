@@ -248,3 +248,40 @@
   .header { flex-wrap: wrap; }
   .quoteGrid strong { font-size: 15px; }
 }
+
+/* ── Volume row (presets + inline custom input) ─────────────────────────── */
+.volumeRow { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.volumeCustom {
+  width: 60px; height: 28px; padding: 0 7px;
+  border: 1px solid var(--fx-border); border-radius: 6px;
+  background: var(--fx-surface); color: var(--fx-ink);
+  font: inherit; font-size: 10px;
+}
+
+/* ── SL/TP labels and helpers ───────────────────────────────────────────── */
+.slLabel { color: var(--sell) !important; }
+.tpLabel { color: var(--buy)  !important; }
+.slTpHint { color: var(--fx-muted); font-size: 9px; }
+.slTpEmpty { color: var(--fx-muted); font-size: 9px; opacity: .6; }
+.slTpModeLink {
+  background: none; border: none; padding: 0;
+  color: var(--fx-muted); font-size: 9px; text-decoration: underline;
+  text-underline-offset: 2px; cursor: pointer; text-align: left;
+}
+.slTpModeLink:hover:not(:disabled) { color: var(--fx-ink); }
+.slTpModeLink:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Advanced chevron ───────────────────────────────────────────────────── */
+.advancedChevron { font-size: 8px; }
+
+/* ── Submit row — side-by-side Sell / Buy buttons ───────────────────────── */
+.submitRow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.submitSell, .submitBuy {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; min-height: 52px; border: 0; border-radius: 9px; font-weight: 900;
+}
+.submitSell { background: var(--sell); color: #200409; }
+.submitBuy  { background: var(--buy);  color: #051f12; }
+.submitSell:disabled, .submitBuy:disabled { opacity: .45; cursor: not-allowed; }
+.submitSide  { font-size: 13px; font-weight: 900; line-height: 1; }
+.submitPrice { font-size: 10px; font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }

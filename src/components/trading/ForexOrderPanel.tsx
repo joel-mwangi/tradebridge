@@ -311,8 +311,12 @@ export default function ForexOrderPanel({
   }, [stopPosPolling]);
 
   // ── Submit trade order ────────────────────────────────────────────────────
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !deviceId) return;
+  const handleSubmit = useCallback(async (overrideSide?: OrderSide) => {
+    const effectiveSide = overrideSide ?? side;
+    if (!deviceId) return;
+    if (!(!!deviceId && quoteFresh && validVolume && validEntryPrice &&
+      (slTpMode === "pips" || (validOptPrice(stopLoss) && validOptPrice(takeProfit))) &&
+      validDeviation(deviationPoints))) return;
 
     // Extra confirmation for real-account orders
     if (accountType === "real") {
@@ -328,7 +332,7 @@ export default function ForexOrderPanel({
     const idempotencyKey = `forex-${brokerSymbol}-${orderType}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const body: Record<string, unknown> = {
       broker_symbol: brokerSymbol,
-      order_side: side,
+      order_side: effectiveSide,
       order_type: orderType,
       volume: Number(volume),
       account_type: accountType,
@@ -337,7 +341,7 @@ export default function ForexOrderPanel({
     };
     // Auto-fill entry price from current quote for pending orders if not manually set
     const resolvedEntryPrice = orderCat !== "market"
-      ? (entryPrice.trim() ? Number(entryPrice) : (side === "buy" ? ask : bid))
+      ? (entryPrice.trim() ? Number(entryPrice) : (effectiveSide === "buy" ? ask : bid))
       : undefined;
     if (resolvedEntryPrice && resolvedEntryPrice > 0) body.entry_price = resolvedEntryPrice;
     if (computedSl && computedSl > 0)  body.stop_loss   = computedSl;
@@ -370,7 +374,7 @@ export default function ForexOrderPanel({
       setSubmitError("Network error — could not reach the server.");
       setSubmitting(false);
     }
-  }, [canSubmit, deviceId, brokerSymbol, side, orderType, orderCat, volume, entryPrice, accountType, computedSl, computedTp, ask, bid, deviationPoints, pollOrder]);
+  }, [deviceId, brokerSymbol, side, orderType, orderCat, volume, entryPrice, accountType, computedSl, computedTp, ask, bid, deviationPoints, quoteFresh, validVolume, validEntryPrice, slTpMode, stopLoss, takeProfit, validDeviation, deviationPoints, pollOrder]);
 
   // ── Cancel queued trade order ─────────────────────────────────────────────
   const handleCancelOrder = useCallback(async () => {
@@ -483,7 +487,7 @@ export default function ForexOrderPanel({
         <span>Spread {spread === undefined ? "—" : formatPrice(spread, symbol, pipSize)}</span>
       </div>
 
-      {/* Order type + direction */}
+      {/* Order type */}
       <div className={styles.orderTypeBar} role="group" aria-label="Order category">
         {(["market", "limit", "stop"] as OrderCategory[]).map((cat) => (
           <button key={cat} type="button"
@@ -496,118 +500,116 @@ export default function ForexOrderPanel({
         ))}
       </div>
 
-      <div className={styles.sideSwitch} role="group" aria-label="Order direction">
-        <button type="button" className={side === "sell" ? styles.sellActive : styles.sideButton}
-          aria-pressed={side === "sell"} onClick={() => setSide("sell")} disabled={!!activeOrder}>
-          {orderCat === "limit" ? "Sell Limit" : orderCat === "stop" ? "Sell Stop" : "Sell"}
-        </button>
-        <button type="button" className={side === "buy" ? styles.buyActive : styles.sideButton}
-          aria-pressed={side === "buy"} onClick={() => setSide("buy")} disabled={!!activeOrder}>
-          {orderCat === "limit" ? "Buy Limit" : orderCat === "stop" ? "Buy Stop" : "Buy"}
-        </button>
-      </div>
-
-      {/* Entry price for pending orders — defaults to current quote */}
+      {/* Entry price for pending orders */}
       {orderCat !== "market" && (
         <label className={styles.field}>
-          <span>Entry price <small className={styles.fieldHint}>(blank = current {side === "buy" ? "ask" : "bid"})</small></span>
+          <span>Entry price <small className={styles.fieldHint}>— leave blank to use current {side === "buy" ? "ask" : "bid"}</small></span>
           <input inputMode="decimal" value={entryPrice}
             onChange={(e) => setEntryPrice(e.target.value)}
-            placeholder={refPrice ? String(refPrice) : "Price to trigger order"}
+            placeholder={refPrice ? formatPrice(refPrice, symbol, pipSize) : "e.g. 1.08500"}
             disabled={!!activeOrder} />
-          {!validEntryPrice && <small className={styles.validation}>Enter a valid entry price.</small>}
+          {!validEntryPrice && <small className={styles.validation}>Enter a valid price.</small>}
         </label>
       )}
 
-      {/* Volume — quick presets + custom input */}
+      {/* Volume — presets only, click to select or type custom */}
       <div className={styles.field}>
-        <span>Volume (lots)</span>
-        <div className={styles.volumePresets}>
+        <span>Volume <small className={styles.fieldHint}>(lots)</small></span>
+        <div className={styles.volumeRow}>
           {["0.01","0.05","0.10","0.25","0.50","1.00"].map((v) => (
             <button key={v} type="button"
               className={volume === v ? styles.presetBtnActive : styles.presetBtn}
               onClick={() => setVolume(v)} disabled={!!activeOrder}>{v}</button>
           ))}
+          <input
+            className={styles.volumeCustom}
+            inputMode="decimal" value={volume}
+            onChange={(e) => setVolume(e.target.value)}
+            aria-invalid={!validVolume}
+            aria-label="Custom volume"
+            disabled={!!activeOrder} />
         </div>
-        <input inputMode="decimal" value={volume} onChange={(e) => setVolume(e.target.value)}
-          aria-invalid={!validVolume} disabled={!!activeOrder} placeholder="Custom lots" />
         {!validVolume && <small className={styles.validation}>Enter a volume greater than zero.</small>}
       </div>
 
-      {/* SL / TP with pip or price mode */}
+      {/* SL / TP — always pips, calculated price shown as ghost text */}
       <div className={styles.slTpSection}>
         <div className={styles.slTpHeader}>
           <span className={styles.slTpTitle}>Stop Loss &amp; Take Profit</span>
-          <div className={styles.slTpModeToggle} role="group" aria-label="SL/TP input mode">
-            <button type="button"
-              className={slTpMode === "pips" ? styles.modeActive : styles.modeBtn}
-              onClick={() => setSlTpMode("pips")} disabled={!!activeOrder}>Pips</button>
-            <button type="button"
-              className={slTpMode === "price" ? styles.modeActive : styles.modeBtn}
-              onClick={() => setSlTpMode("price")} disabled={!!activeOrder}>Price</button>
-          </div>
+          <span className={styles.slTpHint}>pips from entry</span>
         </div>
         <div className={styles.protectionGrid}>
           <div className={styles.slTpField}>
             <label className={styles.field}>
-              <span>Stop loss</span>
+              <span className={styles.slLabel}>⬇ Stop Loss</span>
               {slTpMode === "pips"
                 ? <input inputMode="decimal" value={slPips} onChange={(e) => setSlPips(e.target.value)}
-                    placeholder="e.g. 20 pips" disabled={!!activeOrder} />
+                    placeholder="e.g. 20" disabled={!!activeOrder} />
                 : <input inputMode="decimal" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)}
-                    placeholder="Absolute price" disabled={!!activeOrder} />}
+                    placeholder="Price" disabled={!!activeOrder} />}
             </label>
-            {computedSl !== undefined && computedSl > 0 &&
-              <small className={styles.slPreview}>→ {formatPrice(computedSl, symbol, pipSize)}</small>}
+            {computedSl !== undefined && computedSl > 0
+              ? <small className={styles.slPreview}>= {formatPrice(computedSl, symbol, pipSize)}</small>
+              : <small className={styles.slTpEmpty}>No stop loss</small>}
           </div>
           <div className={styles.slTpField}>
             <label className={styles.field}>
-              <span>Take profit</span>
+              <span className={styles.tpLabel}>⬆ Take Profit</span>
               {slTpMode === "pips"
                 ? <input inputMode="decimal" value={tpPips} onChange={(e) => setTpPips(e.target.value)}
-                    placeholder="e.g. 40 pips" disabled={!!activeOrder} />
+                    placeholder="e.g. 40" disabled={!!activeOrder} />
                 : <input inputMode="decimal" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)}
-                    placeholder="Absolute price" disabled={!!activeOrder} />}
+                    placeholder="Price" disabled={!!activeOrder} />}
             </label>
-            {computedTp !== undefined && computedTp > 0 &&
-              <small className={styles.tpPreview}>→ {formatPrice(computedTp, symbol, pipSize)}</small>}
+            {computedTp !== undefined && computedTp > 0
+              ? <small className={styles.tpPreview}>= {formatPrice(computedTp, symbol, pipSize)}</small>
+              : <small className={styles.slTpEmpty}>No take profit</small>}
           </div>
         </div>
+        <button type="button" className={styles.slTpModeLink}
+          onClick={() => setSlTpMode(slTpMode === "pips" ? "price" : "pips")}
+          disabled={!!activeOrder}>
+          {slTpMode === "pips" ? "Switch to exact price input" : "Switch to pips input"}
+        </button>
       </div>
 
-      {/* Advanced — deviation hidden by default */}
+      {/* Advanced — deviation */}
       <div className={styles.advancedSection}>
         <button type="button" className={styles.advancedToggle}
           onClick={() => setShowAdvanced((v) => !v)} aria-expanded={showAdvanced}>
-          <span>Advanced settings</span>
-          <span>{showAdvanced ? "▲" : "▼"}</span>
+          <span>Advanced</span>
+          <span className={styles.advancedChevron}>{showAdvanced ? "▲" : "▼"}</span>
         </button>
         {showAdvanced && (
           <label className={styles.field} style={{ marginTop: 6 }}>
-            <span>Max deviation (points) <small className={styles.fieldHint}>— blank = broker default</small></span>
+            <span>Max slippage (points) <small className={styles.fieldHint}>— blank = broker default</small></span>
             <input inputMode="numeric" value={deviationPoints} onChange={(e) => setDeviation(e.target.value)}
               placeholder="Leave blank for broker default" disabled={!!activeOrder} />
-            {!validDeviation(deviationPoints) && <small className={styles.validation}>Enter a non-negative whole number.</small>}
+            {!validDeviation(deviationPoints) && <small className={styles.validation}>Whole number required.</small>}
           </label>
         )}
       </div>
 
-      {/* Submit */}
+      {/* Submit — Sell and Buy as direct action buttons */}
       {!activeOrder && (
-        <>
-          <button type="button" className={side === "buy" ? styles.reviewBuy : styles.reviewSell}
-            disabled={!canSubmit} onClick={() => void handleSubmit()}>
-            {submitting ? "Sending…"
-              : !deviceId ? "No EA paired"
-              : orderCat === "market"
-                ? `${side === "buy" ? "Buy" : "Sell"} ${brokerSymbol} at market`
-                : `Place ${orderType.replace("_", " ")} on ${brokerSymbol}`}
+        <div className={styles.submitRow}>
+          <button type="button" className={styles.submitSell}
+            disabled={!canSubmit || submitting}
+            onClick={() => { setSide("sell"); void handleSubmit("sell"); }}>
+            <span className={styles.submitSide}>{orderCat === "market" ? "Sell" : "Sell " + orderCat}</span>
+            <span className={styles.submitPrice}>{orderCat === "market" ? formatPrice(bid, symbol, pipSize) : brokerSymbol}</span>
           </button>
-          {!quoteFresh && <p className={styles.warning}>Quote stale — waiting for live price.</p>}
-          {!deviceId && <p className={styles.warning}>Pair an MT5 EA in the MT5 Bridge panel before placing orders.</p>}
-          {submitError && <p className={styles.warning} role="alert">{submitError}</p>}
-        </>
+          <button type="button" className={styles.submitBuy}
+            disabled={!canSubmit || submitting}
+            onClick={() => { setSide("buy"); void handleSubmit("buy"); }}>
+            <span className={styles.submitSide}>{orderCat === "market" ? "Buy" : "Buy " + orderCat}</span>
+            <span className={styles.submitPrice}>{orderCat === "market" ? formatPrice(ask, symbol, pipSize) : brokerSymbol}</span>
+          </button>
+        </div>
       )}
+      {!quoteFresh && !activeOrder && <p className={styles.warning}>Quote stale — waiting for live price.</p>}
+      {!deviceId && !activeOrder && <p className={styles.warning}>Pair an MT5 EA in the MT5 Bridge panel.</p>}
+      {submitError && <p className={styles.warning} role="alert">{submitError}</p>}
 
       {/* Active order status card */}
       {activeOrder && (
