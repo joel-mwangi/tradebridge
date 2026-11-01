@@ -527,6 +527,7 @@ export default function ForexOrderPanel({
             onChange={(e) => setVolume(e.target.value)}
             aria-invalid={!validVolume}
             aria-label="Custom volume"
+            placeholder="custom"
             disabled={!!activeOrder} />
         </div>
         {!validVolume && <small className={styles.validation}>Enter a volume greater than zero.</small>}

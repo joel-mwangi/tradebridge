@@ -24,7 +24,7 @@
 .panel * { box-sizing: border-box; }
 .panel button, .panel input, .panel select { font: inherit; }
 /* reset any browser defaults on buttons */
-.panel button { appearance: none; -webkit-appearance: none; cursor: pointer; }
+.panel button { appearance: none; -webkit-appearance: none; cursor: pointer; outline: none; }
 .panel button:focus-visible,
 .panel input:focus-visible,
 .panel select:focus-visible { outline: 2px solid var(--teal, #10b981); outline-offset: 2px; }
@@ -103,9 +103,8 @@
 .presetBtn, .presetBtnActive {
   min-height: 28px; padding: 0 8px; border-radius: 6px;
   font-size: 10px; font-weight: 800;
-  /* kill any browser checkbox / radio appearance */
-  appearance: none; -webkit-appearance: none;
-  list-style: none;
+    appearance: none; -webkit-appearance: none;
+  list-style: none; outline: none;
 }
 .presetBtn {
   border: 1px solid var(--fx-border); background: transparent; color: var(--fx-muted);
@@ -256,7 +255,9 @@
   border: 1px solid var(--fx-border); border-radius: 6px;
   background: var(--fx-surface); color: var(--fx-ink);
   font: inherit; font-size: 10px;
+  appearance: none; -webkit-appearance: none;
 }
+.volumeCustom::placeholder { color: var(--fx-muted); opacity: .7; }
 
 /* ── SL/TP labels and helpers ───────────────────────────────────────────── */
 .slLabel { color: var(--sell) !important; }
@@ -267,6 +268,7 @@
   background: none; border: none; padding: 0;
   color: var(--fx-muted); font-size: 9px; text-decoration: underline;
   text-underline-offset: 2px; cursor: pointer; text-align: left;
+  appearance: none; -webkit-appearance: none; outline: none;
 }
 .slTpModeLink:hover:not(:disabled) { color: var(--fx-ink); }
 .slTpModeLink:disabled { opacity: .4; cursor: not-allowed; }
