@@ -40,11 +40,37 @@ export interface ForexAnalysis {
   support: PriceZone[];
   resistance: PriceZone[];
 }
+export type TradeSignal = 'STRONG_BUY' | 'BUY' | 'WAIT' | 'SELL' | 'STRONG_SELL' | 'NO_SIGNAL';
+
+export interface SignalComponents {
+  emaScore: number;
+  patternScore: number;
+  patternLabel: string;
+  structureScore: number;
+  atrActive: boolean;
+}
+
+export interface SignalResult {
+  signal: TradeSignal;
+  score: number;
+  components: SignalComponents;
+  suggestedSl: number | null;
+  suggestedTp: number | null;
+  entryPrice: number | null;
+}
+
 export const FOREX_CANDLE_PATTERNS: readonly string[];
 export function normalizeCandles(candles: unknown): ForexCandle[];
 export function calculateAtr(candles: ForexCandle[], period?: number): number;
+export function calculateEma(candles: ForexCandle[], period: number): number;
 export function detectCandlePatterns(candles: ForexCandle[], limit?: number): CandlePattern[];
 export function findSwingPoints(candles: ForexCandle[], strength?: number): SwingPoint[];
 export function analyzeForexCandles(candles: ForexCandle[], options?: {
   atrPeriod?: number; swingStrength?: number; patternLimit?: number;
 }): ForexAnalysis;
+export function computeSignal(
+  m1Candles: ForexCandle[],
+  m15Structure: { bullish: boolean; bearish: boolean },
+  entryBid?: number,
+  entryAsk?: number
+): SignalResult;

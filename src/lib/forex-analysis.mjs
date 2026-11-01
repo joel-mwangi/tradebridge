@@ -266,6 +266,123 @@ function clusterZones(swings, currentPrice, atr) {
   };
 }
 
+/**
+ * Standard EMA calculation.
+ * @param {Array<{epoch:number, open:number, high:number, low:number, close:number}>} candles - chronologically ascending candles
+ * @param {number} period
+ * @returns {number} latest EMA value, or 0 if insufficient data
+ */
+export function calculateEma(candles, period) {
+  const bars = normalizeCandles(candles);
+  const safePeriod = Number.isInteger(period) && period > 0 ? period : 9;
+  if (bars.length < safePeriod) return 0;
+
+  // Seed with SMA of first `period` closes
+  let ema = bars.slice(0, safePeriod).reduce((sum, c) => sum + c.close, 0) / safePeriod;
+  const k = 2 / (safePeriod + 1);
+  for (let i = safePeriod; i < bars.length; i++) {
+    ema = bars[i].close * k + ema * (1 - k);
+  }
+  return ema;
+}
+
+/**
+ * @param {Array<{epoch:number, open:number, high:number, low:number, close:number}>} m1Candles
+ * @param {{bullish: boolean, bearish: boolean}} m15Structure
+ * @param {number} [entryBid]
+ * @param {number} [entryAsk]
+ * @returns {{ signal: 'STRONG_BUY'|'BUY'|'WAIT'|'SELL'|'STRONG_SELL'|'NO_SIGNAL', score: number, components: { emaScore: number, patternScore: number, patternLabel: string, structureScore: number, atrActive: boolean }, suggestedSl: number|null, suggestedTp: number|null, entryPrice: number|null }}
+ */
+export function computeSignal(m1Candles, m15Structure, entryBid, entryAsk) {
+  const bars = normalizeCandles(m1Candles);
+
+  // Layer 1: EMA momentum
+  const ema9 = calculateEma(bars, 9);
+  const ema21 = calculateEma(bars, 21);
+  const emaScore = ema9 > ema21 ? 2 : ema9 < ema21 ? -2 : 0;
+
+  // Layer 2: Candle pattern (last pattern only)
+  const patterns = detectCandlePatterns(bars);
+  const lastPattern = patterns.length ? patterns[patterns.length - 1] : null;
+  const patternLabel = lastPattern?.label ?? 'None';
+  let patternScore = 0;
+  if (lastPattern) {
+    const lbl = lastPattern.label.toLowerCase();
+    if (lbl.includes('bullish engulfing') || lbl.includes('morning star') || lbl.includes('hammer')) {
+      patternScore = 2;
+    } else if (lbl.includes('bearish engulfing') || lbl.includes('evening star') || lbl.includes('shooting star')) {
+      patternScore = -2;
+    }
+  }
+
+  // Layer 3: M15 structure
+  const structureScore = m15Structure.bullish ? 1 : m15Structure.bearish ? -1 : 0;
+
+  // ATR activity filter
+  const currentAtr = calculateAtr(bars, 14);
+  let avgAtr = 0;
+  if (bars.length >= 15) {
+    const startIdx = Math.max(14, bars.length - 20);
+    const samples = [];
+    for (let i = startIdx; i < bars.length; i++) {
+      samples.push(calculateAtr(bars.slice(0, i + 1), 14));
+    }
+    avgAtr = samples.length ? samples.reduce((sum, v) => sum + v, 0) / samples.length : 0;
+  }
+  const atrActive = bars.length >= 15 && avgAtr > 0 && currentAtr >= 0.7 * avgAtr;
+
+  if (!atrActive) {
+    return {
+      signal: 'NO_SIGNAL',
+      score: 0,
+      components: { emaScore, patternScore, patternLabel, structureScore, atrActive: false },
+      suggestedSl: null,
+      suggestedTp: null,
+      entryPrice: null,
+    };
+  }
+
+  const score = emaScore + patternScore + structureScore;
+  let signal;
+  if (score >= 4) signal = 'STRONG_BUY';
+  else if (score === 3) signal = 'BUY';
+  else if (score === -3) signal = 'SELL';
+  else if (score <= -4) signal = 'STRONG_SELL';
+  else signal = 'WAIT';
+
+  // SL/TP
+  let suggestedSl = null;
+  let suggestedTp = null;
+  let entryPrice = null;
+
+  if (signal === 'STRONG_BUY' || signal === 'BUY') {
+    entryPrice = (typeof entryAsk === 'number' && Number.isFinite(entryAsk) && entryAsk > 0)
+      ? entryAsk
+      : bars[bars.length - 1].close;
+    const last3Lows = bars.slice(-3).map((c) => c.low);
+    suggestedSl = Math.min(...last3Lows) - 0.3 * currentAtr;
+    const slDist = entryPrice - suggestedSl;
+    suggestedTp = entryPrice + slDist * 1.5;
+  } else if (signal === 'SELL' || signal === 'STRONG_SELL') {
+    entryPrice = (typeof entryBid === 'number' && Number.isFinite(entryBid) && entryBid > 0)
+      ? entryBid
+      : bars[bars.length - 1].close;
+    const last3Highs = bars.slice(-3).map((c) => c.high);
+    suggestedSl = Math.max(...last3Highs) + 0.3 * currentAtr;
+    const slDist = suggestedSl - entryPrice;
+    suggestedTp = entryPrice - slDist * 1.5;
+  }
+
+  return {
+    signal,
+    score,
+    components: { emaScore, patternScore, patternLabel, structureScore, atrActive },
+    suggestedSl,
+    suggestedTp,
+    entryPrice,
+  };
+}
+
 export function analyzeForexCandles(candles, options = {}) {
   const bars = normalizeCandles(candles);
   if (!bars.length) {

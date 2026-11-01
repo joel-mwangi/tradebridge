@@ -401,3 +401,118 @@
   font-size: 10px; font-weight: 800;
 }
 .posCloseError { margin: 0; color: #f4bb55; font-size: 9px; }
+
+/* ── Signal Card ──────────────────────────────────────────────────────── */
+.analysisRight {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+}
+.signalCard {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--fx-line);
+  border-radius: 13px;
+  background: var(--fx-panel);
+}
+.signalCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.signalBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+.signalStrongBuy  { background: rgba(34, 201, 133, .18); color: #22c985; }
+.signalBuy        { background: rgba(34, 201, 133, .10); color: #22c985; }
+.signalSell       { background: rgba(255, 123, 135, .10); color: #ff7b87; }
+.signalStrongSell { background: rgba(255, 123, 135, .18); color: #ff7b87; }
+.signalWait       { background: rgba(244, 187, 85, .12);  color: #f4bb55; }
+.signalNone       { background: var(--fx-surface); color: var(--fx-muted); }
+.signalScore {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid var(--fx-line);
+  border-radius: 8px;
+  color: var(--fx-muted);
+  font-size: 11px;
+}
+.signalScore strong {
+  color: var(--fx-ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.signalComponents {
+  display: grid;
+  gap: 2px;
+}
+.signalRow {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid var(--fx-line);
+  font-size: 10px;
+  color: var(--fx-muted);
+}
+.signalRow:first-child { border-top: 0; }
+.signalCheck   { color: #22c985; font-weight: 900; text-align: center; }
+.signalCross   { color: #ff7b87; font-weight: 900; text-align: center; }
+.signalNeutral { color: var(--fx-muted); font-weight: 900; text-align: center; }
+.signalRowValue {
+  color: var(--fx-ink);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.signalLevels {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--fx-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.signalLevelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 10px;
+  color: var(--fx-muted);
+}
+.signalLevelRow + .signalLevelRow { border-top: 1px solid var(--fx-line); }
+.signalLevelRow strong {
+  color: var(--fx-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.signalLevelRow strong small {
+  color: var(--fx-muted);
+  font-size: 9px;
+  margin-left: 4px;
+}
+.signalSlValue { color: #ff7b87 !important; }
+.signalTpValue { color: #22c985 !important; }
+.signalDisclaimer {
+  margin: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--fx-line);
+  color: var(--fx-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}

@@ -8,10 +8,12 @@ import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs"
 import { panChartViewport, zoomChartViewport } from "../../lib/forex-chart-viewport.mjs";
 import {
   analyzeForexCandles,
+  computeSignal,
   findSwingPoints,
   type CandlePattern,
   type ForexCandle,
   type PriceZone,
+  type SignalResult,
   type SwingPoint,
 } from "../../lib/forex-analysis.mjs";
 
@@ -273,7 +275,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     const interval = window.setInterval(() => void load(), 3_000);
     return () => { alive = false; clearInterval(interval); };
   }, [mt5Device?.id, positionLinesFetchRef.current]);
-  const [timeframe, setTimeframe] = useState<number>(900);
+  const [timeframe, setTimeframe] = useState<number>(60);
   const [chartViewCount, setChartViewCount] = useState<number>(VIEW_LIMIT);
   const [chartViewOffset, setChartViewOffset] = useState<number>(0);
   const [isChartDragging, setIsChartDragging] = useState(false);
@@ -578,6 +580,9 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     }
     activeTickSymbolRef.current = selectedSymbol;
     requestCandles(selectedSymbol, timeframe);
+    // Always fetch M15 for signal structure and M1 for signal momentum
+    if (timeframe !== 60) requestCandles(selectedSymbol, 60);
+    if (timeframe !== 900) requestCandles(selectedSymbol, 900);
   }, [feedReady, selectedSymbol, timeframe, requestCandles]);
 
   useEffect(() => {
@@ -633,6 +638,36 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     [candles, timeframe, currentBucket],
   );
   const analysis = useMemo(() => analyzeForexCandles(closedCandles), [closedCandles]);
+
+  // M1 closed candles (always needed for signal, regardless of current timeframe)
+  const m1Key = keyFor(selectedSymbol, 60);
+  const m1Candles = candlesByKey[m1Key] ?? EMPTY_CANDLES;
+  const closedM1Candles = useMemo(() => {
+    const bucket = Math.floor(Date.now() / 1000 / 60) * 60;
+    return m1Candles.filter((c) => c.epoch + 60 <= bucket);
+  }, [m1Candles]);
+
+  // M15 closed candles for structure
+  const m15Key = keyFor(selectedSymbol, 900);
+  const m15Candles = candlesByKey[m15Key] ?? EMPTY_CANDLES;
+  const closedM15Candles = useMemo(() => {
+    const bucket = Math.floor(Date.now() / 1000 / 900) * 900;
+    return m15Candles.filter((c) => c.epoch + 900 <= bucket);
+  }, [m15Candles]);
+
+  const m15Analysis = useMemo(() => analyzeForexCandles(closedM15Candles), [closedM15Candles]);
+
+  const signalResult = useMemo(
+    () => computeSignal(
+      closedM1Candles,
+      m15Analysis.structure,
+      liveQuote?.bid,
+      liveQuote?.ask,
+    ),
+    // Re-run on every tick (liveQuote) and whenever M1 candles update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [closedM1Candles, m15Analysis.structure, liveQuote],
+  );
   const safeViewCount = Math.max(1, Math.min(chartViewCount, candles.length || chartViewCount));
   const maxViewOffset = Math.max(0, candles.length - safeViewCount);
   const safeViewOffset = Math.min(chartViewOffset, maxViewOffset);
@@ -1117,17 +1152,20 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
         <strong>Analysis, not a trading signal.</strong> Levels and pattern labels are deterministic interpretations of the received OHLC bars, not predictions. No orders are placed. Verify prices against your Deriv MT5 terminal before using this page for market decisions.
       </footer>
         </div>
-        <ForexOrderPanel
-          symbol={selectedSymbol}
-          instrumentName={activePair?.name ?? selectedSymbol}
-          lastPrice={liveQuote?.price}
-          bid={liveQuote?.bid}
-          ask={liveQuote?.ask}
-          quoteEpoch={liveQuote?.epoch}
-          pipSize={activeInstrument?.pipSize}
-          deviceId={mt5Device?.id}
-          accountType={accountType}
-        />
+        <div className={styles.analysisRight}>
+          <SignalCard result={signalResult} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
+          <ForexOrderPanel
+            symbol={selectedSymbol}
+            instrumentName={activePair?.name ?? selectedSymbol}
+            lastPrice={liveQuote?.price}
+            bid={liveQuote?.bid}
+            ask={liveQuote?.ask}
+            quoteEpoch={liveQuote?.epoch}
+            pipSize={activeInstrument?.pipSize}
+            deviceId={mt5Device?.id}
+            accountType={accountType}
+          />
+        </div>
       </div>
     </section>
   );
@@ -1279,6 +1317,120 @@ function LivePositionsPanel({
       {closeError && <p className={styles.posCloseError}>{closeError}</p>}
       {!deviceId && <p className={styles.positionsEmpty}>Pair an MT5 EA to close positions from here.</p>}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SignalCard — M1 trade signal display
+// ---------------------------------------------------------------------------
+function SignalCard({
+  result,
+  symbol: _symbol,
+  pipSize,
+}: {
+  result: SignalResult;
+  symbol: string;
+  pipSize?: number;
+}) {
+  const { signal, score, components, suggestedSl, suggestedTp, entryPrice } = result;
+
+  const isBuy = signal === 'STRONG_BUY' || signal === 'BUY';
+  const isSell = signal === 'SELL' || signal === 'STRONG_SELL';
+
+  function signalClass() {
+    if (signal === 'STRONG_BUY') return styles.signalStrongBuy;
+    if (signal === 'BUY') return styles.signalBuy;
+    if (signal === 'SELL') return styles.signalSell;
+    if (signal === 'STRONG_SELL') return styles.signalStrongSell;
+    if (signal === 'NO_SIGNAL') return styles.signalNone;
+    return styles.signalWait; // WAIT
+  }
+
+  function signalLabel() {
+    if (signal === 'STRONG_BUY') return 'STRONG BUY';
+    if (signal === 'BUY') return 'BUY';
+    if (signal === 'SELL') return 'SELL';
+    if (signal === 'STRONG_SELL') return 'STRONG SELL';
+    if (signal === 'NO_SIGNAL') return 'NO SIGNAL';
+    return 'WAIT';
+  }
+
+  const digits = pipSize && pipSize > 0 && pipSize < 1
+    ? Math.min(6, String(pipSize).replace(/.*\./, '').length)
+    : 5;
+  const pipValue = pipSize && pipSize > 0 ? pipSize : 0.0001;
+
+  function fmt(n: number | null) {
+    if (n == null) return '—';
+    return n.toFixed(digits);
+  }
+
+  function pips(dist: number | null) {
+    if (dist == null || entryPrice == null || suggestedSl == null) return '—';
+    return Math.abs(dist / pipValue).toFixed(1) + ' pips';
+  }
+
+  const slDist = entryPrice != null && suggestedSl != null ? Math.abs(entryPrice - suggestedSl) : null;
+  const rrText = slDist != null && slDist > 0 ? '1 : 1.5' : '—';
+
+  return (
+    <section className={styles.signalCard} aria-label="M1 trade signal">
+      <div className={styles.signalCardHeader}>
+        <span className={styles.sectionEyebrow}>M1 SIGNAL ENGINE</span>
+        <span className={`${styles.signalBadge} ${signalClass()}`}>{signalLabel()}</span>
+      </div>
+      <div className={styles.signalScore}>
+        <span>Confluence score</span>
+        <strong>{score > 0 ? '+' : ''}{score} / 6</strong>
+      </div>
+      <div className={styles.signalComponents}>
+        <div className={styles.signalRow}>
+          <span className={components.emaScore > 0 ? styles.signalCheck : components.emaScore < 0 ? styles.signalCross : styles.signalNeutral}>
+            {components.emaScore > 0 ? '✓' : components.emaScore < 0 ? '✗' : '–'}
+          </span>
+          <span>EMA 9 vs 21 (M1)</span>
+          <span className={styles.signalRowValue}>{components.emaScore > 0 ? '+2 bullish' : components.emaScore < 0 ? '-2 bearish' : '0 flat'}</span>
+        </div>
+        <div className={styles.signalRow}>
+          <span className={components.patternScore > 0 ? styles.signalCheck : components.patternScore < 0 ? styles.signalCross : styles.signalNeutral}>
+            {components.patternScore > 0 ? '✓' : components.patternScore < 0 ? '✗' : '–'}
+          </span>
+          <span>M1 pattern: {components.patternLabel}</span>
+          <span className={styles.signalRowValue}>{components.patternScore > 0 ? '+2' : components.patternScore < 0 ? '-2' : '0'}</span>
+        </div>
+        <div className={styles.signalRow}>
+          <span className={components.structureScore > 0 ? styles.signalCheck : components.structureScore < 0 ? styles.signalCross : styles.signalNeutral}>
+            {components.structureScore > 0 ? '✓' : components.structureScore < 0 ? '✗' : '–'}
+          </span>
+          <span>M15 structure</span>
+          <span className={styles.signalRowValue}>{components.structureScore > 0 ? '+1 bullish' : components.structureScore < 0 ? '-1 bearish' : '0 neutral'}</span>
+        </div>
+        <div className={styles.signalRow}>
+          <span className={components.atrActive ? styles.signalCheck : styles.signalCross}>
+            {components.atrActive ? '✓' : '✗'}
+          </span>
+          <span>ATR activity filter</span>
+          <span className={styles.signalRowValue}>{components.atrActive ? 'active' : 'low — ranging'}</span>
+        </div>
+      </div>
+      {(isBuy || isSell) && entryPrice != null ? (
+        <div className={styles.signalLevels}>
+          <div className={styles.signalLevelRow}>
+            <span>Entry ({isBuy ? 'Ask' : 'Bid'})</span>
+            <strong>{fmt(entryPrice)}</strong>
+          </div>
+          <div className={styles.signalLevelRow}>
+            <span>Stop-loss</span>
+            <strong className={styles.signalSlValue}>{fmt(suggestedSl)} <small>({pips(slDist)})</small></strong>
+          </div>
+          <div className={styles.signalLevelRow}>
+            <span>Take-profit</span>
+            <strong className={styles.signalTpValue}>{fmt(suggestedTp)} <small>R:R {rrText}</small></strong>
+          </div>
+        </div>
+      ) : null}
+      <p className={styles.signalDisclaimer}>Computed signal — verify before trading</p>
+    </section>
   );
 }
 
