@@ -1,11 +1,12 @@
 //+------------------------------------------------------------------+
-//| TradeBridgeMarketBridge.mq5  — Phase 1 + Phase 2                |
+//| TradeBridgeMarketBridge.mq5  — Phase 1 + Phase 2 + Phase 3      |
 //| Phase 1: market selection commands + buy/sell market orders.     |
 //| Phase 2: pending orders (limit/stop), position close/modify.     |
+//| Phase 3: real-time position sync.                                |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "3.00"
-#property description "TradeBridge MT5 bridge — market selection, Phase 1 market orders, Phase 2 pending orders and position commands."
+#property version   "4.00"
+#property description "TradeBridge MT5 bridge — market selection, Phase 1 market orders, Phase 2 pending orders and position commands. Phase 3 position sync."
 
 #include <Trade\Trade.mqh>
 
@@ -34,6 +35,10 @@ struct PlacedOrder {
    string broker_symbol;
 };
 PlacedOrder g_placed_orders[];
+
+// Phase 3: position sync
+bool   g_poll_position_sync_in_progress = false;
+long   g_known_tickets[];  // tickets seen on last sync; used to detect closes
 
 void AddPlacedOrder(const string order_id, const string lease_token,
                     const long ticket, const string broker_symbol)
@@ -998,6 +1003,101 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 }
 
 //──────────────────────────────────────────────────────────────────────────
+// Phase 3: push all open positions to the backend and detect closes
+//──────────────────────────────────────────────────────────────────────────
+void SyncPositions()
+{
+   if(g_poll_position_sync_in_progress) return;
+   g_poll_position_sync_in_progress = true;
+
+   int total = PositionsTotal();
+
+   // ── Build JSON array of open positions ───────────────────────────────
+   string positions_json = "";
+   long current_tickets[];
+   ArrayResize(current_tickets, 0);
+
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+
+      long   pos_id      = (long)PositionGetInteger(POSITION_IDENTIFIER);
+      string sym         = PositionGetString(POSITION_SYMBOL);
+      int    pos_type    = (int)PositionGetInteger(POSITION_TYPE); // 0=buy,1=sell
+      double volume      = PositionGetDouble(POSITION_VOLUME);
+      double open_price  = PositionGetDouble(POSITION_PRICE_OPEN);
+      double cur_price   = PositionGetDouble(POSITION_PRICE_CURRENT);
+      double floating_pl = PositionGetDouble(POSITION_PROFIT);
+      double sl          = PositionGetDouble(POSITION_SL);
+      double tp          = PositionGetDouble(POSITION_TP);
+      datetime opened_at = (datetime)PositionGetInteger(POSITION_TIME);
+      string side        = (pos_type == POSITION_TYPE_BUY) ? "buy" : "sell";
+
+      // Append to current_tickets
+      int n = ArraySize(current_tickets);
+      ArrayResize(current_tickets, n + 1);
+      current_tickets[n] = pos_id;
+
+      // Build JSON object for this position
+      string entry = "{";
+      entry += "\"mt5_ticket\":" + IntegerToString(pos_id);
+      entry += ",\"symbol\":\"" + JsonEscape(sym) + "\"";
+      entry += ",\"order_side\":\"" + side + "\"";
+      entry += ",\"volume\":" + DoubleToString(volume, 8);
+      entry += ",\"open_price\":" + DoubleToString(open_price, 8);
+      entry += ",\"current_price\":" + DoubleToString(cur_price, 8);
+      entry += ",\"floating_pl\":" + DoubleToString(floating_pl, 2);
+      if(sl > 0)
+         entry += ",\"stop_loss\":" + DoubleToString(sl, 8);
+      if(tp > 0)
+         entry += ",\"take_profit\":" + DoubleToString(tp, 8);
+      entry += ",\"account_type\":\"" + JsonEscape(InpAccountType) + "\"";
+      entry += ",\"opened_at\":\"" + TimeToString(opened_at, TIME_DATE|TIME_MINUTES|TIME_SECONDS) + "\"";
+      entry += "}";
+
+      if(StringLen(positions_json) > 0) positions_json += ",";
+      positions_json += entry;
+   }
+
+   // ── POST sync (even if empty, to keep last_synced_at fresh) ─────────
+   string sync_body = "{\"positions\":[" + positions_json + "]}";
+   string resp; int http_status;
+   HttpRequest("POST", "/mt5/ea/positions/sync", sync_body, resp, http_status);
+
+   // ── Detect closed positions (tickets present last time but missing now)
+   int prev_count = ArraySize(g_known_tickets);
+   for(int i = 0; i < prev_count; i++)
+   {
+      long prev_ticket = g_known_tickets[i];
+      bool still_open = false;
+      int cur_count = ArraySize(current_tickets);
+      for(int j = 0; j < cur_count; j++)
+      {
+         if(current_tickets[j] == prev_ticket) { still_open = true; break; }
+      }
+      if(!still_open)
+      {
+         string close_body = "{}";
+         string close_resp; int close_status;
+         HttpRequest("POST",
+                     "/mt5/ea/positions/" + IntegerToString(prev_ticket) + "/closed",
+                     close_body, close_resp, close_status);
+         Print("TradeBridge Phase 3: position closed ticket=", prev_ticket);
+      }
+   }
+
+   // ── Update known tickets ──────────────────────────────────────────────
+   int new_count = ArraySize(current_tickets);
+   ArrayResize(g_known_tickets, new_count);
+   for(int k = 0; k < new_count; k++)
+      g_known_tickets[k] = current_tickets[k];
+
+   g_poll_position_sync_in_progress = false;
+}
+
+//──────────────────────────────────────────────────────────────────────────
 // EA lifecycle
 //──────────────────────────────────────────────────────────────────────────
 int OnInit()
@@ -1024,11 +1124,12 @@ int OnInit()
       g_base_url = StringSubstr(g_base_url, 0, StringLen(g_base_url) - 1);
 
    ArrayResize(g_placed_orders, 0);
+   ArrayResize(g_known_tickets, 0);
    EventSetTimer(InpPollSeconds);
 
    long account_mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
    bool is_demo = (account_mode == 0) || (account_mode == 1);
-   Print("TradeBridge Phase 1+2 v3.00 started. Account mode=", account_mode,
+   Print("TradeBridge Phase 1+2+3 v4.00 started. Account mode=", account_mode,
          " (", (is_demo ? "DEMO" : "REAL"), ").",
          " EA InpAccountType=", InpAccountType,
          " Backend=", g_base_url);
@@ -1048,6 +1149,7 @@ void OnTimer()
    PollForCommand();
    PollForTradeOrder();
    PollForPositionCommand();
+   SyncPositions();
 }
 
 void OnTick()
