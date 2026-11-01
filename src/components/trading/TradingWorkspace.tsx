@@ -140,7 +140,12 @@ export default function TradingWorkspace() {
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
-  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem("tradebridge:preferred_account") ?? "";
+    }
+    return "";
+  });
   const [pendingRealAccount, setPendingRealAccount] = useState<DerivAccount | null>(null);
   const [showRealSwitchConfirm, setShowRealSwitchConfirm] = useState(false);
   const [authMessage, setAuthMessage] = useState("Checking your Deriv connection…");
@@ -280,9 +285,17 @@ export default function TradingWorkspace() {
         const returnedAccounts = data.accounts ?? [];
         setAccounts(returnedAccounts);
         const eligible = returnedAccounts.filter(isDemoAccount);
-        setSelectedAccountId((current) => returnedAccounts.some((item) => item.account_id === current)
-          ? current
-          : eligible[0]?.account_id ?? returnedAccounts.find(isRealAccount)?.account_id ?? returnedAccounts[0]?.account_id ?? "");
+        const savedId = typeof window !== "undefined"
+          ? window.localStorage.getItem("tradebridge:preferred_account") ?? ""
+          : "";
+        setSelectedAccountId((current) => {
+          // Prefer the currently selected account if it's still valid
+          if (returnedAccounts.some((item) => item.account_id === current)) return current;
+          // Restore from localStorage if valid
+          if (savedId && returnedAccounts.some((item) => item.account_id === savedId)) return savedId;
+          // Fall back: prefer demo, then real, then first available
+          return eligible[0]?.account_id ?? returnedAccounts.find(isRealAccount)?.account_id ?? returnedAccounts[0]?.account_id ?? "";
+        });
         if (firstAuthMessage) setAuthMessage(firstAuthMessage);
         else if (data.connected && eligible.length > 0) setAuthMessage("Trading account connected. Demo and real accounts verified.");
         else if (data.connected && returnedAccounts.some(isRealAccount)) setAuthMessage("Trading account connected. Real and demo accounts verified.");
