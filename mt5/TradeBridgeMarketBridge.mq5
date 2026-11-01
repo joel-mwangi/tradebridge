@@ -1054,7 +1054,12 @@ void SyncPositions()
       if(tp > 0)
          entry += ",\"take_profit\":" + DoubleToString(tp, 8);
       entry += ",\"account_type\":\"" + JsonEscape(InpAccountType) + "\"";
-      entry += ",\"opened_at\":\"" + TimeToString(opened_at, TIME_DATE|TIME_MINUTES|TIME_SECONDS) + "\"";
+      // Format opened_at as ISO-8601: "YYYY-MM-DDTHH:MM:SSZ"
+      string dt = TimeToString(opened_at, TIME_DATE|TIME_MINUTES|TIME_SECONDS);
+      // dt = "2026.11.01 14:00:58" → replace dots with dashes, space with T, add Z
+      StringReplace(dt, ".", "-");
+      StringReplace(dt, " ", "T");
+      entry += ",\"opened_at\":\"" + dt + "Z\"";
       entry += "}";
 
       if(StringLen(positions_json) > 0) positions_json += ",";
