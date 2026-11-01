@@ -234,54 +234,45 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
   const [quotePanelOpen, setQuotePanelOpen] = useState(false);
   const [positionsPanelOpen, setPositionsPanelOpen] = useState(false);
 
-  // ── Filled position lines ─────────────────────────────────────────────────
-  interface FilledPositionLine {
+  // ── Live MT5 positions ────────────────────────────────────────────────────
+  interface LivePosition {
     id: string;
-    fill_price: number;
+    mt5_ticket: number;
+    symbol: string;
     order_side: "buy" | "sell";
     volume: string;
-    mt5_deal_ticket?: number;
-    filled_at?: string;
+    open_price: number;
+    current_price: number;
+    floating_pl: number;
+    stop_loss?: number | null;
+    take_profit?: number | null;
+    account_type: string;
+    is_open: boolean;
+    opened_at: string;
+    closed_at?: string | null;
   }
-  const [positionLines, setPositionLines] = useState<FilledPositionLine[]>([]);
+  const [positionLines, setPositionLines] = useState<LivePosition[]>([]);
   const positionLinesFetchRef = useRef<number>(0);
 
   useEffect(() => {
     const deviceId = mt5Device?.id;
     if (!deviceId) { setPositionLines([]); return; }
 
-    const brokerSym = selectedSymbol.startsWith("frx") || selectedSymbol.startsWith("cry")
-      ? selectedSymbol.slice(3)
-      : selectedSymbol.startsWith("OTC_")
-        ? selectedSymbol.slice(4)
-        : selectedSymbol;
-
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch(`/api/mt5/devices/${deviceId}/trade-orders?limit=200`, { cache: "no-store" });
+        const res = await fetch(`/api/mt5/devices/${deviceId}/positions`, { cache: "no-store" });
         if (!res.ok || !alive) return;
-        const data = (await res.json()) as { orders: Array<{ id: string; broker_symbol: string; order_side: string; status: string; fill_price?: number; volume: string; mt5_deal_ticket?: number; filled_at?: string }> };
+        const data = (await res.json()) as { positions: LivePosition[] };
         if (!alive) return;
-        const lines: FilledPositionLine[] = (data.orders ?? [])
-          .filter((o) => o.status === "filled" && o.broker_symbol === brokerSym && typeof o.fill_price === "number" && o.fill_price > 0)
-          .map((o) => ({
-            id: o.id,
-            fill_price: o.fill_price as number,
-            order_side: o.order_side as "buy" | "sell",
-            volume: o.volume,
-            mt5_deal_ticket: o.mt5_deal_ticket,
-            filled_at: o.filled_at,
-          }));
-        setPositionLines(lines);
+        setPositionLines(data.positions ?? []);
       } catch { /* non-critical */ }
     };
 
     void load();
-    // Re-poll every 15s so new fills appear without a page reload
-    const interval = window.setInterval(() => void load(), 15_000);
+    const interval = window.setInterval(() => void load(), 3_000);
     return () => { alive = false; clearInterval(interval); };
-  }, [selectedSymbol, mt5Device?.id]);
+  }, [mt5Device?.id, positionLinesFetchRef.current]);
   const [timeframe, setTimeframe] = useState<number>(900);
   const [chartViewCount, setChartViewCount] = useState<number>(VIEW_LIMIT);
   const [chartViewOffset, setChartViewOffset] = useState<number>(0);
@@ -1018,13 +1009,13 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
               </text>
               {/* ── Position entry lines ─────────────────────────────── */}
               {positionLines.map((pos) => {
-                const y = chart.yFor(pos.fill_price);
+                const y = chart.yFor(pos.open_price);
                 if (y < chart.top || y > chart.height - chart.bottom) return null;
                 const isBuy = pos.order_side === "buy";
                 const lineClass = isBuy ? styles.positionLineBuy : styles.positionLineSell;
                 const tagClass  = isBuy ? styles.positionTagBuy  : styles.positionTagSell;
                 const txtClass  = isBuy ? styles.positionTextBuy : styles.positionTextSell;
-                const label = formatPrice(pos.fill_price, selectedSymbol, activeInstrument?.pipSize);
+                const label = formatPrice(pos.open_price, selectedSymbol, activeInstrument?.pipSize);
                 const sideLabel = isBuy ? "B" : "S";
                 return (
                   <g key={pos.id}>
@@ -1147,11 +1138,19 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
 // ---------------------------------------------------------------------------
 interface LivePositionEntry {
   id: string;
-  fill_price: number;
+  mt5_ticket: number;
+  symbol: string;
   order_side: "buy" | "sell";
   volume: string;
-  mt5_deal_ticket?: number;
-  filled_at?: string;
+  open_price: number;
+  current_price: number;
+  floating_pl: number;
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  account_type: string;
+  is_open: boolean;
+  opened_at: string;
+  closed_at?: string | null;
 }
 
 function LivePositionsPanel({
@@ -1168,29 +1167,11 @@ function LivePositionsPanel({
 }) {
   const [closingId, setClosingId] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
-  const pipVal = pipSize && pipSize > 0 ? pipSize : 0.0001;
 
-  const currentBid = liveQuote?.bid ?? liveQuote?.price;
-  const currentAsk = liveQuote?.ask ?? liveQuote?.price;
   const quoteFresh = liveQuote != null && Date.now() - liveQuote.epoch * 1000 < 60_000;
 
   const brokerSym = symbol.startsWith("frx") || symbol.startsWith("cry")
     ? symbol.slice(3) : symbol.startsWith("OTC_") ? symbol.slice(4) : symbol;
-
-  // Dollar P&L: for forex priceDiff × volume × 100,000 (standard lot)
-  // For crypto (cry prefix) or if pipSize >= 1: priceDiff × volume
-  const isCrypto = symbol.startsWith("cry") || (pipSize !== undefined && pipSize >= 1);
-  const contractSize = isCrypto ? 1 : 100_000;
-
-  function calcPnl(pos: LivePositionEntry) {
-    const current = pos.order_side === "buy" ? currentBid : currentAsk;
-    if (!current) return null;
-    const vol = parseFloat(pos.volume);
-    if (!Number.isFinite(vol) || vol <= 0) return null;
-    const diff = pos.order_side === "buy" ? current - pos.fill_price : pos.fill_price - current;
-    const dollars = diff * vol * contractSize;
-    return { dollars, current };
-  }
 
   function fmtP(v: number) {
     const dec = pipSize && pipSize > 0 && pipSize < 1
@@ -1205,9 +1186,9 @@ function LivePositionsPanel({
   }
 
   async function handleClose(pos: LivePositionEntry) {
-    if (!deviceId || !pos.mt5_deal_ticket) return;
+    if (!deviceId || !pos.mt5_ticket) return;
     if (accountType === "real") {
-      if (!window.confirm(`⚠ REAL ACCOUNT — Close #${pos.mt5_deal_ticket} (${pos.order_side} ${pos.volume} lots)?`)) return;
+      if (!window.confirm(`⚠ REAL ACCOUNT — Close #${pos.mt5_ticket} (${pos.order_side} ${pos.volume} lots)?`)) return;
     }
     setClosingId(pos.id);
     setCloseError(null);
@@ -1217,7 +1198,7 @@ function LivePositionsPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           command_type: "close",
-          mt5_position_ticket: pos.mt5_deal_ticket,
+          mt5_position_ticket: pos.mt5_ticket,
           account_type: accountType ?? "demo",
           idempotency_key: `close-${pos.id}-${Date.now()}`,
           expires_in_seconds: 60,
@@ -1233,10 +1214,7 @@ function LivePositionsPanel({
     finally { setClosingId(null); }
   }
 
-  const totalDollars = positions.reduce((sum, p) => {
-    const r = calcPnl(p);
-    return sum + (r?.dollars ?? 0);
-  }, 0);
+  const totalDollars = positions.reduce((sum, p) => sum + p.floating_pl, 0);
 
   return (
     <div className={styles.positionsOverlay} role="dialog" aria-label="Open positions">
@@ -1251,12 +1229,11 @@ function LivePositionsPanel({
       </div>
 
       {positions.length === 0
-        ? <p className={styles.positionsEmpty}>No filled positions for {brokerSym} yet.</p>
+        ? <p className={styles.positionsEmpty}>No open positions for {brokerSym} yet.</p>
         : (
           <div className={styles.positionsList}>
             {positions.map((pos) => {
-              const pnl = calcPnl(pos);
-              const isProfit = pnl ? pnl.dollars >= 0 : null;
+              const isProfit = pos.floating_pl >= 0;
               return (
                 <div key={pos.id} className={styles.positionRow}>
                   <span className={pos.order_side === "buy" ? styles.posBuyBadge : styles.posSellBadge}>
@@ -1264,22 +1241,24 @@ function LivePositionsPanel({
                   </span>
                   <div className={styles.positionMeta}>
                     <strong>{pos.volume} lot{parseFloat(pos.volume) !== 1 ? "s" : ""}</strong>
-                    <span className={styles.posEntryPrice}>@ {fmtP(pos.fill_price)}</span>
+                    <span className={styles.posEntryPrice}>@ {fmtP(pos.open_price)}</span>
+                    {pos.stop_loss != null && pos.stop_loss > 0 && (
+                      <span className={styles.posSlTp}>SL: {fmtP(pos.stop_loss)}</span>
+                    )}
+                    {pos.take_profit != null && pos.take_profit > 0 && (
+                      <span className={styles.posSlTp}>TP: {fmtP(pos.take_profit)}</span>
+                    )}
                   </div>
                   <div className={styles.positionPnl}>
-                    {pnl
-                      ? <>
-                          <span className={styles.posCurrentPrice}>{fmtP(pnl.current)}</span>
-                          <span className={isProfit ? styles.posProfit : styles.posLoss}>
-                            {isProfit ? "Profit" : "Loss"} {fmtDollar(pnl.dollars)}
-                          </span>
-                        </>
-                      : <span className={styles.posWaiting}>—</span>}
+                    <span className={styles.posCurrentPrice}>{fmtP(pos.current_price)}</span>
+                    <span className={isProfit ? styles.posProfit : styles.posLoss}>
+                      {isProfit ? "Profit" : "Loss"} {fmtDollar(pos.floating_pl)}
+                    </span>
                   </div>
                   <button type="button" className={styles.posCloseBtn}
-                    disabled={closingId === pos.id || !deviceId || !pos.mt5_deal_ticket}
+                    disabled={closingId === pos.id || !deviceId || !pos.mt5_ticket}
                     onClick={() => void handleClose(pos)}
-                    title={!pos.mt5_deal_ticket ? "No ticket — close in MT5" : "Close position"}>
+                    title={!pos.mt5_ticket ? "No ticket — close in MT5" : "Close position"}>
                     {closingId === pos.id ? "…" : "✕"}
                   </button>
                 </div>

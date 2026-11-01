@@ -380,6 +380,7 @@
 .positionMeta { display: grid; gap: 2px; min-width: 0; }
 .positionMeta strong { font-size: 10px; color: var(--fx-ink); }
 .posEntryPrice { color: var(--fx-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.posSlTp { color: var(--fx-muted); font-size: 8px; font-variant-numeric: tabular-nums; opacity: .8; }
 .positionPnl { display: grid; gap: 2px; text-align: right; min-width: 0; }
 .posCurrentPrice { color: var(--fx-ink); font-size: 10px; font-variant-numeric: tabular-nums; }
 .posProfit { color: #22c985; font-size: 9px; font-weight: 750; }
