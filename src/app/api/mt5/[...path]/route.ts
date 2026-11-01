@@ -16,7 +16,9 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
 
   const { path } = await context.params;
   const routePath = path.join("/");
+  const queryString = request.nextUrl.search; // e.g. "?lease_seconds=20" or ""
   const UUID = "[0-9a-f-]{36}";
+  const ACK  = "submitted|accepted|placed|rejected|filled|reconciled|cancelled-pending";
   const allowed =
     // ── Pairing / device management ─────────────────────────────────────────
     (method === "GET"    && routePath === "devices") ||
@@ -34,7 +36,17 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
     // ── Position commands (Phase 2: close / modify) ───────────────────────
     (method === "POST"   && new RegExp(`^devices/${UUID}/position-commands$`, "i").test(routePath)) ||
     (method === "GET"    && new RegExp(`^devices/${UUID}/position-commands/${UUID}$`, "i").test(routePath)) ||
-    (method === "POST"   && new RegExp(`^devices/${UUID}/position-commands/${UUID}/cancel$`, "i").test(routePath));
+    (method === "POST"   && new RegExp(`^devices/${UUID}/position-commands/${UUID}/cancel$`, "i").test(routePath)) ||
+    // ── EA-side polling and ack endpoints ────────────────────────────────────
+    // Market-selection commands
+    (method === "GET"    && routePath === "ea/commands/next") ||
+    (method === "POST"   && new RegExp(`^ea/commands/${UUID}/ack$`, "i").test(routePath)) ||
+    // Trade order polling and ack
+    (method === "GET"    && routePath === "ea/trade-orders/next") ||
+    (method === "POST"   && new RegExp(`^ea/trade-orders/${UUID}/ack/(${ACK})$`, "i").test(routePath)) ||
+    // Position command polling and ack
+    (method === "GET"    && routePath === "ea/position-commands/next") ||
+    (method === "POST"   && new RegExp(`^ea/position-commands/${UUID}/ack/(submitted|done|rejected)$`, "i").test(routePath));
   if (!allowed) return NextResponse.json({ error: "not_found" }, { status: 404, headers });
 
   let body: string | undefined;
@@ -51,7 +63,7 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
   }
 
   try {
-    const upstream = await fetch(`${session.backendUrl}/mt5/${routePath}`, {
+    const upstream = await fetch(`${session.backendUrl}/mt5/${routePath}${queryString}`, {
       method,
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
