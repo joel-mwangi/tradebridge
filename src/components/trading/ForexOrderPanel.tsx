@@ -132,7 +132,12 @@ function isPosTerminal(s: PositionCommandStatus): boolean {
 }
 
 function providerToBrokerSymbol(sym: string): string {
-  if (sym.startsWith("frx")) return sym.slice(3);
+  // Strip Deriv provider prefixes to get the broker-side symbol:
+  //   frx  → forex   (frxEURUSD  → EURUSD)
+  //   cry  → crypto  (cryBTCUSD  → BTCUSD)
+  //   OTC_ → stocks  (OTC_AAPL   → AAPL)
+  if (sym.startsWith("frx") || sym.startsWith("cry")) return sym.slice(3);
+  if (sym.startsWith("OTC_")) return sym.slice(4);
   return sym;
 }
 
