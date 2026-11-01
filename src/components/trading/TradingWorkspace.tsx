@@ -1106,17 +1106,24 @@ export default function TradingWorkspace() {
                 type="button"
                 className={styles.confirmModalCancelBtn}
                 onClick={handleCancelRealSwitch}
+                disabled={liveConsentBusy}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className={styles.confirmModalConfirmBtn}
+                disabled={liveConsentBusy}
                 onClick={handleConfirmRealSwitch}
               >
-                Confirm Switch
+                {liveConsentBusy ? "Saving…" : "Confirm Switch"}
               </button>
             </div>
+            {liveConsentMessage && (
+              <p style={{ margin: "8px 0 0", color: "#f4bb55", fontSize: "11px", lineHeight: 1.5 }}>
+                {liveConsentMessage}
+              </p>
+            )}
           </div>
         </div>
       )}
