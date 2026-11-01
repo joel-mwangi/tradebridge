@@ -243,6 +243,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     filled_at?: string;
   }
   const [positionLines, setPositionLines] = useState<FilledPositionLine[]>([]);
+  const positionLinesFetchRef = useRef<number>(0);
 
   useEffect(() => {
     const deviceId = mt5Device?.id;
@@ -1103,6 +1104,18 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
         <strong>Analysis, not a trading signal.</strong> Levels and pattern labels are deterministic interpretations of the received OHLC bars, not predictions. No orders are placed. Verify prices against your Deriv MT5 terminal before using this page for market decisions.
       </footer>
         </div>
+        <LivePositionsPanel
+          positions={positionLines}
+          liveQuote={liveQuote ?? null}
+          pipSize={activeInstrument?.pipSize}
+          symbol={selectedSymbol}
+          deviceId={mt5Device?.id}
+          accountType={accountType}
+          onPositionClosed={() => {
+            // re-fetch position lines after a close
+            positionLinesFetchRef.current = Date.now();
+          }}
+        />
         <ForexOrderPanel
           symbol={selectedSymbol}
           instrumentName={activePair?.name ?? selectedSymbol}
@@ -1116,6 +1129,151 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
         />
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LivePositionsPanel — real-time open position P&L
+// ---------------------------------------------------------------------------
+interface LivePositionEntry {
+  id: string;
+  fill_price: number;
+  order_side: "buy" | "sell";
+  volume: string;
+  mt5_deal_ticket?: number;
+  filled_at?: string;
+}
+
+function LivePositionsPanel({
+  positions, liveQuote, pipSize, symbol, deviceId, accountType, onPositionClosed,
+}: {
+  positions: LivePositionEntry[];
+  liveQuote: { price: number; bid?: number; ask?: number; epoch: number } | null;
+  pipSize?: number;
+  symbol: string;
+  deviceId?: string;
+  accountType?: "demo" | "real";
+  onPositionClosed: () => void;
+}) {
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const pipVal = pipSize && pipSize > 0 ? pipSize : 0.0001;
+
+  const currentBid = liveQuote?.bid ?? liveQuote?.price;
+  const currentAsk = liveQuote?.ask ?? liveQuote?.price;
+  const quoteFresh = liveQuote != null && Date.now() - liveQuote.epoch * 1000 < 60_000;
+
+  const brokerSym = symbol.startsWith("frx") || symbol.startsWith("cry")
+    ? symbol.slice(3) : symbol.startsWith("OTC_") ? symbol.slice(4) : symbol;
+
+  function calcPnl(pos: LivePositionEntry) {
+    const current = pos.order_side === "buy" ? currentBid : currentAsk;
+    if (!current) return null;
+    const vol = parseFloat(pos.volume);
+    if (!Number.isFinite(vol) || vol <= 0) return null;
+    const diff = pos.order_side === "buy" ? current - pos.fill_price : pos.fill_price - current;
+    return { pips: diff / pipVal, current };
+  }
+
+  function fmtP(v: number) {
+    const dec = pipSize && pipSize > 0 && pipSize < 1
+      ? Math.min(8, String(pipSize).replace(/.*\./, "").length)
+      : symbol.startsWith("cry") ? 2 : 5;
+    return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: dec }).format(v);
+  }
+
+  async function handleClose(pos: LivePositionEntry) {
+    if (!deviceId || !pos.mt5_deal_ticket) return;
+    if (accountType === "real") {
+      if (!window.confirm(`⚠ REAL ACCOUNT — Close #${pos.mt5_deal_ticket} (${pos.order_side} ${pos.volume} lots)?`)) return;
+    }
+    setClosingId(pos.id);
+    setCloseError(null);
+    try {
+      const res = await fetch(`/api/mt5/devices/${deviceId}/position-commands`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command_type: "close",
+          mt5_position_ticket: pos.mt5_deal_ticket,
+          account_type: accountType ?? "demo",
+          idempotency_key: `close-${pos.id}-${Date.now()}`,
+          expires_in_seconds: 60,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { detail?: string };
+        setCloseError(d.detail ?? `HTTP ${res.status}`);
+      } else {
+        onPositionClosed();
+      }
+    } catch { setCloseError("Network error"); }
+    finally { setClosingId(null); }
+  }
+
+  const totalPips = positions.reduce((sum, p) => {
+    const r = calcPnl(p);
+    return sum + (r?.pips ?? 0);
+  }, 0);
+
+  return (
+    <aside className={styles.positionsPanel} aria-label="Open positions P&L">
+      <div className={styles.positionsPanelHeader}>
+        <span className={styles.sectionEyebrow}>OPEN POSITIONS · {brokerSym}</span>
+        <span className={quoteFresh ? styles.posLiveDot : styles.posStaleDot}>
+          <i /> {quoteFresh ? "LIVE" : "STALE"}
+        </span>
+      </div>
+
+      {positions.length === 0
+        ? <p className={styles.positionsEmpty}>No filled positions yet.</p>
+        : (
+          <div className={styles.positionsList}>
+            {positions.map((pos) => {
+              const pnl = calcPnl(pos);
+              const up = pnl ? pnl.pips >= 0 : null;
+              return (
+                <div key={pos.id} className={styles.positionRow}>
+                  <span className={pos.order_side === "buy" ? styles.posBuyBadge : styles.posSellBadge}>
+                    {pos.order_side === "buy" ? "▲" : "▼"}
+                  </span>
+                  <div className={styles.positionMeta}>
+                    <strong>{pos.volume} lot{parseFloat(pos.volume) !== 1 ? "s" : ""}</strong>
+                    <span className={styles.posEntryPrice}>@ {fmtP(pos.fill_price)}</span>
+                  </div>
+                  <div className={styles.positionPnl}>
+                    {pnl
+                      ? <>
+                          <span className={styles.posCurrentPrice}>{fmtP(pnl.current)}</span>
+                          <span className={up ? styles.posProfit : styles.posLoss}>
+                            {pnl.pips >= 0 ? "+" : ""}{pnl.pips.toFixed(1)} pips
+                          </span>
+                        </>
+                      : <span className={styles.posWaiting}>—</span>}
+                  </div>
+                  <button type="button" className={styles.posCloseBtn}
+                    disabled={closingId === pos.id || !deviceId || !pos.mt5_deal_ticket}
+                    onClick={() => void handleClose(pos)}
+                    title={!pos.mt5_deal_ticket ? "No ticket — close in MT5" : "Close position"}>
+                    {closingId === pos.id ? "…" : "✕"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      {positions.length > 0 && (
+        <div className={styles.positionsTotals}>
+          <span>Total</span>
+          <span className={totalPips >= 0 ? styles.posProfit : styles.posLoss}>
+            {totalPips >= 0 ? "+" : ""}{totalPips.toFixed(1)} pips
+          </span>
+        </div>
+      )}
+
+      {closeError && <p className={styles.posCloseError}>{closeError}</p>}
+    </aside>
   );
 }
 
