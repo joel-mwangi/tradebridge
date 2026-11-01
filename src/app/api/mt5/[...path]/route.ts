@@ -46,7 +46,11 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
     (method === "POST"   && new RegExp(`^ea/trade-orders/${UUID}/ack/(${ACK})$`, "i").test(routePath)) ||
     // Position command polling and ack
     (method === "GET"    && routePath === "ea/position-commands/next") ||
-    (method === "POST"   && new RegExp(`^ea/position-commands/${UUID}/ack/(submitted|done|rejected)$`, "i").test(routePath));
+    (method === "POST"   && new RegExp(`^ea/position-commands/${UUID}/ack/(submitted|done|rejected)$`, "i").test(routePath)) ||
+    // ── Phase 3: position sync (EA push + UI poll) ────────────────────
+    (method === "POST"   && routePath === "ea/positions/sync") ||
+    (method === "POST"   && new RegExp(`^ea/positions/\\d+/closed$`).test(routePath)) ||
+    (method === "GET"    && new RegExp(`^devices/${UUID}/positions$`, "i").test(routePath));
   if (!allowed) return NextResponse.json({ error: "not_found" }, { status: 404, headers });
 
   let body: string | undefined;
