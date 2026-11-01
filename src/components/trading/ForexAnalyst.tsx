@@ -242,26 +242,24 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     filled_at?: string;
   }
   const [positionLines, setPositionLines] = useState<FilledPositionLine[]>([]);
-  const positionLinesFetchKey = useRef<string>("");
 
   useEffect(() => {
     const deviceId = mt5Device?.id;
     if (!deviceId) { setPositionLines([]); return; }
-    // Strip provider prefix to compare against broker_symbol stored in the DB
+
     const brokerSym = selectedSymbol.startsWith("frx") || selectedSymbol.startsWith("cry")
       ? selectedSymbol.slice(3)
       : selectedSymbol.startsWith("OTC_")
         ? selectedSymbol.slice(4)
         : selectedSymbol;
-    const fetchKey = `${deviceId}:${brokerSym}`;
-    if (positionLinesFetchKey.current === fetchKey) return;
-    positionLinesFetchKey.current = fetchKey;
 
-    void (async () => {
+    let alive = true;
+    const load = async () => {
       try {
         const res = await fetch(`/api/mt5/devices/${deviceId}/trade-orders?limit=200`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { orders: Array<{ id: string; broker_symbol: string; order_side: string; status: string; fill_price?: number; fill_volume?: string; volume: string; mt5_deal_ticket?: number; filled_at?: string }> };
+        if (!res.ok || !alive) return;
+        const data = (await res.json()) as { orders: Array<{ id: string; broker_symbol: string; order_side: string; status: string; fill_price?: number; volume: string; mt5_deal_ticket?: number; filled_at?: string }> };
+        if (!alive) return;
         const lines: FilledPositionLine[] = (data.orders ?? [])
           .filter((o) => o.status === "filled" && o.broker_symbol === brokerSym && typeof o.fill_price === "number" && o.fill_price > 0)
           .map((o) => ({
@@ -274,7 +272,12 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
           }));
         setPositionLines(lines);
       } catch { /* non-critical */ }
-    })();
+    };
+
+    void load();
+    // Re-poll every 15s so new fills appear without a page reload
+    const interval = window.setInterval(() => void load(), 15_000);
+    return () => { alive = false; clearInterval(interval); };
   }, [selectedSymbol, mt5Device?.id]);
   const [timeframe, setTimeframe] = useState<number>(900);
   const [chartViewCount, setChartViewCount] = useState<number>(VIEW_LIMIT);
