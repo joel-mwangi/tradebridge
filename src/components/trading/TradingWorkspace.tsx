@@ -87,6 +87,21 @@ function accountErrorMessage(error?: string) {
   }
 }
 
+function liveConsentErrorMessage(error?: string): string {
+  switch (error) {
+    case "not_connected":        return "You need to connect your Deriv account first before enabling real trading.";
+    case "unauthorized":         return "Your session has expired. Please sign in again.";
+    case "unverified":           return "Your email is not verified. Please verify it before switching to a real account.";
+    case "owner_mismatch":       return "Session mismatch — please reconnect your Deriv account.";
+    case "account_not_linked":   return "This real account is not linked to your profile. Connect it via the accounts panel.";
+    case "account_linking_unavailable": return "Account verification is temporarily unavailable. Try again shortly.";
+    case "real_execution_gateway_unavailable": return "Real trading is not available on this deployment. Contact support.";
+    case "live_consent_write_failed":
+    case "live_consent_write_unavailable": return "Could not save consent. Try again in a moment.";
+    default:                     return error ?? "Could not enable real trading. Try again.";
+  }
+}
+
 function formatMoney(value: number | null, currency: string) {
   if (value === null || !Number.isFinite(value)) return "—";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value) + (currency ? " " + currency : "");
@@ -396,7 +411,7 @@ export default function TradingWorkspace() {
       });
       const data = await response.json() as LiveConsentResponse;
       if (!response.ok || data.enabled !== true) {
-        setLiveConsentMessage(data.error || "The server could not enable Real trading for this account.");
+        setLiveConsentMessage(liveConsentErrorMessage(data.error ?? (response.ok ? "unknown" : undefined)));
         return;
       }
       applyAccountChange(targetId);
