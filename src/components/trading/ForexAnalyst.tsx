@@ -231,6 +231,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
   const [instruments, setInstruments] = useState<AnalystInstrument[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("all");
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
+  const [quotePanelOpen, setQuotePanelOpen] = useState(false);
 
   // ── Filled position lines ─────────────────────────────────────────────────
   interface FilledPositionLine {
@@ -781,49 +782,64 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
             <span className={styles.sectionEyebrow}>LIVE MARKET QUOTE</span>
             <h2>Bid / Ask / Spread</h2>
           </div>
-          <span className={liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined ? styles.quoteFresh : styles.quoteUnavailable}>
-            {liveQuote
-              ? calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
-                ? "Live Bid / Ask available"
-                : "Tick received · Bid / Ask unavailable"
-              : "Waiting for quote"}
-          </span>
-        </div>
-        <div className={styles.marketQuoteGrid}>
-          <div className={styles.marketQuoteCell}>
-            <span>Last quote</span>
-            <strong>{liveQuote ? formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize) : "—"}</strong>
-            <small>{liveQuote ? "Provider tick · " + formatTime(liveQuote.epoch) : "No live tick received"}</small>
-          </div>
-          <div className={styles.marketQuoteCell}>
-            <span>Bid · Sell price</span>
-            <strong className={liveQuote?.bid !== undefined ? styles.bidValue : styles.quoteUnavailableValue}>
-              {liveQuote?.bid !== undefined ? formatPrice(liveQuote.bid, selectedSymbol, activeInstrument?.pipSize) : "Unavailable"}
-            </strong>
-            <small>{liveQuote?.bid !== undefined ? "Provider-supplied Bid" : "Not present in this tick"}</small>
-          </div>
-          <div className={styles.marketQuoteCell}>
-            <span>Ask · Buy price</span>
-            <strong className={liveQuote?.ask !== undefined ? styles.askValue : styles.quoteUnavailableValue}>
-              {liveQuote?.ask !== undefined ? formatPrice(liveQuote.ask, selectedSymbol, activeInstrument?.pipSize) : "Unavailable"}
-            </strong>
-            <small>{liveQuote?.ask !== undefined ? "Provider-supplied Ask" : "Not present in this tick"}</small>
-          </div>
-          <div className={styles.marketQuoteCell}>
-            <span>Spread</span>
-            <strong className={liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined ? styles.spreadValue : styles.quoteUnavailableValue}>
-              {liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
-                ? formatPrice(calculateQuoteSpread(liveQuote.bid, liveQuote.ask)!, selectedSymbol, activeInstrument?.pipSize)
-                : "Unavailable"}
-            </strong>
-            <small>{liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
-              ? "Ask − Bid · price units"
-              : "Requires valid Bid and Ask"}</small>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className={liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined ? styles.quoteFresh : styles.quoteUnavailable}>
+              {liveQuote
+                ? calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
+                  ? "Live Bid / Ask available"
+                  : "Tick received · Bid / Ask unavailable"
+                : "Waiting for quote"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setQuotePanelOpen((v) => !v)}
+              aria-expanded={quotePanelOpen}
+              aria-label={quotePanelOpen ? "Hide quote details" : "Show quote details"}
+              className={styles.quotePanelToggle}
+            >
+              {quotePanelOpen ? "−" : "+"}
+            </button>
           </div>
         </div>
-        <p className={styles.quoteDisclosure}>
-          Bid, Ask and spread are shown only when supplied by the provider in the same tick and the prices are valid. Spread is displayed in price units; it is not converted to pips because the feed&apos;s pip-size semantics have not yet been independently verified. Buy/Sell order execution is not provided by this panel.
-        </p>
+        {quotePanelOpen && (
+          <>
+            <div className={styles.marketQuoteGrid}>
+              <div className={styles.marketQuoteCell}>
+                <span>Last quote</span>
+                <strong>{liveQuote ? formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize) : "—"}</strong>
+                <small>{liveQuote ? "Provider tick · " + formatTime(liveQuote.epoch) : "No live tick received"}</small>
+              </div>
+              <div className={styles.marketQuoteCell}>
+                <span>Bid · Sell price</span>
+                <strong className={liveQuote?.bid !== undefined ? styles.bidValue : styles.quoteUnavailableValue}>
+                  {liveQuote?.bid !== undefined ? formatPrice(liveQuote.bid, selectedSymbol, activeInstrument?.pipSize) : "Unavailable"}
+                </strong>
+                <small>{liveQuote?.bid !== undefined ? "Provider-supplied Bid" : "Not present in this tick"}</small>
+              </div>
+              <div className={styles.marketQuoteCell}>
+                <span>Ask · Buy price</span>
+                <strong className={liveQuote?.ask !== undefined ? styles.askValue : styles.quoteUnavailableValue}>
+                  {liveQuote?.ask !== undefined ? formatPrice(liveQuote.ask, selectedSymbol, activeInstrument?.pipSize) : "Unavailable"}
+                </strong>
+                <small>{liveQuote?.ask !== undefined ? "Provider-supplied Ask" : "Not present in this tick"}</small>
+              </div>
+              <div className={styles.marketQuoteCell}>
+                <span>Spread</span>
+                <strong className={liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined ? styles.spreadValue : styles.quoteUnavailableValue}>
+                  {liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
+                    ? formatPrice(calculateQuoteSpread(liveQuote.bid, liveQuote.ask)!, selectedSymbol, activeInstrument?.pipSize)
+                    : "Unavailable"}
+                </strong>
+                <small>{liveQuote && calculateQuoteSpread(liveQuote.bid, liveQuote.ask) !== undefined
+                  ? "Ask − Bid · price units"
+                  : "Requires valid Bid and Ask"}</small>
+              </div>
+            </div>
+            <p className={styles.quoteDisclosure}>
+              Bid, Ask and spread are shown only when supplied by the provider in the same tick and the prices are valid. Spread is displayed in price units; it is not converted to pips because the feed&apos;s pip-size semantics have not yet been independently verified. Buy/Sell order execution is not provided by this panel.
+            </p>
+          </>
+        )}
       </section>
 
       <div className={styles.analysisLayout}>

@@ -321,3 +321,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ── Quote panel toggle button ──────────────────────────────────────────── */
+.quotePanelToggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  border: 1px solid var(--fx-border); background: var(--fx-surface);
+  color: var(--fx-ink); font-size: 16px; font-weight: 400; line-height: 1;
+  cursor: pointer; transition: background 0.15s;
+}
+.quotePanelToggle:hover { background: var(--fx-panel); border-color: var(--teal, #10b981); color: var(--teal, #10b981); }
