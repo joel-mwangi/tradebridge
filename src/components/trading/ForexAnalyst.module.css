@@ -78,6 +78,12 @@
 .lastPriceLine { stroke: var(--teal, #10b981); stroke-width: 1; stroke-dasharray: 5 4; }
 .lastPriceTag { fill: var(--teal, #10b981); }
 .lastPriceText { fill: #051b14; font-size: 9px; font-weight: 900; }
+.positionLineBuy  { stroke: #22c985; stroke-width: 1.5; stroke-dasharray: 6 3; opacity: .9; }
+.positionLineSell { stroke: #ff7b87; stroke-width: 1.5; stroke-dasharray: 6 3; opacity: .9; }
+.positionTagBuy   { fill: #22c985; }
+.positionTagSell  { fill: #ff7b87; }
+.positionTextBuy  { fill: #041a0f; font-size: 8px; font-weight: 900; }
+.positionTextSell { fill: #1a0508; font-size: 8px; font-weight: 900; }
 .chartFooter { display: flex; justify-content: space-between; gap: 10px; padding: 11px 16px 13px; border-top: 1px solid var(--fx-line); color: var(--fx-muted); font-size: 9px; }
 .emptyChart { display: grid; justify-items: center; gap: 7px; padding: 48px 18px; text-align: center; color: var(--fx-muted); }
 .emptyIcon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--fx-line); border-radius: 14px; color: var(--teal, #10b981); font-size: 23px; }

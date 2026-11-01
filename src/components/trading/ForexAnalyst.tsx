@@ -231,6 +231,51 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
   const [instruments, setInstruments] = useState<AnalystInstrument[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("all");
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
+
+  // ── Filled position lines ─────────────────────────────────────────────────
+  interface FilledPositionLine {
+    id: string;
+    fill_price: number;
+    order_side: "buy" | "sell";
+    volume: string;
+    mt5_deal_ticket?: number;
+    filled_at?: string;
+  }
+  const [positionLines, setPositionLines] = useState<FilledPositionLine[]>([]);
+  const positionLinesFetchKey = useRef<string>("");
+
+  useEffect(() => {
+    const deviceId = mt5Device?.id;
+    if (!deviceId) { setPositionLines([]); return; }
+    // Strip provider prefix to compare against broker_symbol stored in the DB
+    const brokerSym = selectedSymbol.startsWith("frx") || selectedSymbol.startsWith("cry")
+      ? selectedSymbol.slice(3)
+      : selectedSymbol.startsWith("OTC_")
+        ? selectedSymbol.slice(4)
+        : selectedSymbol;
+    const fetchKey = `${deviceId}:${brokerSym}`;
+    if (positionLinesFetchKey.current === fetchKey) return;
+    positionLinesFetchKey.current = fetchKey;
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/mt5/devices/${deviceId}/trade-orders?limit=200`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { orders: Array<{ id: string; broker_symbol: string; order_side: string; status: string; fill_price?: number; fill_volume?: string; volume: string; mt5_deal_ticket?: number; filled_at?: string }> };
+        const lines: FilledPositionLine[] = (data.orders ?? [])
+          .filter((o) => o.status === "filled" && o.broker_symbol === brokerSym && typeof o.fill_price === "number" && o.fill_price > 0)
+          .map((o) => ({
+            id: o.id,
+            fill_price: o.fill_price as number,
+            order_side: o.order_side as "buy" | "sell",
+            volume: o.volume,
+            mt5_deal_ticket: o.mt5_deal_ticket,
+            filled_at: o.filled_at,
+          }));
+        setPositionLines(lines);
+      } catch { /* non-critical */ }
+    })();
+  }, [selectedSymbol, mt5Device?.id]);
   const [timeframe, setTimeframe] = useState<number>(900);
   const [chartViewCount, setChartViewCount] = useState<number>(VIEW_LIMIT);
   const [chartViewOffset, setChartViewOffset] = useState<number>(0);
@@ -929,12 +974,32 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
               <text x={chart.width - chart.right} y={chart.height - 10} textAnchor="end" className={styles.axisLabel}>
                 {visibleCandles.length ? formatTime(visibleCandles[visibleCandles.length - 1].epoch, true) : ""}
               </text>
+              {/* ── Position entry lines ─────────────────────────────── */}
+              {positionLines.map((pos) => {
+                const y = chart.yFor(pos.fill_price);
+                if (y < chart.top || y > chart.height - chart.bottom) return null;
+                const isBuy = pos.order_side === "buy";
+                const lineClass = isBuy ? styles.positionLineBuy : styles.positionLineSell;
+                const tagClass  = isBuy ? styles.positionTagBuy  : styles.positionTagSell;
+                const txtClass  = isBuy ? styles.positionTextBuy : styles.positionTextSell;
+                const label = formatPrice(pos.fill_price, selectedSymbol, activeInstrument?.pipSize);
+                const sideLabel = isBuy ? "B" : "S";
+                return (
+                  <g key={pos.id}>
+                    <line x1={chart.left} y1={y} x2={chart.width - chart.right} y2={y} className={lineClass} />
+                    <rect x={chart.left - 18} y={y - 9} width={18} height={18} rx="3" className={tagClass} />
+                    <text x={chart.left - 9} y={y + 4} textAnchor="middle" className={txtClass}>{sideLabel}</text>
+                    <rect x={chart.width - chart.right + 3} y={y - 10} width={chart.right - 9} height="20" rx="4" className={tagClass} />
+                    <text x={chart.width - chart.right + (chart.right - 9) / 2 + 3} y={y + 4} textAnchor="middle" className={txtClass}>{label}</text>
+                  </g>
+                );
+              })}
+
               {liveQuote && safeViewOffset === 0 && <g>
                 <line x1={chart.left} y1={chart.yFor(liveQuote.price)} x2={chart.width - chart.right} y2={chart.yFor(liveQuote.price)} className={styles.lastPriceLine} />
                 <rect x={chart.width - chart.right + 3} y={chart.yFor(liveQuote.price) - 10} width={chart.right - 9} height="20" rx="4" className={styles.lastPriceTag} />
                 <text x={chart.width - chart.right + (chart.right - 9) / 2 + 3} y={chart.yFor(liveQuote.price) + 4} textAnchor="middle" className={styles.lastPriceText}>{formatPrice(liveQuote.price, selectedSymbol, activeInstrument?.pipSize)}</text>
-              </g>}
-            </svg>
+              </g>}            </svg>
           </div>
           </>
         ) : (
