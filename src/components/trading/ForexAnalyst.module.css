@@ -332,16 +332,35 @@
 }
 .quotePanelToggle:hover { background: var(--fx-panel); border-color: var(--teal, #10b981); color: var(--teal, #10b981); }
 
-/* ── Live Positions Panel ────────────────────────────────────────────────── */
-.positionsPanel {
-  display: grid; gap: 10px; min-width: 0;
-  padding: 14px 16px; border: 1px solid var(--fx-line); border-radius: 13px;
-  background: var(--fx-panel); color: var(--fx-ink);
+/* ── Live Positions Panel — top-right overlay ────────────────────────────── */
+.positionsToggleBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 36px; padding: 0 13px; border: 1px solid var(--fx-border);
+  border-radius: 9px; background: var(--fx-panel); color: var(--fx-ink);
+  font-size: 11px; font-weight: 800; cursor: pointer; white-space: nowrap;
+  appearance: none; -webkit-appearance: none;
 }
-.positionsPanel * { box-sizing: border-box; }
-.positionsPanelHeader {
+.positionsToggleBtn:hover { border-color: var(--teal, #10b981); color: var(--teal, #10b981); }
+.positionsOverlay {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 100;
+  width: 340px; max-height: 480px; overflow-y: auto;
+  display: grid; gap: 10px;
+  padding: 14px 16px; border: 1px solid var(--fx-border); border-radius: 13px;
+  background: var(--fx-panel); color: var(--fx-ink);
+  box-shadow: 0 8px 32px rgba(0,0,0,.45);
+}
+.positionsOverlay * { box-sizing: border-box; }
+.positionsOverlayHeader {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
+.posOverlayClose {
+  display: grid; place-items: center; width: 24px; height: 24px;
+  border: 1px solid var(--fx-border); border-radius: 6px;
+  background: var(--fx-surface); color: var(--fx-muted);
+  font-size: 10px; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+}
+.posOverlayClose:hover { color: var(--fx-ink); border-color: var(--fx-ink); }
 .posLiveDot, .posStaleDot {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 7px; border-radius: 6px; font-size: 8px; font-weight: 850; white-space: nowrap;
@@ -352,7 +371,7 @@
 .positionsEmpty { margin: 0; color: var(--fx-muted); font-size: 10px; }
 .positionsList { display: grid; gap: 6px; }
 .positionRow {
-  display: grid; grid-template-columns: 20px 1fr auto auto; gap: 8px;
+  display: grid; grid-template-columns: 18px 1fr auto auto; gap: 8px;
   align-items: center; padding: 9px 10px;
   border: 1px solid var(--fx-line); border-radius: 9px; background: var(--fx-surface);
 }
@@ -361,13 +380,13 @@
 .positionMeta { display: grid; gap: 2px; min-width: 0; }
 .positionMeta strong { font-size: 10px; color: var(--fx-ink); }
 .posEntryPrice { color: var(--fx-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
-.positionPnl { display: grid; gap: 2px; text-align: right; }
+.positionPnl { display: grid; gap: 2px; text-align: right; min-width: 0; }
 .posCurrentPrice { color: var(--fx-ink); font-size: 10px; font-variant-numeric: tabular-nums; }
-.posProfit { color: #22c985; font-size: 9px; font-weight: 750; font-variant-numeric: tabular-nums; }
-.posLoss   { color: #ff7b87; font-size: 9px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.posProfit { color: #22c985; font-size: 9px; font-weight: 750; }
+.posLoss   { color: #ff7b87; font-size: 9px; font-weight: 750; }
 .posWaiting { color: var(--fx-muted); font-size: 9px; }
 .posCloseBtn {
-  display: grid; place-items: center; width: 26px; height: 26px;
+  display: grid; place-items: center; width: 24px; height: 24px;
   border: 1px solid rgba(255,123,135,.35); border-radius: 6px;
   background: rgba(255,123,135,.10); color: #ff7b87;
   font-size: 10px; cursor: pointer; flex-shrink: 0;

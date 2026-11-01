@@ -232,6 +232,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("all");
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
   const [quotePanelOpen, setQuotePanelOpen] = useState(false);
+  const [positionsPanelOpen, setPositionsPanelOpen] = useState(false);
 
   // ── Filled position lines ─────────────────────────────────────────────────
   interface FilledPositionLine {
@@ -692,9 +693,30 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
           <h1>AI Chart Analyst</h1>
           <p>Live price action, candle recognition and automatically mapped support/resistance.</p>
         </div>
-        <button type="button" className={styles.retryButton} onClick={() => setRetryCount((count) => count + 1)}>
-          <span aria-hidden="true">↻</span> Reconnect feed
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+          <button type="button" className={styles.positionsToggleBtn}
+            onClick={() => setPositionsPanelOpen((v) => !v)}
+            aria-label={positionsPanelOpen ? "Hide open positions" : "Show open positions"}>
+            {positionsPanelOpen ? "−" : "+"} Positions
+          </button>
+          <button type="button" className={styles.retryButton} onClick={() => setRetryCount((count) => count + 1)}>
+            <span aria-hidden="true">↻</span> Reconnect feed
+          </button>
+          {positionsPanelOpen && (
+            <LivePositionsPanel
+              positions={positionLines}
+              liveQuote={liveQuote ?? null}
+              pipSize={activeInstrument?.pipSize}
+              symbol={selectedSymbol}
+              deviceId={mt5Device?.id}
+              accountType={accountType}
+              onClose={() => setPositionsPanelOpen(false)}
+              onPositionClosed={() => {
+                positionLinesFetchRef.current = Date.now();
+              }}
+            />
+          )}
+        </div>
       </header>
 
       <div className={styles.categoryBar} role="tablist" aria-label="Market categories">
@@ -1104,18 +1126,6 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
         <strong>Analysis, not a trading signal.</strong> Levels and pattern labels are deterministic interpretations of the received OHLC bars, not predictions. No orders are placed. Verify prices against your Deriv MT5 terminal before using this page for market decisions.
       </footer>
         </div>
-        <LivePositionsPanel
-          positions={positionLines}
-          liveQuote={liveQuote ?? null}
-          pipSize={activeInstrument?.pipSize}
-          symbol={selectedSymbol}
-          deviceId={mt5Device?.id}
-          accountType={accountType}
-          onPositionClosed={() => {
-            // re-fetch position lines after a close
-            positionLinesFetchRef.current = Date.now();
-          }}
-        />
         <ForexOrderPanel
           symbol={selectedSymbol}
           instrumentName={activePair?.name ?? selectedSymbol}
@@ -1145,7 +1155,7 @@ interface LivePositionEntry {
 }
 
 function LivePositionsPanel({
-  positions, liveQuote, pipSize, symbol, deviceId, accountType, onPositionClosed,
+  positions, liveQuote, pipSize, symbol, deviceId, accountType, onClose, onPositionClosed,
 }: {
   positions: LivePositionEntry[];
   liveQuote: { price: number; bid?: number; ask?: number; epoch: number } | null;
@@ -1153,6 +1163,7 @@ function LivePositionsPanel({
   symbol: string;
   deviceId?: string;
   accountType?: "demo" | "real";
+  onClose: () => void;
   onPositionClosed: () => void;
 }) {
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -1166,13 +1177,19 @@ function LivePositionsPanel({
   const brokerSym = symbol.startsWith("frx") || symbol.startsWith("cry")
     ? symbol.slice(3) : symbol.startsWith("OTC_") ? symbol.slice(4) : symbol;
 
+  // Dollar P&L: for forex priceDiff × volume × 100,000 (standard lot)
+  // For crypto (cry prefix) or if pipSize >= 1: priceDiff × volume
+  const isCrypto = symbol.startsWith("cry") || (pipSize !== undefined && pipSize >= 1);
+  const contractSize = isCrypto ? 1 : 100_000;
+
   function calcPnl(pos: LivePositionEntry) {
     const current = pos.order_side === "buy" ? currentBid : currentAsk;
     if (!current) return null;
     const vol = parseFloat(pos.volume);
     if (!Number.isFinite(vol) || vol <= 0) return null;
     const diff = pos.order_side === "buy" ? current - pos.fill_price : pos.fill_price - current;
-    return { pips: diff / pipVal, current };
+    const dollars = diff * vol * contractSize;
+    return { dollars, current };
   }
 
   function fmtP(v: number) {
@@ -1180,6 +1197,11 @@ function LivePositionsPanel({
       ? Math.min(8, String(pipSize).replace(/.*\./, "").length)
       : symbol.startsWith("cry") ? 2 : 5;
     return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: dec }).format(v);
+  }
+
+  function fmtDollar(v: number) {
+    const abs = Math.abs(v);
+    return (v >= 0 ? "+" : "−") + "$" + abs.toFixed(2);
   }
 
   async function handleClose(pos: LivePositionEntry) {
@@ -1211,27 +1233,30 @@ function LivePositionsPanel({
     finally { setClosingId(null); }
   }
 
-  const totalPips = positions.reduce((sum, p) => {
+  const totalDollars = positions.reduce((sum, p) => {
     const r = calcPnl(p);
-    return sum + (r?.pips ?? 0);
+    return sum + (r?.dollars ?? 0);
   }, 0);
 
   return (
-    <aside className={styles.positionsPanel} aria-label="Open positions P&L">
-      <div className={styles.positionsPanelHeader}>
+    <div className={styles.positionsOverlay} role="dialog" aria-label="Open positions">
+      <div className={styles.positionsOverlayHeader}>
         <span className={styles.sectionEyebrow}>OPEN POSITIONS · {brokerSym}</span>
-        <span className={quoteFresh ? styles.posLiveDot : styles.posStaleDot}>
-          <i /> {quoteFresh ? "LIVE" : "STALE"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className={quoteFresh ? styles.posLiveDot : styles.posStaleDot}>
+            <i /> {quoteFresh ? "LIVE" : "STALE"}
+          </span>
+          <button type="button" className={styles.posOverlayClose} onClick={onClose} aria-label="Close panel">✕</button>
+        </div>
       </div>
 
       {positions.length === 0
-        ? <p className={styles.positionsEmpty}>No filled positions yet.</p>
+        ? <p className={styles.positionsEmpty}>No filled positions for {brokerSym} yet.</p>
         : (
           <div className={styles.positionsList}>
             {positions.map((pos) => {
               const pnl = calcPnl(pos);
-              const up = pnl ? pnl.pips >= 0 : null;
+              const isProfit = pnl ? pnl.dollars >= 0 : null;
               return (
                 <div key={pos.id} className={styles.positionRow}>
                   <span className={pos.order_side === "buy" ? styles.posBuyBadge : styles.posSellBadge}>
@@ -1245,8 +1270,8 @@ function LivePositionsPanel({
                     {pnl
                       ? <>
                           <span className={styles.posCurrentPrice}>{fmtP(pnl.current)}</span>
-                          <span className={up ? styles.posProfit : styles.posLoss}>
-                            {pnl.pips >= 0 ? "+" : ""}{pnl.pips.toFixed(1)} pips
+                          <span className={isProfit ? styles.posProfit : styles.posLoss}>
+                            {isProfit ? "Profit" : "Loss"} {fmtDollar(pnl.dollars)}
                           </span>
                         </>
                       : <span className={styles.posWaiting}>—</span>}
@@ -1266,14 +1291,15 @@ function LivePositionsPanel({
       {positions.length > 0 && (
         <div className={styles.positionsTotals}>
           <span>Total</span>
-          <span className={totalPips >= 0 ? styles.posProfit : styles.posLoss}>
-            {totalPips >= 0 ? "+" : ""}{totalPips.toFixed(1)} pips
+          <span className={totalDollars >= 0 ? styles.posProfit : styles.posLoss}>
+            {totalDollars >= 0 ? "Profit" : "Loss"} {fmtDollar(totalDollars)}
           </span>
         </div>
       )}
 
       {closeError && <p className={styles.posCloseError}>{closeError}</p>}
-    </aside>
+      {!deviceId && <p className={styles.positionsEmpty}>Pair an MT5 EA to close positions from here.</p>}
+    </div>
   );
 }
 
