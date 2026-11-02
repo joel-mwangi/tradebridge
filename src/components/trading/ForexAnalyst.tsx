@@ -8,15 +8,22 @@ import { buildForexCandleHistoryRequest } from "../../lib/forex-market-data.mjs"
 import { panChartViewport, zoomChartViewport } from "../../lib/forex-chart-viewport.mjs";
 import {
   analyzeForexCandles,
+  buildTrendlines,
   computeSignal,
+  computeSentiment,
   computeSmcSignal,
+  computeTradeSetup,
+  computeVolumeProfile,
   findSwingPoints,
   type CandlePattern,
   type ForexCandle,
   type PriceZone,
+  type SentimentResult,
   type SignalResult,
   type SmcSignal,
   type SwingPoint,
+  type TradeSetupResult,
+  type VolumeProfileResult,
 } from "../../lib/forex-analysis.mjs";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
@@ -721,6 +728,39 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
   const patternByEpoch = new Map<number, CandlePattern>(analysis.patterns.map((pattern): [number, CandlePattern] => [pattern.epoch, pattern]));
   const swingPoints = useMemo(() => findSwingPoints(closedCandles, 2), [closedCandles]);
   const swingLabels = useMemo(() => buildSwingLabels(swingPoints, analysis.atr), [swingPoints, analysis.atr]);
+
+  // ── Layer 1: Trendlines ────────────────────────────────────────────────
+  const trendlines = useMemo(() => buildTrendlines(swingPoints, analysis.structure), [swingPoints, analysis.structure]);
+
+  // ── Layer 2: Sentiment ─────────────────────────────────────────────────
+  const sentiment = useMemo(() => computeSentiment(closedCandles, analysis.structure), [closedCandles, analysis.structure]);
+
+  // ── Layer 3: Volume Profile anchor epoch ──────────────────────────────
+  const anchorEpoch = useMemo(() => {
+    if (analysis.structure.bullish) {
+      const lows = swingPoints.filter((s) => s.kind === 'low');
+      return lows.length ? lows[lows.length - 1].epoch : (closedCandles[0]?.epoch ?? 0);
+    } else if (analysis.structure.bearish) {
+      const highs = swingPoints.filter((s) => s.kind === 'high');
+      return highs.length ? highs[highs.length - 1].epoch : (closedCandles[0]?.epoch ?? 0);
+    } else {
+      const lows = swingPoints.filter((s) => s.kind === 'low');
+      if (!lows.length) return closedCandles[0]?.epoch ?? 0;
+      const lowest = lows.reduce((a, b) => a.price < b.price ? a : b);
+      return lowest.epoch;
+    }
+  }, [analysis.structure, swingPoints, closedCandles]);
+
+  const volumeProfile = useMemo(
+    () => hasUsableHistory ? computeVolumeProfile(closedCandles, anchorEpoch, 40) : { buckets: [], poc: 0, vah: 0, val: 0 },
+    [closedCandles, anchorEpoch, hasUsableHistory],
+  );
+
+  // ── Layer 4: Trade Setup ───────────────────────────────────────────────
+  const tradeSetup = useMemo(
+    () => computeTradeSetup(closedM1Candles, analysis.structure, sentiment, volumeProfile, liveQuote?.price ?? null, analysis.atr),
+    [closedM1Candles, analysis.structure, sentiment, volumeProfile, liveQuote, analysis.atr],
+  );
   const statusIsLive = liveQuote && Date.now() - liveQuote.epoch * 1000 < 60_000;
   const quoteAgeText = liveQuote
     ? Date.now() - liveQuote.epoch * 1000 > 0
@@ -990,6 +1030,79 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
                 </g>;
               })}
 
+              {/* ── Layer 3: Volume Profile histogram ─────────────────── */}
+              {hasUsableHistory && volumeProfile.buckets.length > 0 && (() => {
+                const maxWeight = Math.max(...volumeProfile.buckets.map((b) => b.weight), 1);
+                const bucketHeight = chart.plotHeight / volumeProfile.buckets.length;
+                return (
+                  <g key="volume-profile">
+                    {volumeProfile.buckets.map((bucket, i) => {
+                      const barWidth = Math.max(1, (bucket.weight / maxWeight) * 50);
+                      const bucketY = chart.yFor(bucket.price + (chart.max - chart.min) / volumeProfile.buckets.length / 2);
+                      const bh = Math.max(1, bucketHeight);
+                      const fill = bucket.isPoc
+                        ? '#f4bb55'
+                        : bucket.isVa
+                          ? 'rgba(16,185,129,0.15)'
+                          : 'rgba(148,163,184,0.12)';
+                      return (
+                        <rect
+                          key={i}
+                          x={chart.left}
+                          y={bucketY - bh / 2}
+                          width={barWidth}
+                          height={bh}
+                          fill={fill}
+                          className={bucket.isPoc ? styles.vpBarPoc : bucket.isVa ? styles.vpBarVa : styles.vpBar}
+                        />
+                      );
+                    })}
+                    {/* POC label on bars */}
+                    {(() => {
+                      const pocBucket = volumeProfile.buckets.find((b) => b.isPoc);
+                      if (!pocBucket) return null;
+                      const pocWeight = Math.max(1, (pocBucket.weight / maxWeight) * 50);
+                      const pocY = chart.yFor(pocBucket.price);
+                      return (
+                        <text x={chart.left + pocWeight + 3} y={pocY + 3} className={styles.structureBadge} style={{ fill: '#f4bb55', fontSize: '7px', fontWeight: 900 }}>POC</text>
+                      );
+                    })()}
+                  </g>
+                );
+              })()}
+
+              {/* ── POC / VAH / VAL horizontal lines ──────────────────── */}
+              {hasUsableHistory && volumeProfile.poc > 0 && (() => {
+                const pocY = chart.yFor(volumeProfile.poc);
+                const vahY = chart.yFor(volumeProfile.vah);
+                const valY = chart.yFor(volumeProfile.val);
+                const rightX = chart.width - chart.right;
+                return (
+                  <g key="poc-vah-val">
+                    {pocY >= chart.top && pocY <= chart.height - chart.bottom && (
+                      <g>
+                        <line x1={chart.left} y1={pocY} x2={rightX} y2={pocY} className={styles.pocLine} />
+                        <text x={rightX + 3} y={pocY - 2} className={styles.smcZoneLabel} style={{ fill: '#f4bb55', fontSize: '8px' }}>
+                          POC {formatPrice(volumeProfile.poc, selectedSymbol, activeInstrument?.pipSize)}
+                        </text>
+                      </g>
+                    )}
+                    {vahY >= chart.top && vahY <= chart.height - chart.bottom && (
+                      <g>
+                        <line x1={chart.left} y1={vahY} x2={rightX} y2={vahY} className={styles.vahLine} />
+                        <text x={rightX + 3} y={vahY - 2} className={styles.smcZoneLabel} style={{ fill: '#10b981', fontSize: '8px' }}>VAH</text>
+                      </g>
+                    )}
+                    {valY >= chart.top && valY <= chart.height - chart.bottom && (
+                      <g>
+                        <line x1={chart.left} y1={valY} x2={rightX} y2={valY} className={styles.valLine} />
+                        <text x={rightX + 3} y={valY + 9} className={styles.smcZoneLabel} style={{ fill: '#ff7b87', fontSize: '8px' }}>VAL</text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })()}
+
               {analysis.support.map((zone, index) => {
                 const top = chart.yFor(zone.price + zoneHalfWidth);
                 const bottom = chart.yFor(zone.price - zoneHalfWidth);
@@ -1069,6 +1182,47 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
                 );
               })()}
 
+              {/* ── Layer 1: Trendlines ─────────────────────────────── */}
+              {hasUsableHistory && (() => {
+                const epochToX = (epoch: number): number | null => {
+                  const idx = visibleCandles.findIndex((c) => c.epoch === epoch);
+                  if (idx >= 0) return chart.xForIndex(idx);
+                  if (!visibleCandles.length) return null;
+                  const first = visibleCandles[0];
+                  const last = visibleCandles[visibleCandles.length - 1];
+                  if (timeframe <= 0) return null;
+                  if (epoch < first.epoch) {
+                    const barsBack = (first.epoch - epoch) / timeframe;
+                    return chart.xForIndex(-barsBack);
+                  }
+                  const barsAhead = (epoch - last.epoch) / timeframe;
+                  return chart.xForIndex(visibleCandles.length - 1 + barsAhead);
+                };
+
+                return (
+                  <g key="trendlines">
+                    {trendlines.uptrend && trendlines.uptrend.length >= 2 && (() => {
+                      const pts = trendlines.uptrend!;
+                      return pts.slice(0, -1).map((pt, i) => {
+                        const x1 = epochToX(pt.epoch);
+                        const x2 = epochToX(pts[i + 1].epoch);
+                        if (x1 === null || x2 === null) return null;
+                        return <line key={'up-' + i} x1={x1} y1={chart.yFor(pt.price)} x2={x2} y2={chart.yFor(pts[i + 1].price)} className={styles.trendlineUp} />;
+                      });
+                    })()}
+                    {trendlines.downtrend && trendlines.downtrend.length >= 2 && (() => {
+                      const pts = trendlines.downtrend!;
+                      return pts.slice(0, -1).map((pt, i) => {
+                        const x1 = epochToX(pt.epoch);
+                        const x2 = epochToX(pts[i + 1].epoch);
+                        if (x1 === null || x2 === null) return null;
+                        return <line key={'dn-' + i} x1={x1} y1={chart.yFor(pt.price)} x2={x2} y2={chart.yFor(pts[i + 1].price)} className={styles.trendlineDown} />;
+                      });
+                    })()}
+                  </g>
+                );
+              })()}
+
               {visibleCandles.map((candle, index) => {
                 const x = chart.xForIndex(index);
                 const openY = chart.yFor(candle.open);
@@ -1115,6 +1269,23 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
               <text x={chart.width - chart.right} y={chart.height - 10} textAnchor="end" className={styles.axisLabel}>
                 {visibleCandles.length ? formatTime(visibleCandles[visibleCandles.length - 1].epoch, true) : ""}
               </text>
+
+              {/* ── Structure badge (top-left of plot area) ──────────── */}
+              {hasUsableHistory && (() => {
+                const label = analysis.structure.bullish ? 'UPTREND' : analysis.structure.bearish ? 'DOWNTREND' : 'RANGE';
+                const badgeColor = analysis.structure.bullish ? '#22c985' : analysis.structure.bearish ? '#ff7b87' : '#f59e0b';
+                const bgColor = analysis.structure.bullish ? 'rgba(34,201,133,0.15)' : analysis.structure.bearish ? 'rgba(255,123,135,0.15)' : 'rgba(245,158,11,0.15)';
+                const badgeX = chart.left + 6;
+                const badgeY = chart.top + 6;
+                const textWidth = label.length * 5.5 + 10;
+                return (
+                  <g key="structure-badge">
+                    <rect x={badgeX} y={badgeY} width={textWidth} height={14} rx="3" fill={bgColor} />
+                    <text x={badgeX + textWidth / 2} y={badgeY + 10} textAnchor="middle" className={styles.structureBadge} style={{ fill: badgeColor, fontSize: '9px', fontWeight: 900 }}>{label}</text>
+                  </g>
+                );
+              })()}
+
               {/* ── Position entry lines ─────────────────────────────── */}
               {positionLines.map((pos) => {
                 const y = chart.yFor(pos.open_price);
@@ -1166,6 +1337,9 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
           <span>Pattern labels appear only on closed candles</span>
         </div>
       </section>
+
+      {/* ── Layer 2: Sentiment Bar ──────────────────────────────────────── */}
+      <SentimentBar sentiment={sentiment} />
 
       <section className={styles.insightGrid} aria-label="Chart analysis summary">
         <article className={styles.insightCard}>
@@ -1228,6 +1402,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
         <div className={styles.analysisRight}>
           <SignalCard result={signalResult} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
           <SmcSignalCard result={smcSignal} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
+          <TradeSetupCard setup={tradeSetup} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
           <ForexOrderPanel
             symbol={selectedSymbol}
             instrumentName={activePair?.name ?? selectedSymbol}
@@ -1611,6 +1786,122 @@ function SmcSignalCard({
 
       <p className={styles.smcDisclaimer}>
         SMC setup based on liquidity sweep + BoS. Not financial advice. Verify in your terminal.
+      </p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SentimentBar — compact horizontal sentiment strip
+// ---------------------------------------------------------------------------
+function SentimentBar({ sentiment }: { sentiment: SentimentResult }) {
+  const { label, bullish, bearish, candleRatio, aboveMidpoint } = sentiment;
+
+  const icon = bullish ? '🟢' : bearish ? '🔴' : '⚪';
+  const barClass = bullish ? styles.sentimentBullish : bearish ? styles.sentimentBearish : styles.sentimentNeutral;
+
+  const details: string[] = [];
+  if (bullish) details.push('Structure: Bullish');
+  else if (bearish) details.push('Structure: Bearish');
+  else details.push('Structure: Mixed');
+
+  const pct = Math.round(candleRatio * 100);
+  if (candleRatio > 0.6) details.push(`Candles: ${pct}% bullish`);
+  else if (candleRatio < 0.4) details.push(`Candles: ${pct}% bearish`);
+  else details.push(`Candles: ${pct}% (neutral)`);
+
+  details.push(aboveMidpoint ? 'Price above midpoint' : 'Price below midpoint');
+
+  return (
+    <div className={styles.sentimentBar} aria-label="Market sentiment">
+      <span className={styles.sentimentLabel}>SENTIMENT</span>
+      <span className={`${styles.sentimentLabel} ${barClass}`}>{icon} {label}</span>
+      <span className={styles.sentimentDetail}>{details.join(' · ')}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TradeSetupCard — Layer 4 entry alert panel
+// ---------------------------------------------------------------------------
+function TradeSetupCard({
+  setup,
+  symbol,
+  pipSize,
+}: {
+  setup: TradeSetupResult;
+  symbol: string;
+  pipSize?: number;
+}) {
+  const { confluence, maxConfluence, structureAligned, sentimentAligned, nearPoc, action, poc, sl, tp, rrRatio, description } = setup;
+
+  const isBuy = action.includes('BUY');
+  const isSell = action.includes('SELL');
+  const isWait = action === 'WAIT';
+
+  const badgeClass = isWait
+    ? styles.setupBadgeWait
+    : isBuy
+      ? styles.setupBadgeBuy
+      : styles.setupBadgeSell;
+
+  const digits = pipSize && pipSize > 0 && pipSize < 1
+    ? Math.min(6, String(pipSize).replace(/.*\./, '').length)
+    : 5;
+
+  function fmt(n: number | null) {
+    if (n === null || !Number.isFinite(n) || n === 0) return '—';
+    return n.toFixed(digits);
+  }
+
+  const tfLabel = symbol.startsWith('frx') ? symbol.slice(3) : symbol;
+  const actionIcon = isBuy ? '🟢' : isSell ? '🔴' : '⏸';
+
+  return (
+    <section className={styles.tradeSetupCard} aria-label="Trade setup">
+      <div className={styles.tradeSetupHeader}>
+        <span className={styles.sectionEyebrow}>TRADE SETUP</span>
+        <span style={{ color: 'var(--fx-muted)', fontSize: '9px' }}>{tfLabel} · M1</span>
+      </div>
+      <div className={styles.setupRow}>
+        <span>{structureAligned ? '✓' : '✗'}</span>
+        <span>Structure: {setup.direction === 'BUY' ? 'UPTREND (HH + HL)' : setup.direction === 'SELL' ? 'DOWNTREND (LH + LL)' : 'Mixed'}</span>
+      </div>
+      <div className={styles.setupRow}>
+        <span>{sentimentAligned ? '✓' : '✗'}</span>
+        <span>Sentiment: {sentimentAligned ? (isBuy ? 'Buyers in control' : 'Sellers in control') : 'Not aligned'}</span>
+      </div>
+      <div className={styles.setupRow}>
+        <span>{nearPoc ? '✓' : '✗'}</span>
+        <span>POC: {nearPoc ? 'Price approaching POC' : 'Price not near POC'}</span>
+      </div>
+      <div className={styles.setupConfluence}>
+        Confluence: <strong>{confluence}/{maxConfluence}</strong>
+      </div>
+      <div className={`${styles.tradeSetupHeader} ${badgeClass}`} style={{ marginTop: 4 }}>
+        {actionIcon} {action}
+      </div>
+      <p style={{ margin: '6px 0 0', color: 'var(--fx-muted)', fontSize: '10px', lineHeight: 1.55 }}>{description}</p>
+      {!isWait && poc > 0 && (
+        <div className={styles.setupLevels}>
+          <div className={styles.setupRow}>
+            <span style={{ color: 'var(--fx-muted)' }}>POC</span>
+            <span style={{ color: '#f4bb55', fontVariantNumeric: 'tabular-nums' }}>{fmt(poc)}</span>
+          </div>
+          <div className={styles.setupRow}>
+            <span style={{ color: 'var(--fx-muted)' }}>SL</span>
+            <span style={{ color: '#ff7b87', fontVariantNumeric: 'tabular-nums' }}>{fmt(sl)}</span>
+          </div>
+          <div className={styles.setupRow}>
+            <span style={{ color: 'var(--fx-muted)' }}>TP</span>
+            <span style={{ color: '#22c985', fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(tp)}{rrRatio !== null ? ` (1:${rrRatio.toFixed(1)})` : ''}
+            </span>
+          </div>
+        </div>
+      )}
+      <p style={{ margin: '6px 0 0', paddingTop: 6, borderTop: '1px solid var(--fx-line)', color: 'var(--fx-muted)', fontSize: '9px', lineHeight: 1.5 }}>
+        Levels are computed from swing points. Not financial advice.
       </p>
     </section>
   );

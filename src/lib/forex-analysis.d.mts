@@ -111,6 +111,80 @@ export interface SmcSignal {
   bosEpoch: number | null;
 }
 
+// ── Layer 1: Trendlines ────────────────────────────────────────────────────
+
+export interface TrendlinePoint {
+  epoch: number;
+  price: number;
+}
+
+export interface Trendlines {
+  uptrend: TrendlinePoint[] | null;
+  downtrend: TrendlinePoint[] | null;
+}
+
+export function buildTrendlines(swings: SwingPoint[], structure: { bullish: boolean; bearish: boolean }): Trendlines;
+
+// ── Layer 2: Sentiment ─────────────────────────────────────────────────────
+
+export interface SentimentResult {
+  score: number;
+  label: 'BUYERS IN CONTROL' | 'SELLERS IN CONTROL' | 'NEUTRAL';
+  bullish: boolean;
+  bearish: boolean;
+  candleRatio: number;
+  aboveMidpoint: boolean;
+}
+
+export function computeSentiment(candles: ForexCandle[], structure: { bullish: boolean; bearish: boolean }): SentimentResult;
+
+// ── Layer 3: Volume Profile ────────────────────────────────────────────────
+
+export interface VolumeProfileBucket {
+  price: number;
+  weight: number;
+  isVa: boolean;
+  isPoc: boolean;
+}
+
+export interface VolumeProfileResult {
+  buckets: VolumeProfileBucket[];
+  poc: number;
+  vah: number;
+  val: number;
+}
+
+export function computeVolumeProfile(candles: ForexCandle[], anchorEpoch: number, buckets?: number): VolumeProfileResult;
+
+// ── Layer 4: Trade Setup ───────────────────────────────────────────────────
+
+export type TradeSetupAction = 'WATCH FOR BUY' | 'WATCH FOR SELL' | 'POSSIBLE BUY' | 'POSSIBLE SELL' | 'WAIT';
+export type TradeSetupDirection = 'BUY' | 'SELL' | 'WAIT';
+
+export interface TradeSetupResult {
+  confluence: number;
+  maxConfluence: number;
+  structureAligned: boolean;
+  sentimentAligned: boolean;
+  nearPoc: boolean;
+  direction: TradeSetupDirection;
+  action: TradeSetupAction;
+  poc: number;
+  sl: number | null;
+  tp: number | null;
+  rrRatio: number | null;
+  description: string;
+}
+
+export function computeTradeSetup(
+  m1Candles: ForexCandle[],
+  structure: { bullish: boolean; bearish: boolean; label: string },
+  sentiment: SentimentResult,
+  volumeProfile: VolumeProfileResult,
+  livePrice: number | null,
+  atr: number
+): TradeSetupResult;
+
 export function findLiquidityLevels(candles: ForexCandle[]): LiquidityLevels;
 export function detectLiquiditySweep(candles: ForexCandle[], levels: LiquidityLevels): SweepEvent | null;
 export function detectBreakOfStructure(candles: ForexCandle[], sweepEpoch: number, sweepType: 'BSL' | 'SSL'): BosEvent;

@@ -693,3 +693,194 @@
   stroke-width: 2.5px;
   stroke-linejoin: round;
 }
+
+/* ── Layer 1: Trendlines (SVG) ─────────────────────────────────── */
+.trendlineUp {
+  stroke: rgba(34, 201, 133, 0.65);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.trendlineDown {
+  stroke: rgba(255, 123, 135, 0.65);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+/* ── Structure badge (SVG) ─────────────────────────────────────── */
+.structureBadge {
+  fill: var(--fx-muted);
+  font-size: 9px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: var(--fx-panel);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
+
+/* ── Volume Profile lines (SVG) ────────────────────────────────── */
+.pocLine {
+  stroke: #f4bb55;
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+  opacity: 0.9;
+}
+.vahLine {
+  stroke: #10b981;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.8;
+}
+.valLine {
+  stroke: #ff7b87;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.8;
+}
+
+/* ── Volume Profile bars (SVG) ─────────────────────────────────── */
+.vpBar {
+  opacity: 1;
+}
+.vpBarVa {
+  opacity: 1;
+}
+.vpBarPoc {
+  opacity: 0.95;
+}
+
+/* ── Layer 2: Sentiment Bar ────────────────────────────────────── */
+.sentimentBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--fx-line);
+  border-radius: 10px;
+  background: var(--fx-panel);
+  font-size: 11px;
+}
+.sentimentLabel {
+  color: var(--fx-muted);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .75px;
+  white-space: nowrap;
+}
+.sentimentBullish {
+  color: #22c985 !important;
+  font-weight: 900;
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+}
+.sentimentBearish {
+  color: #ff7b87 !important;
+  font-weight: 900;
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+}
+.sentimentNeutral {
+  color: var(--fx-ink) !important;
+  font-weight: 900;
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+}
+.sentimentDetail {
+  color: var(--fx-muted);
+  font-size: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Layer 4: Trade Setup Card ─────────────────────────────────── */
+.tradeSetupCard {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--fx-line);
+  border-radius: 13px;
+  background: var(--fx-panel);
+  min-width: 0;
+}
+.tradeSetupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.setupBadgeBuy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(34, 201, 133, 0.15);
+  color: #22c985;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .4px;
+}
+.setupBadgeSell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(255, 123, 135, 0.15);
+  color: #ff7b87;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .4px;
+}
+.setupBadgeWait {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--fx-muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .4px;
+}
+.setupRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--fx-muted);
+}
+.setupRow span:first-child {
+  flex: 0 0 14px;
+  font-weight: 900;
+  color: var(--fx-ink);
+}
+.setupConfluence {
+  padding: 5px 8px;
+  border: 1px solid var(--fx-line);
+  border-radius: 6px;
+  color: var(--fx-muted);
+  font-size: 10px;
+}
+.setupConfluence strong {
+  color: var(--fx-ink);
+  font-size: 12px;
+}
+.setupLevels {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--fx-line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.setupLevels .setupRow {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--fx-line);
+}
+.setupLevels .setupRow:last-child {
+  border-bottom: none;
+}

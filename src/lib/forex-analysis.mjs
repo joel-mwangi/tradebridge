@@ -663,6 +663,300 @@ export function computeSmcSignal(m1Candles, m15Candles, h1Candles, currentBid, c
 
 // ── End SMC Signal Engine ────────────────────────────────────────────────────
 
+// ── Layer 1: Trendlines ────────────────────────────────────────────────────
+
+/**
+ * Build trendlines through swing points.
+ * @param {SwingPoint[]} swings
+ * @param {{ bullish: boolean, bearish: boolean }} structure
+ * @returns {{ uptrend: Array<{epoch:number,price:number}>|null, downtrend: Array<{epoch:number,price:number}>|null }}
+ */
+export function buildTrendlines(swings, structure) {
+  // For uptrend: filter HL points (swing lows where price > previous swing low)
+  const lows = swings.filter((s) => s.kind === 'low');
+  const hlPoints = [];
+  let prevLow = null;
+  for (const s of lows) {
+    if (prevLow !== null && s.price > prevLow) {
+      hlPoints.push({ epoch: s.epoch, price: s.price });
+    }
+    prevLow = s.price;
+  }
+  const uptrendPoints = hlPoints.slice(-3);
+
+  // For downtrend: filter LH points (swing highs where price < previous swing high)
+  const highs = swings.filter((s) => s.kind === 'high');
+  const lhPoints = [];
+  let prevHigh = null;
+  for (const s of highs) {
+    if (prevHigh !== null && s.price < prevHigh) {
+      lhPoints.push({ epoch: s.epoch, price: s.price });
+    }
+    prevHigh = s.price;
+  }
+  const downtrendPoints = lhPoints.slice(-3);
+
+  return {
+    uptrend: uptrendPoints.length >= 2 ? uptrendPoints : null,
+    downtrend: downtrendPoints.length >= 2 ? downtrendPoints : null,
+  };
+}
+
+// ── Layer 2: Sentiment ─────────────────────────────────────────────────────
+
+/**
+ * Compute market sentiment from structure, recent candles, and price position.
+ * @param {Array<{epoch:number,open:number,high:number,low:number,close:number}>} candles
+ * @param {{ bullish: boolean, bearish: boolean }} structure
+ * @returns {{ score: number, label: 'BUYERS IN CONTROL'|'SELLERS IN CONTROL'|'NEUTRAL', bullish: boolean, bearish: boolean, candleRatio: number, aboveMidpoint: boolean }}
+ */
+export function computeSentiment(candles, structure) {
+  const bars = normalizeCandles(candles);
+  let score = 0;
+
+  // Structure contribution
+  if (structure.bullish) score += 2;
+  else if (structure.bearish) score -= 2;
+
+  // Last 10 candles bullish ratio
+  const last10 = bars.slice(-10);
+  const bullishCount = last10.filter((c) => c.close > c.open).length;
+  const candleRatio = last10.length > 0 ? bullishCount / last10.length : 0.5;
+  if (candleRatio > 0.6) score += 1;
+  else if (candleRatio < 0.4) score -= 1;
+
+  // Price vs midpoint of last swing range
+  let aboveMidpoint = false;
+  if (bars.length >= 2) {
+    const recentBars = bars.slice(-20);
+    const lastHigh = Math.max(...recentBars.map((c) => c.high));
+    const lastLow = Math.min(...recentBars.map((c) => c.low));
+    const midpoint = (lastHigh + lastLow) / 2;
+    const lastClose = bars[bars.length - 1].close;
+    aboveMidpoint = lastClose > midpoint;
+    if (aboveMidpoint) score += 1;
+    else score -= 1;
+  }
+
+  const bullish = score >= 2;
+  const bearish = score <= -2;
+  const label = bullish ? 'BUYERS IN CONTROL' : bearish ? 'SELLERS IN CONTROL' : 'NEUTRAL';
+
+  return { score, label, bullish, bearish, candleRatio, aboveMidpoint };
+}
+
+// ── Layer 3: Volume Profile ────────────────────────────────────────────────
+
+/**
+ * Compute an approximated volume profile (time-at-price) from OHLC candles.
+ * @param {Array<{epoch:number,open:number,high:number,low:number,close:number}>} candles
+ * @param {number} anchorEpoch - only use candles from this epoch onward
+ * @param {number} [buckets=40] - number of price buckets
+ * @returns {{ buckets: Array<{price:number,weight:number,isVa:boolean,isPoc:boolean}>, poc: number, vah: number, val: number }}
+ */
+export function computeVolumeProfile(candles, anchorEpoch, buckets = 40) {
+  const bars = normalizeCandles(candles).filter((c) => c.epoch >= anchorEpoch);
+  const safeBuckets = Number.isInteger(buckets) && buckets > 1 ? buckets : 40;
+
+  if (bars.length === 0) {
+    return { buckets: [], poc: 0, vah: 0, val: 0 };
+  }
+
+  const priceMin = Math.min(...bars.map((c) => c.low));
+  const priceMax = Math.max(...bars.map((c) => c.high));
+  const priceRange = priceMax - priceMin;
+
+  if (priceRange <= 0) {
+    const midPrice = priceMin;
+    const result = Array.from({ length: safeBuckets }, (_, i) => ({
+      price: midPrice,
+      weight: i === Math.floor(safeBuckets / 2) ? 1 : 0,
+      isVa: false,
+      isPoc: false,
+    }));
+    return { buckets: result, poc: midPrice, vah: midPrice, val: midPrice };
+  }
+
+  const bucketSize = priceRange / safeBuckets;
+  const weights = new Array(safeBuckets).fill(0);
+
+  for (const candle of bars) {
+    const candleRange = candle.high - candle.low;
+    if (candleRange <= 0) continue;
+
+    const loIdx = Math.max(0, Math.floor((candle.low - priceMin) / bucketSize));
+    const hiIdx = Math.min(safeBuckets - 1, Math.floor((candle.high - priceMin) / bucketSize));
+
+    for (let b = loIdx; b <= hiIdx; b++) {
+      const bucketLow = priceMin + b * bucketSize;
+      const bucketHigh = bucketLow + bucketSize;
+      const overlapLow = Math.max(candle.low, bucketLow);
+      const overlapHigh = Math.min(candle.high, bucketHigh);
+      const overlap = Math.max(0, overlapHigh - overlapLow);
+      weights[b] += (overlap / candleRange) * candleRange; // weight = overlap amount
+    }
+  }
+
+  // Find POC
+  let pocIdx = 0;
+  let maxWeight = 0;
+  for (let i = 0; i < safeBuckets; i++) {
+    if (weights[i] > maxWeight) { maxWeight = weights[i]; pocIdx = i; }
+  }
+
+  // Value area: find buckets containing 70% of total weight, expanding from POC
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  const valueAreaTarget = totalWeight * 0.70;
+  let vaWeight = weights[pocIdx];
+  let vaLow = pocIdx;
+  let vaHigh = pocIdx;
+
+  while (vaWeight < valueAreaTarget && (vaLow > 0 || vaHigh < safeBuckets - 1)) {
+    const expandUp = vaHigh < safeBuckets - 1 ? weights[vaHigh + 1] : -1;
+    const expandDown = vaLow > 0 ? weights[vaLow - 1] : -1;
+    if (expandUp >= expandDown && vaHigh < safeBuckets - 1) {
+      vaHigh++;
+      vaWeight += weights[vaHigh];
+    } else if (vaLow > 0) {
+      vaLow--;
+      vaWeight += weights[vaLow];
+    } else {
+      break;
+    }
+  }
+
+  const poc = priceMin + (pocIdx + 0.5) * bucketSize;
+  const vah = priceMin + (vaHigh + 1) * bucketSize;
+  const val = priceMin + vaLow * bucketSize;
+
+  const resultBuckets = weights.map((weight, i) => ({
+    price: priceMin + (i + 0.5) * bucketSize,
+    weight,
+    isVa: i >= vaLow && i <= vaHigh,
+    isPoc: i === pocIdx,
+  }));
+
+  return { buckets: resultBuckets, poc, vah, val };
+}
+
+// ── Layer 4: Trade Setup ───────────────────────────────────────────────────
+
+/**
+ * Compute a trade setup from all 4 analysis layers.
+ * @param {Array<{epoch:number,open:number,high:number,low:number,close:number}>} m1Candles
+ * @param {{ bullish: boolean, bearish: boolean, label: string }} structure
+ * @param {{ label: string, bullish: boolean, bearish: boolean }} sentiment
+ * @param {{ poc: number, vah: number, val: number, buckets: Array<{price:number,weight:number,isVa:boolean,isPoc:boolean}> }} volumeProfile
+ * @param {number|null} livePrice
+ * @param {number} atr
+ * @returns {{ confluence: number, maxConfluence: number, structureAligned: boolean, sentimentAligned: boolean, nearPoc: boolean, direction: 'BUY'|'SELL'|'WAIT', action: 'WATCH FOR BUY'|'WATCH FOR SELL'|'POSSIBLE BUY'|'POSSIBLE SELL'|'WAIT', poc: number, sl: number|null, tp: number|null, rrRatio: number|null, description: string }}
+ */
+export function computeTradeSetup(m1Candles, structure, sentiment, volumeProfile, livePrice, atr) {
+  const bars = normalizeCandles(m1Candles);
+  const swings = findSwingPoints(bars, 2);
+  const highs = swings.filter((s) => s.kind === 'high');
+  const lows = swings.filter((s) => s.kind === 'low');
+
+  const isBullish = structure.bullish;
+  const isBearish = structure.bearish;
+  const direction = isBullish ? 'BUY' : isBearish ? 'SELL' : 'WAIT';
+
+  // Confluence scoring
+  const structureAligned = isBullish || isBearish;
+  const sentimentAligned = (isBullish && sentiment.bullish) || (isBearish && sentiment.bearish);
+  const price = typeof livePrice === 'number' && Number.isFinite(livePrice) && livePrice > 0
+    ? livePrice
+    : bars.length ? bars[bars.length - 1].close : 0;
+  const poc = volumeProfile.poc ?? 0;
+  const nearPoc = poc > 0 && atr > 0 && Math.abs(price - poc) <= atr;
+
+  let confluence = 0;
+  if (structureAligned) confluence += 1;
+  if (sentimentAligned) confluence += 1;
+  if (nearPoc) confluence += 1;
+  const maxConfluence = 3;
+
+  // SL and TP
+  let sl = null;
+  let tp = null;
+
+  if (isBullish) {
+    // SL below last confirmed HL
+    // Find HL points: lows where price > previous low
+    let lastHlPrice = null;
+    let prevLowPrice = null;
+    for (const s of lows) {
+      if (prevLowPrice !== null && s.price > prevLowPrice) lastHlPrice = s.price;
+      prevLowPrice = s.price;
+    }
+    const lastHh = highs.length ? highs[highs.length - 1].price : null;
+    sl = lastHlPrice !== null ? lastHlPrice - atr * 0.3 : price - atr * 1.5;
+    tp = lastHh !== null ? lastHh : price + atr * 2;
+  } else if (isBearish) {
+    // SL above last confirmed LH
+    let lastLhPrice = null;
+    let prevHighPrice = null;
+    for (const s of highs) {
+      if (prevHighPrice !== null && s.price < prevHighPrice) lastLhPrice = s.price;
+      prevHighPrice = s.price;
+    }
+    const lastLl = lows.length ? lows[lows.length - 1].price : null;
+    sl = lastLhPrice !== null ? lastLhPrice + atr * 0.3 : price + atr * 1.5;
+    tp = lastLl !== null ? lastLl : price - atr * 2;
+  }
+
+  const slDist = sl !== null ? Math.abs(price - sl) : null;
+  const tpDist = tp !== null ? Math.abs(tp - price) : null;
+  const rrRatio = slDist !== null && slDist > 0 && tpDist !== null
+    ? Math.round((tpDist / slDist) * 100) / 100
+    : null;
+
+  // Action label
+  let action;
+  if (direction === 'WAIT' || confluence < 1) {
+    action = 'WAIT';
+  } else if (confluence >= 3) {
+    action = direction === 'BUY' ? 'WATCH FOR BUY' : 'WATCH FOR SELL';
+  } else {
+    action = direction === 'BUY' ? 'POSSIBLE BUY' : 'POSSIBLE SELL';
+  }
+
+  // Description
+  let description = '';
+  if (action === 'WAIT') {
+    description = 'No clear directional confluence. Wait for structure to develop.';
+  } else if (action === 'WATCH FOR BUY') {
+    description = poc > 0
+      ? `Price is retracing to POC ${poc.toFixed(5)} in a bullish structure. Wait for bullish candle confirmation at POC before entry.`
+      : 'Bullish structure with sentiment aligned. Wait for bullish candle confirmation before entry.';
+  } else if (action === 'WATCH FOR SELL') {
+    description = poc > 0
+      ? `Price is rallying to POC ${poc.toFixed(5)} in a bearish structure. Wait for bearish candle confirmation at POC before entry.`
+      : 'Bearish structure with sentiment aligned. Wait for bearish candle confirmation before entry.';
+  } else if (action === 'POSSIBLE BUY') {
+    description = 'Partial bullish confluence. Setup not fully confirmed — proceed with caution.';
+  } else {
+    description = 'Partial bearish confluence. Setup not fully confirmed — proceed with caution.';
+  }
+
+  return {
+    confluence,
+    maxConfluence,
+    structureAligned,
+    sentimentAligned,
+    nearPoc,
+    direction,
+    action,
+    poc,
+    sl,
+    tp,
+    rrRatio,
+    description,
+  };
+}
+
+// ── End 4-layer analysis ───────────────────────────────────────────────────
+
 export function analyzeForexCandles(candles, options = {}) {
   const bars = normalizeCandles(candles);
   if (!bars.length) {
