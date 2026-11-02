@@ -9,11 +9,13 @@ import { panChartViewport, zoomChartViewport } from "../../lib/forex-chart-viewp
 import {
   analyzeForexCandles,
   computeSignal,
+  computeSmcSignal,
   findSwingPoints,
   type CandlePattern,
   type ForexCandle,
   type PriceZone,
   type SignalResult,
+  type SmcSignal,
   type SwingPoint,
 } from "../../lib/forex-analysis.mjs";
 
@@ -583,6 +585,8 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     // Always fetch M15 for signal structure and M1 for signal momentum
     if (timeframe !== 60) requestCandles(selectedSymbol, 60);
     if (timeframe !== 900) requestCandles(selectedSymbol, 900);
+    // Always fetch H1 for SMC context regardless of chart timeframe
+    if (timeframe !== 3600) requestCandles(selectedSymbol, 3600);
   }, [feedReady, selectedSymbol, timeframe, requestCandles]);
 
   useEffect(() => {
@@ -657,6 +661,13 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
 
   const m15Analysis = useMemo(() => analyzeForexCandles(closedM15Candles), [closedM15Candles]);
 
+  const h1Key = keyFor(selectedSymbol, 3600);
+  const h1Candles = candlesByKey[h1Key] ?? EMPTY_CANDLES;
+  const closedH1Candles = useMemo(() => {
+    const bucket = Math.floor(Date.now() / 1000 / 3600) * 3600;
+    return h1Candles.filter((c) => c.epoch + 3600 <= bucket);
+  }, [h1Candles]);
+
   const signalResult = useMemo(
     () => computeSignal(
       closedM1Candles,
@@ -667,6 +678,11 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     // Re-run on every tick (liveQuote) and whenever M1 candles update
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [closedM1Candles, m15Analysis.structure, liveQuote],
+  );
+
+  const smcSignal = useMemo(
+    () => computeSmcSignal(closedM1Candles, closedM15Candles, closedH1Candles, liveQuote?.bid, liveQuote?.ask),
+    [closedM1Candles, closedM15Candles, closedH1Candles, liveQuote],
   );
   const safeViewCount = Math.max(1, Math.min(chartViewCount, candles.length || chartViewCount));
   const maxViewOffset = Math.max(0, candles.length - safeViewCount);
@@ -996,6 +1012,63 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
                 </g>;
               })}
 
+              {(timeframe === 60 || timeframe === 900) && (() => {
+                const levels = smcSignal.h1Levels;
+                const sweepEpoch = smcSignal.m15SweepEpoch;
+                const bosLevel = smcSignal.bosLevel;
+                return (
+                  <>
+                    {/* BSL levels — dotted blue lines */}
+                    {levels.bsl.map((price) => {
+                      const y = chart.yFor(price);
+                      if (y < chart.top || y > chart.height - chart.bottom) return null;
+                      return (
+                        <g key={'bsl-' + price}>
+                          <line x1={chart.left} y1={y} x2={chart.width - chart.right} y2={y} className={styles.bslLine} />
+                          <text x={chart.width - chart.right + 3} y={y - 2} className={styles.smcZoneLabel}>BSL</text>
+                        </g>
+                      );
+                    })}
+                    {/* SSL levels — dotted orange lines */}
+                    {levels.ssl.map((price) => {
+                      const y = chart.yFor(price);
+                      if (y < chart.top || y > chart.height - chart.bottom) return null;
+                      return (
+                        <g key={'ssl-' + price}>
+                          <line x1={chart.left} y1={y} x2={chart.width - chart.right} y2={y} className={styles.sslLine} />
+                          <text x={chart.width - chart.right + 3} y={y - 2} className={styles.smcZoneLabel}>SSL</text>
+                        </g>
+                      );
+                    })}
+                    {/* BoS level */}
+                    {bosLevel !== null && (() => {
+                      const y = chart.yFor(bosLevel);
+                      if (y < chart.top || y > chart.height - chart.bottom) return null;
+                      const bosLabel = smcSignal.signal === 'BUY' ? 'BoS ↑' : 'BoS ↓';
+                      return (
+                        <g key='bos-level'>
+                          <line x1={chart.left} y1={y} x2={chart.width - chart.right} y2={y} className={styles.bosLine} />
+                          <text x={chart.left + 4} y={y - 3} className={styles.smcZoneLabel}>{bosLabel}</text>
+                        </g>
+                      );
+                    })()}
+                    {/* Sweep candle marker */}
+                    {sweepEpoch !== null && visibleCandles.map((candle, index) => {
+                      if (candle.epoch !== sweepEpoch) return null;
+                      const x = chart.xForIndex(index);
+                      const isBsl = smcSignal.type === 'BSL_SWEEP_BOS';
+                      if (isBsl) {
+                        const y = chart.yFor(candle.high) - 8;
+                        return <polygon key='sweep-marker' points={`${x},${y} ${x - 4},${y - 7} ${x + 4},${y - 7}`} className={styles.sweepMarkerBear} />;
+                      } else {
+                        const y = chart.yFor(candle.low) + 8;
+                        return <polygon key='sweep-marker' points={`${x},${y} ${x - 4},${y + 7} ${x + 4},${y + 7}`} className={styles.sweepMarkerBull} />;
+                      }
+                    })}
+                  </>
+                );
+              })()}
+
               {visibleCandles.map((candle, index) => {
                 const x = chart.xForIndex(index);
                 const openY = chart.yFor(candle.open);
@@ -1154,6 +1227,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
         </div>
         <div className={styles.analysisRight}>
           <SignalCard result={signalResult} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
+          <SmcSignalCard result={smcSignal} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
           <ForexOrderPanel
             symbol={selectedSymbol}
             instrumentName={activePair?.name ?? selectedSymbol}
@@ -1430,6 +1504,114 @@ function SignalCard({
         </div>
       ) : null}
       <p className={styles.signalDisclaimer}>Computed signal — verify before trading</p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SmcSignalCard — SMC liquidity sweep + BoS signal display
+// ---------------------------------------------------------------------------
+function SmcSignalCard({
+  result,
+  symbol: _symbol,
+  pipSize,
+}: {
+  result: SmcSignal;
+  symbol: string;
+  pipSize?: number;
+}) {
+  const { signal, type, confidence, sweepLevel, sweepLow, sweepHigh, bosLevel, entry, sl, tp, rrRatio, h1SweepLevel } = result;
+
+  const isBuy = signal === 'BUY';
+  const isSell = signal === 'SELL';
+  const isActive = isBuy || isSell;
+
+  const digits = pipSize && pipSize > 0 && pipSize < 1
+    ? Math.min(6, String(pipSize).replace(/.*\./, '').length)
+    : 5;
+  const pipValue = pipSize && pipSize > 0 ? pipSize : 0.0001;
+
+  function fmt(n: number | null | undefined) {
+    if (n == null || !Number.isFinite(n)) return '—';
+    return n.toFixed(digits);
+  }
+
+  function pips(a: number | null | undefined, b: number | null | undefined) {
+    if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return '—';
+    return Math.abs((a - b) / pipValue).toFixed(1) + ' pips';
+  }
+
+  const typeLabel = type === 'SSL_SWEEP_BOS' ? 'SSL Swept · BoS ↑' : type === 'BSL_SWEEP_BOS' ? 'BSL Swept · BoS ↓' : 'No active setup';
+  const h1LevelLabel = h1SweepLevel != null
+    ? (type === 'BSL_SWEEP_BOS' ? `BSL ${fmt(h1SweepLevel)} swept` : `SSL ${fmt(h1SweepLevel)} swept`)
+    : (sweepLevel != null ? `Level ${fmt(sweepLevel)} swept` : '—');
+  const sweepWickLabel = isBuy && sweepLow != null
+    ? `Wick to ${fmt(sweepLow)}, closed above`
+    : isSell && sweepHigh != null
+    ? `Wick to ${fmt(sweepHigh)}, closed below`
+    : '—';
+  const bosLabel = bosLevel != null
+    ? (isBuy ? `Break above ${fmt(bosLevel)} confirmed` : `Break below ${fmt(bosLevel)} confirmed`)
+    : '—';
+
+  const badgeClass = isBuy ? styles.smcBadgeBuy : isSell ? styles.smcBadgeSell : styles.smcBadgeWait;
+  const confClass = confidence === 'HIGH' ? styles.smcConfidenceHigh : confidence === 'MEDIUM' ? styles.smcConfidenceMedium : styles.smcBadgeWait;
+
+  return (
+    <section className={styles.smcSignalCard} aria-label="SMC signal engine">
+      <div className={styles.smcSignalHeader}>
+        <div>
+          <span className={styles.sectionEyebrow}>SMC SIGNAL ENGINE</span>
+          <span className={styles.smcTypeLabel}>{typeLabel}</span>
+        </div>
+        <div style={{display: 'flex', gap: 6, alignItems: 'center'}}>
+          {confidence && <span className={confClass}>{confidence}</span>}
+          <span className={badgeClass}>{signal}</span>
+        </div>
+      </div>
+
+      <div className={styles.smcRow}>
+        <span className={styles.smcRowLabel}>H1 level</span>
+        <span className={styles.smcRowValue}>{h1LevelLabel}</span>
+      </div>
+      <div className={styles.smcRow}>
+        <span className={styles.smcRowLabel}>Sweep</span>
+        <span className={styles.smcRowValue}>{sweepWickLabel}</span>
+      </div>
+      <div className={styles.smcRow}>
+        <span className={styles.smcRowLabel}>BoS</span>
+        <span className={styles.smcRowValue}>{bosLabel}</span>
+      </div>
+
+      {isActive && (
+        <div className={styles.smcEntryGrid}>
+          <div>
+            <span className={styles.smcRowLabel}>Entry</span>
+            <strong>{fmt(entry)}</strong>
+          </div>
+          <div>
+            <span className={styles.smcRowLabel}>SL</span>
+            <strong>{fmt(sl)}</strong>
+            <small>{pips(entry, sl)}</small>
+          </div>
+          <div>
+            <span className={styles.smcRowLabel}>TP</span>
+            <strong>{fmt(tp)}</strong>
+            <small>{pips(entry, tp)}</small>
+          </div>
+        </div>
+      )}
+
+      {isActive && (
+        <div className={styles.smcRow}>
+          <span className={styles.smcRowLabel}>R:R</span>
+          <span className={styles.smcRowValue}>{rrRatio != null ? '1 : ' + rrRatio.toFixed(2) : '—'}</span>
+        </div>
+      )}
+
+      <p className={styles.smcDisclaimer}>
+        SMC setup based on liquidity sweep + BoS. Not financial advice. Verify in your terminal.
+      </p>
     </section>
   );
 }

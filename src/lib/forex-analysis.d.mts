@@ -74,3 +74,50 @@ export function computeSignal(
   entryBid?: number,
   entryAsk?: number
 ): SignalResult;
+
+export interface LiquidityLevels {
+  bsl: number[];
+  ssl: number[];
+}
+
+export interface SweepEvent {
+  type: 'BSL' | 'SSL';
+  level: number;
+  epoch: number;
+  wickExtreme: number;
+}
+
+export interface BosEvent {
+  confirmed: boolean;
+  bosLevel?: number;
+  bosEpoch?: number;
+}
+
+export interface SmcSignal {
+  signal: 'BUY' | 'SELL' | 'WAIT';
+  type: 'SSL_SWEEP_BOS' | 'BSL_SWEEP_BOS' | null;
+  sweepLevel: number | null;
+  sweepLow: number | null;
+  sweepHigh: number | null;
+  bosLevel: number | null;
+  entry: number | null;
+  sl: number | null;
+  tp: number | null;
+  rrRatio: number | null;
+  h1SweepLevel: number | null;
+  confidence: 'HIGH' | 'MEDIUM' | null;
+  h1Levels: LiquidityLevels;
+  m15SweepEpoch: number | null;
+  bosEpoch: number | null;
+}
+
+export function findLiquidityLevels(candles: ForexCandle[]): LiquidityLevels;
+export function detectLiquiditySweep(candles: ForexCandle[], levels: LiquidityLevels): SweepEvent | null;
+export function detectBreakOfStructure(candles: ForexCandle[], sweepEpoch: number, sweepType: 'BSL' | 'SSL'): BosEvent;
+export function computeSmcSignal(
+  m1Candles: ForexCandle[],
+  m15Candles: ForexCandle[],
+  h1Candles: ForexCandle[],
+  currentBid?: number,
+  currentAsk?: number
+): SmcSignal;

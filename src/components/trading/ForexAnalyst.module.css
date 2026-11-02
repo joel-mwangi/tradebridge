@@ -516,3 +516,180 @@
   font-size: 9px;
   line-height: 1.5;
 }
+
+/* ── SMC Signal Card ───────────────────────────────────────────── */
+.smcSignalCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--fx-line);
+  border-radius: 13px;
+  background: var(--fx-panel);
+  min-width: 0;
+}
+.smcSignalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.smcTypeLabel {
+  display: block;
+  margin-top: 4px;
+  color: var(--fx-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.smcBadgeBuy {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(34,201,133,.18);
+  color: #22c985;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .6px;
+  white-space: nowrap;
+}
+.smcBadgeSell {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(255,123,135,.18);
+  color: #ff7b87;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .6px;
+  white-space: nowrap;
+}
+.smcBadgeWait {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(148,163,184,.12);
+  color: var(--fx-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .6px;
+  white-space: nowrap;
+}
+.smcConfidenceHigh {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(16,185,129,.15);
+  color: var(--teal, #10b981);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .8px;
+  white-space: nowrap;
+}
+.smcConfidenceMedium {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(245,158,11,.15);
+  color: var(--amber, #f59e0b);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .8px;
+  white-space: nowrap;
+}
+.smcRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.smcRowLabel {
+  flex: 0 0 auto;
+  color: var(--fx-muted);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.smcRowValue {
+  text-align: right;
+  color: var(--fx-ink);
+  font-size: 11px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.smcEntryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--fx-line);
+  border-radius: 8px;
+  background: var(--fx-surface);
+}
+.smcEntryGrid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.smcEntryGrid strong {
+  color: var(--fx-ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.smcEntryGrid small {
+  color: var(--fx-muted);
+  font-size: 9px;
+}
+.smcDisclaimer {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--fx-line);
+  color: var(--fx-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+/* ── SMC Chart Overlays (SVG) ──────────────────────────────────── */
+.bslLine {
+  stroke: #818cf8;
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  opacity: .85;
+}
+.sslLine {
+  stroke: #fb923c;
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  opacity: .85;
+}
+.bosLine {
+  stroke: var(--teal, #10b981);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 3;
+  opacity: .9;
+}
+.sweepMarkerBull {
+  fill: #22c985;
+  opacity: .9;
+}
+.sweepMarkerBear {
+  fill: #ff7b87;
+  opacity: .9;
+}
+.smcZoneLabel {
+  fill: var(--fx-muted);
+  font-size: 8px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: var(--fx-panel);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
