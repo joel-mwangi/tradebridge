@@ -353,10 +353,10 @@ export default function TradingWorkspace() {
 
   async function handleSignOut() {
     try {
-      const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
+      // Call server-side signout to clear SSR session cookies, then redirect.
+      await fetch("/api/auth/signout", { method: "POST" });
     } catch {
-      // Sign out best-effort.
+      // Best-effort.
     }
     window.location.href = "/login";
   }
