@@ -524,6 +524,9 @@ export default function TradingWorkspace() {
             ) : (
               <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Broker ↗</button>
             )}
+            <form action="/api/auth/signout" method="post">
+              <button className={styles.secondaryButton} type="submit" aria-label="Sign out of TradeBridge">Sign out</button>
+            </form>
           </div>
         </header>
 
@@ -1049,6 +1052,9 @@ export default function TradingWorkspace() {
                         </button>
                       )}
                       {connected && <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>}
+                      <form action="/api/auth/signout" method="post">
+                        <button className={styles.secondaryButton} type="submit">Sign out</button>
+                      </form>
                     </div>
                   </section>
 
