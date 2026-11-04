@@ -11,9 +11,13 @@ export async function POST(request: NextRequest) {
   } catch {
     // Always redirect to login even if signout fails.
   }
-  const response = NextResponse.redirect(new URL("/login", appUrl));
-  // Clear any lingering session cookies.
+  const response = NextResponse.redirect(new URL("/login", appUrl), { status: 303 });
   response.cookies.delete("sb-access-token");
   response.cookies.delete("sb-refresh-token");
   return response;
+}
+
+// Support GET so that direct navigation to /api/auth/signout also works.
+export async function GET(request: NextRequest) {
+  return POST(request);
 }

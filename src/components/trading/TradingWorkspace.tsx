@@ -351,6 +351,16 @@ export default function TradingWorkspace() {
     window.location.href = "/api/auth/deriv/start";
   }
 
+  async function handleSignOut() {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Sign out best-effort.
+    }
+    window.location.href = "/login";
+  }
+
   async function handleEnableLiveTrading(stake: number, dailyLoss: number) {
     if (!activeAccount) return;
     setLiveConsentBusy(true);
@@ -524,9 +534,7 @@ export default function TradingWorkspace() {
             ) : (
               <button className={styles.connectButton} type="button" onClick={startDerivConnect}>Connect Broker ↗</button>
             )}
-            <form action="/api/auth/signout" method="post">
-              <button className={styles.secondaryButton} type="submit" aria-label="Sign out of TradeBridge">Sign out</button>
-            </form>
+            <button className={styles.secondaryButton} type="button" onClick={() => void handleSignOut()} aria-label="Sign out of TradeBridge">Sign out</button>
           </div>
         </header>
 
@@ -1052,9 +1060,7 @@ export default function TradingWorkspace() {
                         </button>
                       )}
                       {connected && <button className={styles.secondaryButton} type="button" onClick={() => void trading.refreshAccount()}>Refresh account</button>}
-                      <form action="/api/auth/signout" method="post">
-                        <button className={styles.secondaryButton} type="submit">Sign out</button>
-                      </form>
+                      <button className={styles.secondaryButton} type="button" onClick={() => void handleSignOut()}>Sign out</button>
                     </div>
                   </section>
 
