@@ -46,7 +46,6 @@ export async function GET(request: NextRequest) {
     if (!backendUrl || !bridgeToken) return fail("backend_session_unavailable");
 
     let accounts: Array<{ account_id: string; account_type: string | null; currency: string | null }> = [];
-    console.log(`[deriv/callback] calling exchange: url=${backendUrl}/deriv/internal/oauth/exchange user_id=${user.id} redirect_uri=${redirectUri}`);
     try {
       const exchangeResponse = await fetch(`${backendUrl}/deriv/internal/oauth/exchange`, {
         method: "POST",
@@ -63,10 +62,7 @@ export async function GET(request: NextRequest) {
         cache: "no-store",
         signal: AbortSignal.timeout(18_000),
       });
-      if (!exchangeResponse.ok) {
-        console.error(`[deriv/callback] exchange failed: status=${exchangeResponse.status} url=${backendUrl}/deriv/internal/oauth/exchange body=${await exchangeResponse.text().catch(() => "unreadable")}`);
-        return fail("token_exchange");
-      }
+      if (!exchangeResponse.ok) return fail("token_exchange");
       const exchangePayload = await exchangeResponse.json() as {
         accounts?: Array<{ account_id?: unknown; account_type?: unknown; currency?: unknown }>;
       };
@@ -78,8 +74,7 @@ export async function GET(request: NextRequest) {
           currency: typeof account.currency === "string" ? account.currency : null,
         }];
       });
-    } catch (err) {
-      console.error(`[deriv/callback] exchange threw: ${err instanceof Error ? err.message : String(err)} url=${backendUrl}/deriv/internal/oauth/exchange`);
+    } catch {
       return fail("token_exchange");
     }
     if (accounts.length === 0) return fail("account_verification_failed");
