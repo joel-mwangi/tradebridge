@@ -591,6 +591,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     requestCandles(selectedSymbol, timeframe);
     // Always fetch M15 for signal structure and M1 for signal momentum
     if (timeframe !== 60) requestCandles(selectedSymbol, 60);
+    if (timeframe !== 300) requestCandles(selectedSymbol, 300);
     if (timeframe !== 900) requestCandles(selectedSymbol, 900);
     // Always fetch H1 for SMC context regardless of chart timeframe
     if (timeframe !== 3600) requestCandles(selectedSymbol, 3600);
@@ -665,6 +666,14 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     const bucket = Math.floor(Date.now() / 1000 / 900) * 900;
     return m15Candles.filter((c) => c.epoch + 900 <= bucket);
   }, [m15Candles]);
+
+  // M5 closed candles for precision analyst displacement/BoS detection
+  const m5Key = keyFor(selectedSymbol, 300);
+  const m5Candles = candlesByKey[m5Key] ?? EMPTY_CANDLES;
+  const closedM5Candles = useMemo(() => {
+    const bucket = Math.floor(Date.now() / 1000 / 300) * 300;
+    return m5Candles.filter((c) => c.epoch + 300 <= bucket);
+  }, [m5Candles]);
 
   const m15Analysis = useMemo(() => analyzeForexCandles(closedM15Candles), [closedM15Candles]);
 
@@ -761,6 +770,99 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
     () => computeTradeSetup(closedM1Candles, analysis.structure, sentiment, volumeProfile, liveQuote?.price ?? null, analysis.atr),
     [closedM1Candles, analysis.structure, sentiment, volumeProfile, liveQuote, analysis.atr],
   );
+
+  // ── Precision Analyst ─────────────────────────────────────────────────
+  // Session is held in a ref (mutable, not reactive) so candle feeds do not
+  // cause render cycles. Display state is a plain JS snapshot from getState().
+  type PrecisionSessionModule = typeof import("./precision-analyst.mjs");
+  const precisionModuleRef = useRef<PrecisionSessionModule | null>(null);
+  const precisionSessionRef = useRef<ReturnType<PrecisionSessionModule["createPrecisionSession"]> | null>(null);
+  const [precisionState, setPrecisionState] = useState<PrecisionSnap | null>(null);
+  const precisionSymbolRef = useRef<string>("");
+
+  // Load the ESM module once
+  useEffect(() => {
+    import("./precision-analyst.mjs").then((mod) => {
+      precisionModuleRef.current = mod;
+    }).catch(() => { /* non-critical — card just won't show */ });
+  }, []);
+
+  // Reset session when symbol changes
+  useEffect(() => {
+    const mod = precisionModuleRef.current;
+    if (!mod || !selectedSymbol) return;
+    if (precisionSymbolRef.current === selectedSymbol) return;
+    precisionSymbolRef.current = selectedSymbol;
+    precisionSessionRef.current = mod.createPrecisionSession({
+      symbol: selectedSymbol,
+      accountBalance: 1000,
+      maxRiskPct: 0.5,
+      minRR: 1.5,
+    });
+    setPrecisionState(precisionSessionRef.current.getState() as PrecisionSnap);
+  }, [selectedSymbol, precisionModuleRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Feed closed M15 candles to the precision session
+  useEffect(() => {
+    const session = precisionSessionRef.current;
+    if (!session || !closedM15Candles.length) return;
+    let snap = session.getState();
+    for (const candle of closedM15Candles) {
+      snap = session.onCandle(900, candle, {}) as typeof snap;
+    }
+    setPrecisionState(snap as PrecisionSnap);
+  }, [closedM15Candles]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Feed closed M5 candles
+  useEffect(() => {
+    const session = precisionSessionRef.current;
+    if (!session || !closedM5Candles.length) return;
+    let snap = session.getState();
+    for (const candle of closedM5Candles) {
+      snap = session.onCandle(300, candle, {
+        spread: liveQuote && liveQuote.bid !== undefined && liveQuote.ask !== undefined
+          ? liveQuote.ask - liveQuote.bid
+          : 0,
+      }) as typeof snap;
+    }
+    setPrecisionState(snap as PrecisionSnap);
+  }, [closedM5Candles]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Feed closed M1 candles
+  useEffect(() => {
+    const session = precisionSessionRef.current;
+    if (!session || !closedM1Candles.length) return;
+    let snap = session.getState();
+    for (const candle of closedM1Candles) {
+      snap = session.onCandle(60, candle, {
+        spread: liveQuote && liveQuote.bid !== undefined && liveQuote.ask !== undefined
+          ? liveQuote.ask - liveQuote.bid
+          : 0,
+      }) as typeof snap;
+    }
+    setPrecisionState(snap as PrecisionSnap);
+  }, [closedM1Candles]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Feed live tick as synthetic M1 candle
+  useEffect(() => {
+    const session = precisionSessionRef.current;
+    if (!session || !liveQuote) return;
+    const bucket = Math.floor(liveQuote.epoch / 60) * 60;
+    const syntheticCandle = {
+      epoch: bucket,
+      open: liveQuote.price,
+      high: liveQuote.price,
+      low: liveQuote.price,
+      close: liveQuote.price,
+    };
+    const snap = session.onCandle(60, syntheticCandle, {
+      spread: liveQuote.bid !== undefined && liveQuote.ask !== undefined
+        ? liveQuote.ask - liveQuote.bid
+        : 0,
+    });
+    setPrecisionState(snap as PrecisionSnap);
+  }, [liveQuote]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const statusIsLive = liveQuote && Date.now() - liveQuote.epoch * 1000 < 60_000;
   const quoteAgeText = liveQuote
     ? Date.now() - liveQuote.epoch * 1000 > 0
@@ -1403,6 +1505,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
           <SignalCard result={signalResult} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
           <SmcSignalCard result={smcSignal} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
           <TradeSetupCard setup={tradeSetup} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
+          <PrecisionSignalCard snap={precisionState} symbol={selectedSymbol} pipSize={activeInstrument?.pipSize} />
           <ForexOrderPanel
             symbol={selectedSymbol}
             instrumentName={activePair?.name ?? selectedSymbol}
@@ -1931,4 +2034,223 @@ function mergeTickIntoCandles(candles: ForexCandle[], quote: LiveQuote, seconds:
     close: quote.price,
   };
   return [...candles, next].slice(-CANDLE_LIMIT);
+}
+
+// ---------------------------------------------------------------------------
+// PrecisionSignalCard — M15 / M5 / M1 cascade lifecycle display
+// ---------------------------------------------------------------------------
+
+type PrecisionSnap = {
+  state: string;
+  direction: string | null;
+  pendingStep: string;
+  entryZone: { low: number; high: number } | null;
+  suggestedSl: number | null;
+  suggestedTp: number | null;
+  positionSize: number | null;
+  rrRatio: number | null;
+  sweepLevel: number | null;
+  displacementLevel: number | null;
+  invalidationReason: string | null;
+  actionable: boolean;
+  ageMs: number;
+};
+
+function PrecisionSignalCard({
+  snap,
+  symbol: _symbol,
+  pipSize,
+}: {
+  snap: PrecisionSnap | null;
+  symbol: string;
+  pipSize?: number;
+}) {
+  if (!snap) return null;
+
+  const { state, direction, pendingStep, entryZone, suggestedSl, suggestedTp, positionSize, rrRatio, sweepLevel, displacementLevel, invalidationReason, actionable, ageMs } = snap;
+
+  const digits = pipSize && pipSize > 0 && pipSize < 1
+    ? Math.min(6, String(pipSize).replace(/.*\./, "").length)
+    : 5;
+
+  function fmt(n: number | null | undefined) {
+    if (n == null || !Number.isFinite(n)) return "—";
+    return n.toFixed(digits);
+  }
+
+  function age(ms: number) {
+    if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+    if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+    return `${Math.round(ms / 3_600_000)}h`;
+  }
+
+  const isBuy     = state === "BUY";
+  const isSell    = state === "SELL";
+  const isExpired = state === "EXPIRED" || state === "INVALIDATED";
+  const isActive  = actionable;
+
+  const stateColor = isBuy    ? "#35d6a0"
+    : isSell   ? "#f06f79"
+    : isExpired ? "#6b7280"
+    : state === "WAITING" ? "#6b7280"
+    : "#f4b740";
+
+  const stateBg = isBuy    ? "color-mix(in srgb, #35d6a0 10%, var(--surface-2, #1a2235))"
+    : isSell   ? "color-mix(in srgb, #f06f79 10%, var(--surface-2, #1a2235))"
+    : isExpired ? "var(--surface-2, #1a2235)"
+    : "var(--surface-2, #1a2235)";
+
+  const stateLabel = isBuy ? "BUY" : isSell ? "SELL" : isExpired ? (state === "INVALIDATED" ? "INVALIDATED" : "EXPIRED") : state.replace(/_/g, " ");
+
+  const steps = [
+    { key: "M15_STRUCTURE", label: "M15 Structure", done: state !== "WAITING" && !isExpired },
+    { key: "SWEEP",         label: "Liquidity Sweep", done: ["M5_CONFIRMED","M1_CONFIRMED","RISK_VALIDATED","BUY","SELL"].includes(state) },
+    { key: "M5_BOS",        label: "M5 Displacement + BoS", done: ["M1_CONFIRMED","RISK_VALIDATED","BUY","SELL"].includes(state) },
+    { key: "M1_ENTRY",      label: "M1 Entry Zone + Rejection", done: ["RISK_VALIDATED","BUY","SELL"].includes(state) },
+    { key: "RISK",          label: "Risk Validated", done: ["BUY","SELL"].includes(state) },
+  ];
+
+  return (
+    <section
+      aria-label="Precision signal lifecycle"
+      style={{
+        marginTop: 16,
+        padding: "14px 16px",
+        borderRadius: 14,
+        border: `1px solid ${stateColor}55`,
+        background: stateBg,
+        opacity: isExpired ? 0.7 : 1,
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 850, letterSpacing: ".14em", textTransform: "uppercase" }}>
+            Precision Analyst · M15 / M5 / M1
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{
+              padding: "3px 10px",
+              borderRadius: 999,
+              background: `${stateColor}22`,
+              color: stateColor,
+              fontSize: 11,
+              fontWeight: 850,
+              letterSpacing: ".08em",
+            }}>
+              {stateLabel}
+            </span>
+            {direction && !isExpired && (
+              <span style={{ color: direction === "BUY" ? "#35d6a0" : "#f06f79", fontSize: 11, fontWeight: 750 }}>
+                {direction === "BUY" ? "↑" : "↓"} {direction}
+              </span>
+            )}
+          </div>
+        </div>
+        {ageMs > 0 && (
+          <span style={{ color: "var(--muted)", fontSize: 10 }}>
+            {isExpired ? "Signal age: " : "State age: "}{age(ageMs)}
+          </span>
+        )}
+      </div>
+
+      {/* Sequence progress */}
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${steps.length}, 1fr)`, gap: 6, marginBottom: 12 }}>
+        {steps.map((step) => {
+          const color = step.done ? "#35d6a0" : "var(--line)";
+          return (
+            <div key={step.key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ height: 4, borderRadius: 99, background: color }} />
+              <span style={{ color: step.done ? "#35d6a0" : "var(--muted)", fontSize: 8, fontWeight: 750, textAlign: "center" }}>
+                {step.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Pending step */}
+      {!isExpired && pendingStep && (
+        <p style={{ margin: "0 0 10px", color: "var(--ink)", fontSize: 11, lineHeight: 1.5 }}>
+          <span style={{ color: stateColor }}>→</span> {pendingStep}
+        </p>
+      )}
+
+      {/* Price levels */}
+      {(entryZone || suggestedSl || suggestedTp || sweepLevel) && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginBottom: 10 }}>
+          {sweepLevel != null && (
+            <div style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 9 }}>Swept level</span>
+              <strong style={{ color: "var(--ink)", fontSize: 13 }}>{fmt(sweepLevel)}</strong>
+            </div>
+          )}
+          {displacementLevel != null && (
+            <div style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 9 }}>Displacement / BoS</span>
+              <strong style={{ color: "var(--ink)", fontSize: 13 }}>{fmt(displacementLevel)}</strong>
+            </div>
+          )}
+          {entryZone && (
+            <div style={{ padding: "8px 10px", borderRadius: 9, border: `1px solid ${stateColor}55`, background: `${stateColor}0a` }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 9 }}>Entry zone</span>
+              <strong style={{ color: stateColor, fontSize: 12 }}>{fmt(entryZone.low)} – {fmt(entryZone.high)}</strong>
+            </div>
+          )}
+          {suggestedSl != null && (
+            <div style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid #f06f7955", background: "#f06f790a" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 9 }}>Stop-loss</span>
+              <strong style={{ color: "#f06f79", fontSize: 13 }}>{fmt(suggestedSl)}</strong>
+            </div>
+          )}
+          {suggestedTp != null && (
+            <div style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid #35d6a055", background: "#35d6a00a" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 9 }}>Take-profit</span>
+              <strong style={{ color: "#35d6a0", fontSize: 13 }}>{fmt(suggestedTp)}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* R:R and position size */}
+      {(rrRatio != null || positionSize != null) && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          {rrRatio != null && (
+            <span style={{ padding: "5px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--line)", color: rrRatio >= 1.5 ? "#35d6a0" : "#f4b740", fontSize: 11, fontWeight: 800 }}>
+              R:R {rrRatio.toFixed(2)}
+            </span>
+          )}
+          {positionSize != null && (
+            <span style={{ padding: "5px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--ink)", fontSize: 11, fontWeight: 800 }}>
+              {positionSize} lots
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Active signal highlight */}
+      {isActive && (
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: `${stateColor}18`, border: `1px solid ${stateColor}`, textAlign: "center" }}>
+          <strong style={{ color: stateColor, fontSize: 15, letterSpacing: ".1em" }}>
+            {isBuy ? "▲ BUY" : "▼ SELL"} — Signal active
+          </strong>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 10 }}>
+            Monitor stop-loss. Signal expires in {age(1_800_000 - ageMs > 0 ? 1_800_000 - ageMs : 0)}.
+          </p>
+        </div>
+      )}
+
+      {/* Expiry / invalidation reason */}
+      {isExpired && invalidationReason && (
+        <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#6b728018", border: "1px solid #6b728055" }}>
+          <span style={{ color: "#6b7280", fontSize: 10 }}>{invalidationReason}</span>
+        </div>
+      )}
+
+      {/* Disclaimer */}
+      <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 9, lineHeight: 1.5 }}>
+        Precision signals require all 5 steps. This is not financial advice.
+      </p>
+    </section>
+  );
 }

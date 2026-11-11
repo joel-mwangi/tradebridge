@@ -884,3 +884,96 @@
 .setupLevels .setupRow:last-child {
   border-bottom: none;
 }
+
+/* ── Precision Analyst Signal Card ─────────────────────────────── */
+.precisionCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--fx-line);
+  border-radius: 13px;
+  background: var(--fx-panel);
+  min-width: 0;
+}
+.precisionCard[data-terminal="true"] {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  pointer-events: none;
+}
+.precisionCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.precisionStateBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+.precisionStateWaiting     { background: rgba(148,163,184,.12); color: var(--fx-muted); }
+.precisionStateSetup       { background: rgba(245,158,11,.12);  color: #f59e0b; }
+.precisionStateM5          { background: rgba(16,185,129,.12);  color: #10b981; }
+.precisionStateM1          { background: rgba(99,102,241,.12);  color: #818cf8; }
+.precisionStateRisk        { background: rgba(99,102,241,.18);  color: #a5b4fc; }
+.precisionStateBuy         { background: rgba(34,201,133,.18);  color: #22c985; }
+.precisionStateSell        { background: rgba(255,123,135,.18); color: #ff7b87; }
+.precisionStateTerminal    { background: var(--fx-surface); color: var(--fx-muted); }
+.precisionPending {
+  padding: 8px 10px;
+  border: 1px solid var(--fx-line);
+  border-radius: 8px;
+  background: var(--fx-surface);
+  color: var(--fx-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.precisionLevelsGrid {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--fx-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.precisionLevelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 10px;
+  color: var(--fx-muted);
+  border-top: 1px solid var(--fx-line);
+}
+.precisionLevelRow:first-child { border-top: 0; }
+.precisionLevelRow strong {
+  color: var(--fx-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.precisionSlValue { color: #ff7b87; }
+.precisionTpValue { color: #22c985; }
+.precisionAge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0 0;
+  border-top: 1px solid var(--fx-line);
+  color: var(--fx-muted);
+  font-size: 9px;
+}
+.precisionAge strong { color: var(--fx-ink); font-variant-numeric: tabular-nums; }
+.precisionDisclaimer {
+  margin: 0;
+  color: var(--fx-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
