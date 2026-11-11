@@ -877,6 +877,7 @@ export default function ForexAnalyst({ accountType = "demo" }: { accountType?: "
           <h1>AI Chart Analyst</h1>
           <p>Live price action, candle recognition and automatically mapped support/resistance.</p>
         </div>
+        <TradingSessionClock />
         <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
           <button type="button" className={styles.positionsToggleBtn}
             onClick={() => setPositionsPanelOpen((v) => !v)}
@@ -2252,5 +2253,164 @@ function PrecisionSignalCard({
         Precision signals require all 5 steps. This is not financial advice.
       </p>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TradingSessionClock — live Forex session status in Kenyan time (EAT UTC+3)
+// ---------------------------------------------------------------------------
+
+const EAT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC+3
+
+type SessionDef = {
+  name: string;
+  short: string;
+  utcOpen: number;  // hour in UTC (0–23)
+  utcClose: number; // hour in UTC (exclusive)
+  color: string;
+  pairs: string;
+};
+
+const SESSIONS: SessionDef[] = [
+  { name: "Sydney",   short: "SYD", utcOpen: 21, utcClose: 6,  color: "#60a5fa", pairs: "AUD, NZD, JPY" },
+  { name: "Tokyo",    short: "TYO", utcOpen: 0,  utcClose: 9,  color: "#a78bfa", pairs: "JPY, AUD, NZD" },
+  { name: "London",   short: "LON", utcOpen: 7,  utcClose: 16, color: "#34d399", pairs: "EUR, GBP, CHF" },
+  { name: "New York", short: "NYC", utcOpen: 12, utcClose: 21, color: "#fbbf24", pairs: "USD, CAD, MXN" },
+];
+
+/** Returns true if utcHour is inside [open, close) handling overnight wrap. */
+function isSessionActive(utcHour: number, open: number, close: number): boolean {
+  if (open < close) return utcHour >= open && utcHour < close;
+  // Overnight: e.g. Sydney 21→6 wraps midnight
+  return utcHour >= open || utcHour < close;
+}
+
+/** Minutes until session opens or closes from now (UTC). */
+function minutesUntil(utcNow: Date, targetHour: number): number {
+  const target = new Date(utcNow);
+  target.setUTCHours(targetHour, 0, 0, 0);
+  if (target <= utcNow) target.setUTCDate(target.getUTCDate() + 1);
+  return Math.round((target.getTime() - utcNow.getTime()) / 60_000);
+}
+
+function formatEAT(utcHour: number): string {
+  const eatHour = (utcHour + 3) % 24;
+  const h = eatHour % 12 === 0 ? 12 : eatHour % 12;
+  const ampm = eatHour < 12 ? "AM" : "PM";
+  return `${h}:00 ${ampm}`;
+}
+
+function TradingSessionClock() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 10_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const utcHour = now.getUTCHours();
+  const utcMin  = now.getUTCMinutes();
+
+  // EAT time display
+  const eatMs   = now.getTime() + EAT_OFFSET_MS;
+  const eatDate = new Date(eatMs);
+  const eatStr  = eatDate.toUTCString().replace("GMT", "EAT").slice(0, -4);
+  const eatTime = `${String(eatDate.getUTCHours()).padStart(2, "0")}:${String(eatDate.getUTCMinutes()).padStart(2, "0")} EAT`;
+
+  const activeSessions  = SESSIONS.filter((s) => isSessionActive(utcHour, s.utcOpen, s.utcClose));
+  const inactiveSessions = SESSIONS.filter((s) => !isSessionActive(utcHour, s.utcOpen, s.utcClose));
+
+  // Overlap detection (London+NY is the best trading window)
+  const londonOpen = isSessionActive(utcHour, 7, 16);
+  const nyOpen     = isSessionActive(utcHour, 12, 21);
+  const isOverlap  = londonOpen && nyOpen;
+
+  // Next session to open
+  const nextSession = inactiveSessions
+    .map((s) => ({ ...s, minsUntil: minutesUntil(now, s.utcOpen) }))
+    .sort((a, b) => a.minsUntil - b.minsUntil)[0];
+
+  return (
+    <div
+      aria-label="Forex trading sessions"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        padding: "10px 14px",
+        borderRadius: 12,
+        border: "1px solid var(--line)",
+        background: "var(--surface-2, var(--sidebar-bg))",
+        minWidth: 220,
+        maxWidth: 320,
+      }}
+    >
+      {/* Current EAT time */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 850, letterSpacing: ".1em" }}>NAIROBI TIME</span>
+        <span style={{ color: "var(--ink)", fontSize: 13, fontWeight: 850, fontVariantNumeric: "tabular-nums" }}>{eatTime}</span>
+      </div>
+
+      {/* Overlap badge */}
+      {isOverlap && (
+        <div style={{ padding: "4px 8px", borderRadius: 6, background: "#fbbf2422", border: "1px solid #fbbf2466", textAlign: "center" }}>
+          <span style={{ color: "#fbbf24", fontSize: 10, fontWeight: 850 }}>⚡ London + New York overlap — highest liquidity</span>
+        </div>
+      )}
+
+      {/* Active sessions */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {activeSessions.length === 0 && (
+          <span style={{ color: "var(--muted)", fontSize: 10, fontStyle: "italic" }}>No major session active</span>
+        )}
+        {activeSessions.map((s) => {
+          const minsLeft = minutesUntil(now, s.utcClose);
+          const closeEat = formatEAT(s.utcClose);
+          return (
+            <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 99, background: s.color, flexShrink: 0, boxShadow: `0 0 6px ${s.color}` }} />
+              <span style={{ color: s.color, fontSize: 11, fontWeight: 850, minWidth: 32 }}>{s.short}</span>
+              <span style={{ color: "var(--ink)", fontSize: 10, flex: 1 }}>{s.name}</span>
+              <span style={{ color: "var(--muted)", fontSize: 9 }}>closes {closeEat} · {minsLeft}m left</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Next session */}
+      {nextSession && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, borderTop: "1px solid var(--line)" }}>
+          <span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--muted)", flexShrink: 0 }} />
+          <span style={{ color: "var(--muted)", fontSize: 10, flex: 1 }}>
+            Next: <strong style={{ color: "var(--ink)" }}>{nextSession.name}</strong> opens {formatEAT(nextSession.utcOpen)}
+          </span>
+          <span style={{ color: "var(--muted)", fontSize: 9 }}>in {nextSession.minsUntil}m</span>
+        </div>
+      )}
+
+      {/* All sessions at a glance */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, paddingTop: 4, borderTop: "1px solid var(--line)" }}>
+        {SESSIONS.map((s) => {
+          const active = isSessionActive(utcHour, s.utcOpen, s.utcClose);
+          return (
+            <div key={s.name} title={`${s.name}: ${formatEAT(s.utcOpen)} – ${formatEAT(s.utcClose)} EAT\n${s.pairs}`}
+              style={{
+                padding: "5px 4px",
+                borderRadius: 6,
+                border: `1px solid ${active ? s.color + "88" : "var(--line)"}`,
+                background: active ? `${s.color}14` : "transparent",
+                textAlign: "center",
+                cursor: "default",
+              }}
+            >
+              <span style={{ display: "block", fontSize: 9, fontWeight: 850, color: active ? s.color : "var(--muted)" }}>{s.short}</span>
+              <span style={{ display: "block", fontSize: 8, color: active ? s.color : "var(--muted)", marginTop: 1 }}>
+                {active ? "LIVE" : "CLOSED"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
