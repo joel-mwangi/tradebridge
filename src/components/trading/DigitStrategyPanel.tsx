@@ -43,6 +43,13 @@ type StrategyStatus = {
     over_color_positions_pass?: boolean;
     over_trigger_passes?: boolean;
     trigger_digit?: number | null;
+    threshold_triggered?: boolean;
+    threshold_digit?: number | null;
+    threshold_pct?: number | null;
+    threshold_confidence?: string | null;
+    threshold_reason?: string | null;
+    reverse_suggested?: boolean;
+    reverse_reason?: string | null;
   };
 };
 
@@ -635,6 +642,56 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
             <div style={{ marginTop: 13, paddingTop: 11, borderTop: "1px solid var(--line)" }}>
               <strong style={{ display: "block", color: "var(--ink)", fontSize: 11, marginBottom: 8 }}>Qualification checklist</strong>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 7 }}>
+                {(() => {
+                  const thresholdTriggered = qualification?.threshold_triggered === true;
+                  const thresholdDigit = qualification?.threshold_digit ?? null;
+                  const thresholdPct = qualification?.threshold_pct ?? null;
+                  const thresholdConfidence = qualification?.threshold_confidence ?? null;
+                  const reverseSuggested = qualification?.reverse_suggested === true;
+                  const thresholdColor = thresholdTriggered
+                    ? (thresholdConfidence === "HIGH" ? "#4ade80" : "#f4b740")
+                    : "var(--muted)";
+                  return (
+                    <div
+                      key="threshold-signal"
+                      style={{
+                        gridColumn: "1 / -1",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: thresholdTriggered ? `color-mix(in srgb, ${thresholdColor} 10%, var(--surface))` : "var(--surface)",
+                        border: `1px solid ${thresholdTriggered ? thresholdColor : "var(--line)"}55`,
+                      }}
+                    >
+                      <span style={{fontSize: 18, lineHeight: 1}}>{thresholdTriggered ? "📶" : "📉"}</span>
+                      <div style={{flex: 1, minWidth: 0}}>
+                        <div style={{display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap"}}>
+                          <span style={{color: thresholdColor, fontSize: 11, fontWeight: 850}}>12% Threshold Signal</span>
+                          {thresholdTriggered && thresholdDigit !== null && (
+                            <span style={{ padding: "2px 6px", borderRadius: 999, background: `${thresholdColor}22`, color: thresholdColor, fontSize: 10, fontWeight: 800 }}>
+                              Digit {thresholdDigit}{thresholdPct !== null ? ` · ${thresholdPct.toFixed(1)}%` : ""}
+                            </span>
+                          )}
+                          {thresholdTriggered && thresholdConfidence && (
+                            <span style={{padding: "2px 6px", borderRadius: 999, background: thresholdConfidence === "HIGH" ? "#14532d" : "#422006", color: thresholdConfidence === "HIGH" ? "#4ade80" : "#f4b740", fontSize: 9, fontWeight: 850, letterSpacing: ".08em"}}>
+                              {thresholdConfidence}
+                            </span>
+                          )}
+                          {reverseSuggested && (
+                            <span style={{padding: "2px 6px", borderRadius: 999, background: "#4c0519", color: "#f87171", fontSize: 9, fontWeight: 850, letterSpacing: ".08em"}}>REVERSE</span>
+                          )}
+                        </div>
+                        <div style={{color: "var(--muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4}}>
+                          {thresholdTriggered
+                            ? (qualification?.threshold_reason ?? `Digit ${thresholdDigit} at ≥12% — mean reversion signal active`)
+                            : "No digit above 12% in the signal zone — threshold not met"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {directionChecks.map((check) => {
                   const color = check.passed === true ? "#35d6a0" : check.passed === false ? "#f87171" : "var(--muted)";
                   const icon = check.passed === true ? "✓" : check.passed === false ? "×" : "·";
