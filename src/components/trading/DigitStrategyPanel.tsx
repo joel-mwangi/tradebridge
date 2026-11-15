@@ -120,8 +120,11 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const previousStrategyStateRef = useRef<string | null>(null);
 
   // ── Market Scanner ──────────────────────────────────────────────────────────
+  // Pass the ref object itself — not .current — so the hook reads the live
+  // WebSocket instance inside its effect rather than the null captured at
+  // call time.
   const { scannerResults, autoScanEnabled, setAutoScanEnabled, autoExecuteEnabled, setAutoExecuteEnabled, symbolsToSubscribe } = useMarketScanner({
-    socket: socketRef.current,
+    socketRef,
     sessionConnected: sessionConnected ?? false,
     isDemoAccount: isDemoAccount ?? false,
   });
@@ -130,6 +133,9 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const autoExecNotifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subscribe to 10 volatility symbols when scanner is enabled.
+  // retryCount is included so subscriptions are re-sent after a reconnect —
+  // the socket effect increments it on close, opening a new WebSocket; without
+  // it the nine non-primary symbols are never re-subscribed after a reconnect.
   useEffect(() => {
     if (!autoScanEnabled || symbolsToSubscribe.length === 0) return;
     const sock = socketRef.current;
@@ -139,7 +145,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       sock.send(JSON.stringify({ ticks: sym, subscribe: 1 }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoScanEnabled, symbolsToSubscribe.join(","), symbol]);
+  }, [autoScanEnabled, symbolsToSubscribe.join(","), symbol, retryCount]);
 
   // Auto-execute logic.
   useEffect(() => {

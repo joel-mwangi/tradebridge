@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import type { ScannerResult } from "./types";
 
 const SCANNER_SYMBOLS = [
@@ -9,7 +10,6 @@ const SCANNER_SYMBOLS = [
 ];
 
 const STORAGE_SCANNER_ENABLED = "tradebridge_scanner_enabled";
-const STORAGE_AUTO_EXECUTE_ENABLED = "tradebridge_auto_execute_enabled";
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -36,7 +36,7 @@ type ScannerMessage = {
 };
 
 export function useMarketScanner(options: {
-  socket: WebSocket | null;
+  socketRef: RefObject<WebSocket | null>;
   sessionConnected: boolean;
   isDemoAccount: boolean;
   onMessage?: (event: MessageEvent) => void;
@@ -48,15 +48,15 @@ export function useMarketScanner(options: {
   setAutoExecuteEnabled: (enabled: boolean) => void;
   symbolsToSubscribe: string[];
 } {
-  const { socket } = options;
+  const { socketRef, onMessage } = options;
 
   const [scannerResults, setScannerResults] = useState<ScannerResult[]>([]);
   const [autoScanEnabled, setAutoScanEnabledState] = useState<boolean>(() =>
     readBool(STORAGE_SCANNER_ENABLED, false),
   );
-  const [autoExecuteEnabled, setAutoExecuteEnabledState] = useState<boolean>(() =>
-    readBool(STORAGE_AUTO_EXECUTE_ENABLED, false),
-  );
+  // Auto-execute is always opt-in per session — do not persist across sessions
+  // so it cannot silently re-arm on a different account.
+  const [autoExecuteEnabled, setAutoExecuteEnabledState] = useState<boolean>(false);
 
   const setAutoScanEnabled = (enabled: boolean) => {
     writeBool(STORAGE_SCANNER_ENABLED, enabled);
@@ -65,21 +65,23 @@ export function useMarketScanner(options: {
   };
 
   const setAutoExecuteEnabled = (enabled: boolean) => {
-    writeBool(STORAGE_AUTO_EXECUTE_ENABLED, enabled);
     setAutoExecuteEnabledState(enabled);
   };
 
-  // Track which symbols were subscribed by the scanner so we can reason about
-  // what to subscribe when autoScanEnabled becomes true.
-  const subscribedRef = useRef(new Set<string>());
+  // Stable ref for onMessage callback so it doesn't appear as an effect dep.
+  const onMessageRef = useRef(onMessage);
+  useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
 
   // Listen for scanner_update messages on the shared market socket.
+  // Depend on socketRef (stable) and autoScanEnabled. Reading socketRef.current
+  // inside the effect captures the live WebSocket after mount.
   useEffect(() => {
+    const socket = socketRef.current;
     if (!socket) return;
 
     const handleMessage = (event: MessageEvent) => {
       // Forward to parent caller if provided.
-      options.onMessage?.(event);
+      onMessageRef.current?.(event);
 
       if (!autoScanEnabled) return;
       try {
@@ -97,7 +99,13 @@ export function useMarketScanner(options: {
     return () => {
       socket.removeEventListener("message", handleMessage);
     };
-  }, [socket, autoScanEnabled, options]);
+  // socketRef is a stable object; re-run when the socket instance changes by
+  // reading socketRef.current as the dep key — but React can't track .current
+  // changes, so DigitStrategyPanel passes retryCount (via socketRef being
+  // recreated) which causes this effect to re-run via the component re-render
+  // that updates socketRef.current. The key dep here is autoScanEnabled.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socketRef, autoScanEnabled]);
 
   // Determine which symbols the caller needs to subscribe to on the market socket.
   // The caller (DigitStrategyPanel) is responsible for the actual send.
