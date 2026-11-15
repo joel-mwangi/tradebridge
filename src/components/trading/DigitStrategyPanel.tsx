@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { StrategyContractUpdate, StrategyExecutionStatus } from "./types";
 import { Skeleton } from "./Skeleton";
+import { useMarketScanner } from "./useMarketScanner";
 
 const MARKET_SOCKET = process.env.NEXT_PUBLIC_TRADEBRIDGE_BACKEND_MARKET_WS_URL?.trim() ?? "";
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
@@ -99,7 +100,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected, stake, duration, currency }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number; duration: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected, stake, duration, currency, onSymbolChange, onAutoExecute, isDemoAccount }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number; duration: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean; onSymbolChange?: (symbol: string) => void; onAutoExecute?: (params: { symbol: string; contract_type: string; barrier: number | null; stake: number; duration: number; currency: string }) => void; isDemoAccount?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under" } | null>(null);
@@ -117,6 +118,56 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const audioContextRef = useRef<AudioContext | null>(null);
   const previousTransportRef = useRef<typeof transport | null>(null);
   const previousStrategyStateRef = useRef<string | null>(null);
+
+  // ── Market Scanner ──────────────────────────────────────────────────────────
+  const { scannerResults, autoScanEnabled, setAutoScanEnabled, autoExecuteEnabled, setAutoExecuteEnabled, symbolsToSubscribe } = useMarketScanner({
+    socket: socketRef.current,
+    sessionConnected: sessionConnected ?? false,
+    isDemoAccount: isDemoAccount ?? false,
+  });
+  const lastAutoExecuteAtRef = useRef<number>(0);
+  const [autoExecNotification, setAutoExecNotification] = useState<string | null>(null);
+  const autoExecNotifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Subscribe to 10 volatility symbols when scanner is enabled.
+  useEffect(() => {
+    if (!autoScanEnabled || symbolsToSubscribe.length === 0) return;
+    const sock = socketRef.current;
+    if (!sock || sock.readyState !== WebSocket.OPEN) return;
+    for (const sym of symbolsToSubscribe) {
+      if (sym === symbol) continue; // already subscribed by main logic
+      sock.send(JSON.stringify({ ticks: sym, subscribe: 1 }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoScanEnabled, symbolsToSubscribe.join(","), symbol]);
+
+  // Auto-execute logic.
+  useEffect(() => {
+    if (!autoExecuteEnabled) return;
+    if (!(isDemoAccount && sessionConnected)) return;
+    const executionState = executionStatus?.state ?? "";
+    if (["waiting_proposal", "waiting_buy", "waiting_settlement"].includes(executionState)) return;
+    const now = Date.now();
+    if (now - lastAutoExecuteAtRef.current < 60_000) return;
+    const topResult = scannerResults.find((r) => r.confidence === "HIGH" && r.score >= 80);
+    if (!topResult) return;
+    lastAutoExecuteAtRef.current = now;
+    if (topResult.symbol !== symbol) {
+      onSymbolChange?.(topResult.symbol);
+    }
+    onAutoExecute?.({
+      symbol: topResult.symbol,
+      contract_type: topResult.contract_type,
+      barrier: topResult.barrier,
+      stake,
+      duration,
+      currency,
+    });
+    const notification = `Auto-switching to ${topResult.symbol} · ${topResult.contract_type}${topResult.barrier !== null ? ` ${topResult.barrier}` : ""}`;
+    setAutoExecNotification(notification);
+    if (autoExecNotifTimerRef.current) clearTimeout(autoExecNotifTimerRef.current);
+    autoExecNotifTimerRef.current = setTimeout(() => setAutoExecNotification(null), 5_000);
+  }, [scannerResults, autoExecuteEnabled, isDemoAccount, sessionConnected, executionStatus, symbol, onSymbolChange, onAutoExecute, stake, duration, currency]);
 
   useEffect(() => {
     try {
@@ -460,6 +511,109 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           <button type="button" onClick={() => send("status")} disabled={busy} aria-label="Refresh status" title="Refresh" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy ? .5 : 1, cursor: "pointer" }}><Icon name="refresh" /></button>
         </div>
       </div>
+
+      {/* ── Auto Scanner Section ───────────────────────────────────────────── */}
+      <div aria-label="Auto market scanner" style={{ marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: autoScanEnabled ? 10 : 0 }}>
+          <div style={{ display: "grid", gap: 2 }}>
+            <strong style={{ color: "var(--ink)", fontSize: 12, letterSpacing: ".06em" }}>AUTO SCANNER</strong>
+            {autoScanEnabled && <span style={{ color: "var(--muted)", fontSize: 10 }}>Scanning 10 markets simultaneously</span>}
+          </div>
+          <button
+            type="button"
+            aria-pressed={autoScanEnabled}
+            onClick={() => setAutoScanEnabled(!autoScanEnabled)}
+            style={{
+              padding: "5px 12px", border: "1px solid var(--line)", borderRadius: 8,
+              background: autoScanEnabled ? "var(--teal)" : "transparent",
+              color: autoScanEnabled ? "#0b1320" : "var(--ink)",
+              fontSize: 10, fontWeight: 850, cursor: "pointer",
+            }}
+          >
+            {autoScanEnabled ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {autoScanEnabled && (
+          <>
+            {autoExecNotification && (
+              <div aria-live="polite" style={{ marginBottom: 8, padding: "7px 10px", borderRadius: 8, background: "#0ea5e918", border: "1px solid #0ea5e955", color: "#0ea5e9", fontSize: 10, fontWeight: 750 }}>
+                {autoExecNotification}
+              </div>
+            )}
+
+            {scannerResults.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 11, padding: "8px 0" }} aria-live="polite">
+                <span className="tb-pulse" style={{ display: "inline-block", marginRight: 5 }}>●</span>Scanning…
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {scannerResults.map((result, index) => {
+                  const confidenceColor = result.confidence === "HIGH" ? "#4ade80" : result.confidence === "MEDIUM" ? "#f4b740" : "var(--muted)";
+                  return (
+                    <div key={`${result.symbol}-${result.scanned_at}`} style={{ padding: "10px 11px", borderRadius: 10, border: `1px solid ${confidenceColor}44`, background: `color-mix(in srgb, ${confidenceColor} 6%, var(--surface))` }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 750 }}>#{index + 1}</span>
+                        <span style={{ padding: "2px 7px", borderRadius: 999, background: `${confidenceColor}22`, color: confidenceColor, fontSize: 9, fontWeight: 850, letterSpacing: ".08em" }}>
+                          {result.confidence}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        <strong style={{ color: "var(--ink)", fontSize: 12 }}>{result.symbol}</strong>
+                        <span style={{ color: "var(--muted)", fontSize: 11 }}> · {result.contract_type}{result.barrier !== null ? ` ${result.barrier}` : ""}</span>
+                      </div>
+                      <div style={{ marginTop: 3, color: "var(--muted)", fontSize: 10 }}>
+                        Score: <strong style={{ color: "var(--ink)" }}>{result.score}</strong>
+                        {result.qualifying_digit !== null && result.qualifying_pct !== null && (
+                          <span> · Digit {result.qualifying_digit} at {result.qualifying_pct.toFixed(1)}%</span>
+                        )}
+                      </div>
+                      {result.reason && (
+                        <div style={{ marginTop: 2, color: "var(--muted)", fontSize: 9, lineHeight: 1.4, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }} title={result.reason}>
+                          {result.reason}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid var(--line)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "grid", gap: 2 }}>
+                  <strong style={{ color: "var(--ink)", fontSize: 11 }}>Auto-execute</strong>
+                  <span style={{ color: "var(--muted)", fontSize: 9, lineHeight: 1.4 }}>
+                    {!isDemoAccount
+                      ? "Demo account required"
+                      : !sessionConnected
+                        ? "Session connection required"
+                        : "Switches to the best signal and executes automatically"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-pressed={autoExecuteEnabled}
+                  disabled={!isDemoAccount || !sessionConnected}
+                  title={!isDemoAccount ? "Auto-execute requires a demo account" : !sessionConnected ? "Auto-execute requires an active session connection" : ""}
+                  onClick={() => setAutoExecuteEnabled(!autoExecuteEnabled)}
+                  style={{
+                    padding: "5px 12px", border: "1px solid var(--line)", borderRadius: 8,
+                    background: autoExecuteEnabled && isDemoAccount && sessionConnected ? "#60a5fa" : "transparent",
+                    color: autoExecuteEnabled && isDemoAccount && sessionConnected ? "#0b1320" : "var(--muted)",
+                    fontSize: 10, fontWeight: 850,
+                    cursor: !isDemoAccount || !sessionConnected ? "not-allowed" : "pointer",
+                    opacity: !isDemoAccount || !sessionConnected ? 0.5 : 1,
+                  }}
+                >
+                  {autoExecuteEnabled && isDemoAccount && sessionConnected ? "ON" : "OFF"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      {/* ── End Auto Scanner Section ───────────────────────────────────────── */}
 
       <div aria-label="Strategy contract type" style={{ display: "grid", gap: 8, marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>

@@ -100,6 +100,18 @@ export interface AccountActivity {
 }
 
 
+export interface ScannerResult {
+  symbol: string;
+  contract_type: string;
+  barrier: number | null;
+  score: number;
+  confidence: "HIGH" | "MEDIUM" | "NONE";
+  qualifying_digit: number | null;
+  qualifying_pct: number | null;
+  reason: string;
+  scanned_at: number;
+}
+
 export interface BackendDigitFrequencyWindow {
   window_size: number;
   sample_size: number;
