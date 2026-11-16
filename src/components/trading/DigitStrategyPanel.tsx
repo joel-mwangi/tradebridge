@@ -127,8 +127,13 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     socketRef,
     sessionConnected: sessionConnected ?? false,
     isDemoAccount: isDemoAccount ?? false,
+    retryCount,
   });
-  const lastAutoExecuteAtRef = useRef<number>(0);
+  const lastAutoExecuteAtRef = useRef<number>(
+    (() => {
+      try { return Number(sessionStorage.getItem("tradebridge_auto_exec_last_at") ?? "0"); } catch { return 0; }
+    })()
+  );
   const [autoExecNotification, setAutoExecNotification] = useState<string | null>(null);
   const autoExecNotifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -158,6 +163,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     const topResult = scannerResults.find((r) => r.confidence === "HIGH" && r.score >= 80);
     if (!topResult) return;
     lastAutoExecuteAtRef.current = now;
+    try { sessionStorage.setItem("tradebridge_auto_exec_last_at", String(now)); } catch { /* ignore */ }
     if (topResult.symbol !== symbol) {
       onSymbolChange?.(topResult.symbol);
     }

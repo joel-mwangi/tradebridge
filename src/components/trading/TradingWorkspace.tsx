@@ -875,7 +875,25 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeProduct === "options" && tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} stake={Number(tradeStake)} duration={Number(tradeDuration)} currency={activeAccount?.currency ?? "USD"} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} onSymbolChange={(sym) => selectMarket(sym)} onAutoExecute={activeAccountIsDemo && sessionConnected ? (params) => { const contractTypeUpper = params.contract_type.toUpperCase(); const directionMap: Record<string, "over" | "under"> = { DIGITOVER: "over", DIGITUNDER: "under" }; const direction = directionMap[contractTypeUpper]; if (!direction) { console.warn("[TradeBridge] auto-execute received unrecognised contract_type:", params.contract_type); return; } trading.startStrategy({ symbol: params.symbol, windowSize: digitWindowSize, barrier: params.barrier ?? digitTarget, direction, stake: params.stake, duration: params.duration, currency: params.currency }); } : undefined} isDemoAccount={activeAccountIsDemo} />
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} stake={Number(tradeStake)} duration={Number(tradeDuration)} currency={activeAccount?.currency ?? "USD"} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} onSymbolChange={(sym) => selectMarket(sym)} onAutoExecute={activeAccountIsDemo && sessionConnected ? (params) => {
+                    const ct = params.contract_type.toUpperCase();
+                    // Map all 6 digit contract types to startStrategy params.
+                    // OVER/UNDER use direction; others send contract_type directly.
+                    const directionMap: Record<string, "over" | "under"> = { DIGITOVER: "over", DIGITUNDER: "under" };
+                    const direction = directionMap[ct] ?? "over";
+                    // For non-OVER/UNDER types, pass contract_type as an override
+                    // so the backend routes to the correct Deriv contract.
+                    trading.startStrategy({
+                      symbol: params.symbol,
+                      windowSize: digitWindowSize,
+                      barrier: params.barrier ?? digitTarget,
+                      direction,
+                      contractType: ct,
+                      stake: params.stake,
+                      duration: params.duration,
+                      currency: params.currency,
+                    });
+                  } : undefined} isDemoAccount={activeAccountIsDemo} />
                 )}
 
                 {tradeProduct === "multipliers" && (

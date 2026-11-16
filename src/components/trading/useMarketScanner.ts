@@ -39,6 +39,7 @@ export function useMarketScanner(options: {
   socketRef: RefObject<WebSocket | null>;
   sessionConnected: boolean;
   isDemoAccount: boolean;
+  retryCount?: number;
   onMessage?: (event: MessageEvent) => void;
 }): {
   scannerResults: ScannerResult[];
@@ -48,7 +49,7 @@ export function useMarketScanner(options: {
   setAutoExecuteEnabled: (enabled: boolean) => void;
   symbolsToSubscribe: string[];
 } {
-  const { socketRef, onMessage } = options;
+  const { socketRef, onMessage, retryCount = 0 } = options;
 
   const [scannerResults, setScannerResults] = useState<ScannerResult[]>([]);
   const [autoScanEnabled, setAutoScanEnabledState] = useState<boolean>(() =>
@@ -99,13 +100,11 @@ export function useMarketScanner(options: {
     return () => {
       socket.removeEventListener("message", handleMessage);
     };
-  // socketRef is a stable object; re-run when the socket instance changes by
-  // reading socketRef.current as the dep key — but React can't track .current
-  // changes, so DigitStrategyPanel passes retryCount (via socketRef being
-  // recreated) which causes this effect to re-run via the component re-render
-  // that updates socketRef.current. The key dep here is autoScanEnabled.
+  // retryCount is included so the listener is re-registered after every
+  // reconnect — the socket effect increments it on close, creating a new
+  // WebSocket; socketRef.current is re-read at effect-run time.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socketRef, autoScanEnabled]);
+  }, [autoScanEnabled, retryCount]);
 
   // Determine which symbols the caller needs to subscribe to on the market socket.
   // The caller (DigitStrategyPanel) is responsible for the actual send.

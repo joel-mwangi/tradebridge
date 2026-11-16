@@ -832,7 +832,7 @@ export function useTradingSession(
     });
   }
 
-  function startStrategy(params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake?: number; duration?: number; currency?: string }) {
+  function startStrategy(params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; contractType?: string; stake?: number; duration?: number; currency?: string }) {
     const activeSocket = socketRef.current;
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
     if ((account?.account_type ?? "").toLowerCase() !== "demo") return;
@@ -848,6 +848,7 @@ export function useTradingSession(
         window_size: params.windowSize,
         barrier: params.barrier,
         direction: params.direction,
+        ...(params.contractType ? { contract_type: params.contractType } : {}),
         ...(params.stake !== undefined ? { stake: params.stake } : {}),
         ...(params.duration !== undefined ? { duration: params.duration } : {}),
         ...(params.currency !== undefined ? { currency: params.currency } : {}),
