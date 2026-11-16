@@ -886,7 +886,9 @@ export default function TradingWorkspace() {
                     trading.startStrategy({
                       symbol: params.symbol,
                       windowSize: digitWindowSize,
-                      barrier: params.barrier ?? digitTarget,
+                      // For EVEN/ODD barrier is irrelevant; use 0 as a neutral placeholder.
+                      // For OVER/UNDER/MATCHES/DIFFERS the scanner supplies the correct barrier.
+                      barrier: params.barrier ?? 0,
                       direction,
                       contractType: ct,
                       stake: params.stake,
