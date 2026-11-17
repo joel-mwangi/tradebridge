@@ -154,7 +154,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
 
   // Auto-execute logic.
   useEffect(() => {
-    if (!autoExecuteEnabled) return;
+    if (!autoExecuteEnabled || direction === "EVEN" || direction === "ODD") return;
     if (!(isDemoAccount && sessionConnected)) return;
     const executionState = executionStatus?.state ?? "";
     if (["waiting_proposal", "waiting_buy", "waiting_settlement"].includes(executionState)) return;
@@ -179,7 +179,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     setAutoExecNotification(notification);
     if (autoExecNotifTimerRef.current) clearTimeout(autoExecNotifTimerRef.current);
     autoExecNotifTimerRef.current = setTimeout(() => setAutoExecNotification(null), 5_000);
-  }, [scannerResults, autoExecuteEnabled, isDemoAccount, sessionConnected, executionStatus, symbol, onSymbolChange, onAutoExecute, stake, duration, currency]);
+  }, [scannerResults, autoExecuteEnabled, direction, isDemoAccount, sessionConnected, executionStatus, symbol, onSymbolChange, onAutoExecute, stake, duration, currency]);
 
   useEffect(() => {
     try {
@@ -487,6 +487,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   // the execution card already covers the current state and showing 'idle/disconnected'
   // from the public feed alongside an active trade is confusing.
   const showStrategyStatus = Boolean(status) && !isExecutionActive;
+  const isEvenOdd = direction === "EVEN" || direction === "ODD";
   const matchingContractUpdate = contractUpdate
     && (!activeContractId || contractUpdate.contractId === activeContractId)
     ? contractUpdate
@@ -535,7 +536,38 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
       </div>
 
-      {/* ── Auto Scanner Section ───────────────────────────────────────────── */}
+      {/* ── Automatic execution guidance ───────────────────────────────────── */}
+      {isEvenOdd ? (
+      <div aria-label="Even Odd automatic execution" style={{ marginTop: 14, padding: 14, border: "1px solid #f4b74055", borderRadius: 12, background: "color-mix(in srgb, #f4b740 6%, var(--surface-2, var(--sidebar-bg)))" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ display: "grid", gap: 3 }}>
+            <strong style={{ color: "#f4b740", fontSize: 12, letterSpacing: ".06em" }}>EVEN / ODD AUTO EXECUTION</strong>
+            <span style={{ color: "var(--muted)", fontSize: 10, lineHeight: 1.45 }}>
+              Independent filtered strategy · no barrier or market scanner entry
+            </span>
+          </div>
+          <span style={{ padding: "4px 8px", borderRadius: 999, background: "#f4b74018", color: "#f4b740", fontSize: 9, fontWeight: 850 }}>
+            {direction}
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 7, marginTop: 12 }}>
+          {[
+            ["Power", direction === "EVEN" ? "Even ≥ 58%" : "Odd ≥ 70%"],
+            ["Confluence", "Green + Blue ≥ 11.5%"],
+            ["Opposing digits", "Red + Yellow ≤ 9%"],
+            ["Confirmation", "3–4 opposing ticks, then confirm"],
+          ].map(([label, value]) => (
+            <div key={label} style={{ padding: "8px 9px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 9 }}>{label}</span>
+              <strong style={{ display: "block", marginTop: 3, color: "var(--ink)", fontSize: 10, lineHeight: 1.35 }}>{value}</strong>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 10, color: "var(--muted)", fontSize: 10, lineHeight: 1.45 }}>
+          Start observation to arm the strategy. The backend waits for confirmation within three ticks, then uses the fixed-stake sequence.
+        </div>
+      </div>
+      ) : (
       <div aria-label="Auto market scanner" style={{ marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: autoScanEnabled ? 10 : 0 }}>
           <div style={{ display: "grid", gap: 2 }}>
@@ -636,7 +668,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           </>
         )}
       </div>
-      {/* ── End Auto Scanner Section ───────────────────────────────────────── */}
+      )}
+      {/* ── End automatic execution guidance ──────────────────────────────── */}
 
       <div aria-label="Strategy contract type" style={{ display: "grid", gap: 8, marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -749,7 +782,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       )}
 
 
-      {showStrategyStatus && (() => {        const s = status!; const qualification = s.qualification;
+      {showStrategyStatus && !isEvenOdd && (() => {        const s = status!; const qualification = s.qualification;
         const selectedDirection = s.requested_direction === "under" ? "under" : "over";
         const directionChecks = selectedDirection === "over"
           ? [
@@ -869,6 +902,39 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
                     </div>
                   );
                 })()}
+
+                {showStrategyStatus && isEvenOdd && (
+                  <div aria-label="Even Odd strategy status" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: `1px solid ${status?.signal_generated ? "#35d6a055" : "#f4b74055"}`, background: "var(--surface-2, var(--sidebar-bg))" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ display: "grid", gap: 5 }}>
+                        <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 850, letterSpacing: ".12em", textTransform: "uppercase" }}>Strategy status · {direction}</span>
+                        <strong style={{ color: "var(--ink)", fontSize: 16 }}>
+                          {status?.signal_generated ? "Entry signal confirmed" : status?.state?.replaceAll("_", " ") ?? "Observing market"}
+                        </strong>
+                        <span style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>
+                          {status?.reason ?? "Waiting for digit-frequency confluence and parity confirmation."}
+                        </span>
+                      </div>
+                      <span style={{ padding: "5px 9px", borderRadius: 999, background: status?.signal_generated ? "#35d6a018" : "#f4b74018", color: status?.signal_generated ? "#35d6a0" : "#f4b740", fontSize: 10, fontWeight: 850 }}>
+                        {status?.signal_generated ? "SIGNAL READY" : "OBSERVING"}
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: 8, marginTop: 13 }}>
+                      <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+                        <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Parity power</span>
+                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{direction === "EVEN" ? "Even ≥ 58%" : "Odd ≥ 70%"}</strong>
+                      </div>
+                      <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+                        <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Tick confirmation</span>
+                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{status?.trigger_digit != null ? `Digit ${status.trigger_digit}` : "3–4 then confirm"}</strong>
+                      </div>
+                      <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+                        <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Market feed</span>
+                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{status?.feed_state === "healthy" ? "Healthy" : (status?.feed_state ?? "Waiting").replaceAll("_", " ")}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {directionChecks.map((check) => {
                   const color = check.passed === true ? "#35d6a0" : check.passed === false ? "#f87171" : "var(--muted)";
                   const icon = check.passed === true ? "✓" : check.passed === false ? "×" : "·";
