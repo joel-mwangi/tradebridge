@@ -922,6 +922,10 @@ export function useTradingSession(
       setStatus("Even/Odd contracts do not accept a target digit.");
       return;
     }
+    if ((input.contractType === "CALL" || input.contractType === "PUT") && (input.barrier !== undefined || input.duration !== 1)) {
+      setStatus("Rise/Fall contracts require a 1-tick duration and no barrier.");
+      return;
+    }
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setQuote(null);

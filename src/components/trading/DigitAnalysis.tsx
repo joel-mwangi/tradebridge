@@ -114,12 +114,12 @@ export default function DigitAnalysis({
     </section>
     <div className={styles.controls}>
       <label className={styles.control}><span>Contract type</span><select value={mode} onChange={(e) => onModeChange(e.target.value as DigitContractMode)}>
-        <option value="over-under">Over / Under</option><option value="even-odd">Even / Odd</option><option value="matches-differs">Matches / Differs</option>
+        <option value="over-under">Over / Under</option><option value="even-odd">Even / Odd</option><option value="matches-differs">Matches / Differs</option><option value="rise-fall">Rise / Fall</option>
       </select></label>
       <label className={styles.control}><span>Tick window</span><select value={windowSize} onChange={(e) => onWindowSizeChange(Number(e.target.value))}>
         {[50,100,250,500,1000].map((n) => <option key={n} value={n}>{n.toLocaleString()} ticks</option>)}
       </select></label>
-      {mode !== "even-odd" && <label className={styles.control}>
+      {mode !== "even-odd" && mode !== "rise-fall" && <label className={styles.control}>
         <span>{mode === "over-under" ? "Barrier digit" : "Target digit"}</span>
         <select value={target} onChange={(e) => onTargetChange(Number(e.target.value))}>
           {validTargets.map((d) => <option key={d} value={d}>{d}</option>)}

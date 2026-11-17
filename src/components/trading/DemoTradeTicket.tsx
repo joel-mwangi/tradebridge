@@ -9,11 +9,13 @@ const PREDICTIONS: Record<DigitContractMode, Array<{ label: string; value: Digit
   "over-under": [{ label: "Over", value: "OVER" }, { label: "Under", value: "UNDER" }],
   "even-odd": [{ label: "Even", value: "EVEN" }, { label: "Odd", value: "ODD" }],
   "matches-differs": [{ label: "Matches", value: "MATCHES" }, { label: "Differs", value: "DIFFERS" }],
+  "rise-fall": [{ label: "Rise", value: "CALL" }, { label: "Fall", value: "PUT" }],
 };
 
 function getContractType(mode: DigitContractMode, prediction: DigitPrediction): DigitContractType {
   if (mode === "over-under") return prediction === "UNDER" ? "DIGITUNDER" : "DIGITOVER";
   if (mode === "even-odd") return prediction === "ODD" ? "DIGITODD" : "DIGITEVEN";
+  if (mode === "rise-fall") return prediction === "PUT" ? "PUT" : "CALL";
   return prediction === "DIFFERS" ? "DIGITDIFF" : "DIGITMATCH";
 }
 
@@ -25,6 +27,8 @@ function getContractLabel(contractType: DigitContractType, barrier?: string) {
     case "DIGITODD": return "Odd";
     case "DIGITMATCH": return `Matches ${barrier}`;
     case "DIGITDIFF": return `Differs from ${barrier}`;
+    case "CALL": return "Rise";
+    case "PUT": return "Fall";
   }
 }
 
@@ -81,7 +85,7 @@ export default function DemoTradeTicket({
     ? prediction
     : predictionOptions[0].value;
   const contractType = getContractType(mode, activePrediction);
-  const requiresTarget = mode !== "even-odd";
+  const requiresTarget = mode !== "even-odd" && mode !== "rise-fall";
   const recentFrequency = snapshot?.digitFrequency?.windows?.["100"];
   const observedDigits = (snapshot?.points ?? []).slice(-windowSize).map((point) => point.lastDigit).filter((digit): digit is number => Number.isInteger(digit) && digit! >= 0 && digit! <= 9);
   // Keep the prediction summaries based on the observed digit stream, but all per-digit frequency percentages use backend values.
@@ -176,7 +180,7 @@ export default function DemoTradeTicket({
     </div>}
 
      <fieldset className={styles.directionField + (mode === "over-under" ? " " + styles.overUnderDirectionField : "")} disabled={!ready || busy}>
-      <legend>{mode === "over-under" ? "Over / Under prediction" : mode === "even-odd" ? "Even / Odd prediction" : "Matches / Differs prediction"}</legend>
+      <legend>{mode === "over-under" ? "Over / Under prediction" : mode === "even-odd" ? "Even / Odd prediction" : mode === "rise-fall" ? "Rise / Fall prediction" : "Matches / Differs prediction"}</legend>
       <div className={styles.directionChoices}>
         {predictionOptions.map((option, index) => {
           const selected = activePrediction === option.value;
@@ -210,6 +214,7 @@ export default function DemoTradeTicket({
     </section>}
 
     {mode === "matches-differs" && <p className={styles.compactControlsHint}>Target digit: <strong>{target}</strong>. Matches wins on that digit; Differs wins on any other digit.</p>}
+    {mode === "rise-fall" && <p className={styles.compactControlsHint}>Rise/Fall contracts have no barrier and use a 1-tick duration.</p>}
     <div className={styles.compactInputsGrid}>
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake</label>
@@ -224,16 +229,16 @@ export default function DemoTradeTicket({
       <div className={styles.compactFieldGroup}>
         <label className={styles.fieldLabel} htmlFor="tradebridge-duration">Duration</label>
         <div className={styles.inputShell}>
-          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => onDurationChange(event.target.value)} disabled={!ready || busy} />
+          <input id="tradebridge-duration" type="number" inputMode="numeric" min="1" max={10} step="1" value={duration} onChange={(event) => onDurationChange(event.target.value)} disabled={!ready || busy || mode === "rise-fall"} />
           <span>ticks</span>
         </div>
         <div className={styles.presets + " " + styles.compactPresets + " " + styles.durationPresets} aria-label="Duration presets">
-          {[{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => onDurationChange(value.value)} disabled={!ready || busy}>{value.label}</button>)}
+          {[{ label: "1 tick", value: "1" }, { label: "5 ticks", value: "5" }, { label: "10 ticks", value: "10" }].map((value) => <button key={value.value} type="button" className={duration === value.value ? styles.presetActive : styles.preset} onClick={() => onDurationChange(value.value)} disabled={!ready || busy || mode === "rise-fall"}>{value.label}</button>)}
         </div>
       </div>
     </div>
     {visibleStatus && <p className={styles.inlineHint} role="status">{visibleStatus}</p>}
-    <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 0.35 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
+    <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : activePrediction === "CALL" ? "Over" : activePrediction === "PUT" ? "Under" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 0.35 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10 || (mode === "rise-fall" && Number(duration) !== 1)} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
       {busy ? "Processing…" : "Buy"}
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv to enable Buy.</p>}

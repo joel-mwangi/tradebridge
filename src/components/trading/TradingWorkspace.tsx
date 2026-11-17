@@ -172,8 +172,9 @@ export default function TradingWorkspace() {
 
   function setDigitMode(mode: DigitContractMode) {
     setDigitModeState(mode);
-    setDigitPrediction(mode === "over-under" ? "OVER" : mode === "even-odd" ? "EVEN" : "MATCHES");
+    setDigitPrediction(mode === "over-under" ? "OVER" : mode === "even-odd" ? "EVEN" : mode === "rise-fall" ? "CALL" : "MATCHES");
     setDigitTarget(5);
+    if (mode === "rise-fall") setTradeDuration("1");
   }
 
   function setPredictionAndValidateTarget(prediction: DigitPrediction) {
@@ -886,7 +887,24 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeProduct === "options" && tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : digitPrediction === "EVEN" ? "EVEN" : digitPrediction === "ODD" ? "ODD" : "OVER"} contractType={digitPrediction === "EVEN" ? "DIGITEVEN" : digitPrediction === "ODD" ? "DIGITODD" : digitPrediction === "UNDER" ? "DIGITUNDER" : "DIGITOVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} stake={Number(tradeStake)} duration={Number(tradeDuration)} currency={activeAccount?.currency ?? "USD"} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} onSymbolChange={(sym) => selectMarket(sym)} onAutoExecute={activeAccountIsDemo && sessionConnected ? (params) => {
+                  <DigitStrategyPanel
+                    symbol={selectedSymbol}
+                    windowSize={digitWindowSize}
+                    barrier={digitTarget}
+                    direction={digitPrediction === "UNDER" ? "UNDER" : digitPrediction === "EVEN" ? "EVEN" : digitPrediction === "ODD" ? "ODD" : "OVER"}
+                    contractType={digitPrediction === "EVEN" ? "DIGITEVEN" : digitPrediction === "ODD" ? "DIGITODD" : digitPrediction === "UNDER" ? "DIGITUNDER" : digitPrediction === "CALL" ? "CALL" : digitPrediction === "PUT" ? "PUT" : "DIGITOVER"}
+                    onDirectionChange={setStrategyDirection}
+                    frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined}
+                    executionStatus={trading.strategyExecutionStatus}
+                    contractUpdate={trading.strategyContractUpdate}
+                    stake={Number(tradeStake)}
+                    duration={Number(tradeDuration)}
+                    currency={activeAccount?.currency ?? "USD"}
+                    onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined}
+                    onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined}
+                    sessionConnected={sessionConnected}
+                    onSymbolChange={(sym) => selectMarket(sym)}
+                    onAutoExecute={activeAccountIsDemo && sessionConnected ? (params) => {
                     const ct = params.contract_type.toUpperCase();
                     // Map all 6 digit contract types to startStrategy params.
                     // OVER/UNDER use direction; others send contract_type directly.

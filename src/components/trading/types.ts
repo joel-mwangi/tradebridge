@@ -34,9 +34,9 @@ export interface MarketCandle {
   close: number;
 }
 
-export type DigitContractMode = "over-under" | "even-odd" | "matches-differs";
-export type DigitPrediction = "OVER" | "UNDER" | "EVEN" | "ODD" | "MATCHES" | "DIFFERS";
-export type DigitContractType = "DIGITOVER" | "DIGITUNDER" | "DIGITEVEN" | "DIGITODD" | "DIGITMATCH" | "DIGITDIFF";
+export type DigitContractMode = "over-under" | "even-odd" | "matches-differs" | "rise-fall";
+export type DigitPrediction = "OVER" | "UNDER" | "EVEN" | "ODD" | "MATCHES" | "DIFFERS" | "CALL" | "PUT";
+export type DigitContractType = "DIGITOVER" | "DIGITUNDER" | "DIGITEVEN" | "DIGITODD" | "DIGITMATCH" | "DIGITDIFF" | "CALL" | "PUT";
 
 export interface DemoQuote {
   id: string;
