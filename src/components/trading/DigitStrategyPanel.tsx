@@ -680,8 +680,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           </div>
           <span style={{ color: "var(--muted)", fontSize: 10 }}>Selected: <strong style={{ color: "var(--ink)" }}>{direction}</strong></span>
         </div>
-        <div role="group" aria-label="Select digit strategy contract" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
-          {(["OVER", "UNDER", "EVEN", "ODD"] as const).map((option) => {
+        <div role="group" aria-label="Select digit strategy contract" style={{ display: "grid", gridTemplateColumns: `repeat(${isEvenOdd ? 2 : 4}, minmax(0, 1fr))`, gap: 8 }}>
+          {(isEvenOdd ? (["EVEN", "ODD"] as const) : (["OVER", "UNDER", "EVEN", "ODD"] as const)).map((option) => {
             const selected = direction === option;
             const accent = option === "OVER" ? "#35d6a0" : option === "UNDER" ? "#60a5fa" : option === "EVEN" ? "#f4b740" : "#c084fc";
             return <button key={option} type="button" aria-pressed={selected} disabled={isExecutionActive} onClick={() => { if (option !== direction) onDirectionChange(option); }} style={{ minHeight: 42, border: `1px solid ${selected ? accent : "var(--line)"}`, borderRadius: 9, padding: "9px 6px", background: selected ? `color-mix(in srgb, ${accent} 14%, transparent)` : "transparent", color: selected ? accent : isExecutionActive ? "var(--muted)" : "var(--ink)", fontSize: 11, fontWeight: 850, letterSpacing: ".04em", cursor: isExecutionActive ? "not-allowed" : "pointer", transition: "background .15s ease, border-color .15s ease", opacity: isExecutionActive && !selected ? 0.45 : 1 }}>
