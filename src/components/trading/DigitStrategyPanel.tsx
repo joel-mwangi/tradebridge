@@ -32,6 +32,14 @@ type StrategyStatus = {
   blue_digits?: number[];
   green_digits?: number[];
   execution_enabled?: boolean;
+  direction?: "rise" | "fall";
+  observed_ticks?: number;
+  warmup_ticks?: number;
+  fast_ema?: number | null;
+  slow_ema?: number | null;
+  rsi?: number | null;
+  support?: number | null;
+  resistance?: number | null;
   qualification?: {
     decision?: string;
     reason?: string;
@@ -313,7 +321,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       try {
         const message = JSON.parse(String(event.data)) as StrategyStatus & TickMessage;
         if (message.msg_type === "ping" || message.ping === "pong") return;
-        if (message.type === "strategy_status") {
+        if (message.type === "strategy_status" || message.type === "rise_fall_strategy_status") {
           setStatus(message);
           setBusy(false);
           setTransport("connected");
@@ -368,6 +376,21 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   useEffect(() => {
     const active = ["observing", "waiting_for_more_data", "selected"].includes(status?.state ?? "");
     if (!active || !symbol || !Number.isInteger(strategyWindowSize)) return;
+    if (isRiseFall) {
+      if (status?.type === "rise_fall_strategy_status"
+        && status.direction === (contractType === "CALL" ? "rise" : "fall")) return;
+      // Rise/Fall status messages do not carry digit window or barrier fields.
+      if (status?.type === "rise_fall_strategy_status") {
+        lastStrategyParamsRef.current = null;
+        onStrategyStop?.();
+        const socket = socketRef.current;
+        if (socket?.readyState === WebSocket.OPEN) {
+          setBusy(true);
+          socket.send(JSON.stringify({ strategy: { action: "stop" } }));
+        }
+      }
+      return;
+    }
     if (status?.symbol === symbol && status?.digit_window_size === strategyWindowSize && (direction === "EVEN" || direction === "ODD" || status?.barrier === barrier) && status?.requested_direction === (direction === "EVEN" || direction === "ODD" ? "over" : direction.toLowerCase())) return;
     // Never stop the session mid-execution — param drift during execution is
     // expected when the user changes barrier/direction. The backend keeps running.
@@ -379,7 +402,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
     socket.send(JSON.stringify({ strategy: { action: "stop" } }));
-  }, [symbol, strategyWindowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier, status?.requested_direction, onStrategyStop, executionStatus]);
+  }, [symbol, strategyWindowSize, barrier, direction, isRiseFall, contractType, status?.state, status?.type, status?.direction, status?.symbol, status?.digit_window_size, status?.barrier, status?.requested_direction, onStrategyStop, executionStatus]);
 
   useEffect(() => {
     if (!lastTickAt) return;
@@ -821,7 +844,45 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       )}
 
 
-      {showStrategyStatus && !isEvenOdd && (() => {        const s = status!; const qualification = s.qualification;
+      {showStrategyStatus && isRiseFall && (
+        <div aria-label="Readable Rise Fall candle status" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: `1px solid ${status?.signal_generated ? "#35d6a055" : "#60a5fa55"}`, background: "var(--surface-2, var(--sidebar-bg))" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 5 }}>
+              <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 850, letterSpacing: ".12em", textTransform: "uppercase" }}>
+                Candle strategy · {contractType === "CALL" ? "CALL / RISE" : "PUT / FALL"}
+              </span>
+              <strong style={{ color: "var(--ink)", fontSize: 16 }}>
+                {status?.signal_generated ? "Entry signal confirmed" : status?.state?.replaceAll("_", " ") ?? "Observing candles"}
+              </strong>
+              <span style={{ color: "var(--muted)", fontSize: 11, lineHeight: 1.5 }}>
+                {status?.reason ?? "Waiting for completed 2-minute candle confirmation."}
+              </span>
+            </div>
+            <span style={{ padding: "5px 9px", borderRadius: 999, background: status?.signal_generated ? "#35d6a018" : "#60a5fa18", color: status?.signal_generated ? "#35d6a0" : "#60a5fa", fontSize: 10, fontWeight: 850 }}>
+              {status?.signal_generated ? "SIGNAL READY" : "OBSERVING"}
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: 8, marginTop: 13 }}>
+            <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Price history</span>
+              <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{status?.observed_ticks ?? 0} ticks</strong>
+              <span style={{ color: "var(--muted)", fontSize: 10 }}>{status?.warmup_ticks != null ? `${status.warmup_ticks} tick warm-up` : "Candle observation"}</span>
+            </div>
+            <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Trend</span>
+              <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{contractType === "CALL" ? "Bullish" : "Bearish"}</strong>
+              <span style={{ color: "var(--muted)", fontSize: 10 }}>Strong candle body</span>
+            </div>
+            <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Expiry</span>
+              <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>1 tick</strong>
+              <span style={{ color: "var(--muted)", fontSize: 10 }}>No barrier</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showStrategyStatus && !isRiseFall && !isEvenOdd && (() => {        const s = status!; const qualification = s.qualification;
         const selectedDirection = s.requested_direction === "under" ? "under" : "over";
         const directionChecks = selectedDirection === "over"
           ? [
@@ -1003,6 +1064,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         );
       })()}
 
+      {!isRiseFall && (<>
       <div style={{ marginTop: 16, border: "1px solid var(--line)", borderRadius: 14, padding: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}><Icon name="pulse" size={14} /><span style={{ fontSize: 10, letterSpacing: ".14em" }}>◉ LIVE TAPE</span></div>
@@ -1044,6 +1106,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         <span>{hasFrequency ? `${total.toLocaleString()} / ${strategyWindowSize.toLocaleString()} ticks` : "Waiting for backend frequency snapshot"}</span>
         <span style={{ color: "#4ade80" }}>● Highest</span><span style={{ color: "#60a5fa" }}>● 2nd highest</span><span style={{ color: "#f87171" }}>● Lowest</span><span style={{ color: "#fbbf24" }}>● 2nd lowest</span>
       </div>
+      </>)}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 13 }}>
         <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
