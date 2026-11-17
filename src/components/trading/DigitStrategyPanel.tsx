@@ -137,7 +137,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const [autoExecNotification, setAutoExecNotification] = useState<string | null>(null);
   const autoExecNotifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEvenOdd = direction === "EVEN" || direction === "ODD";
-  const strategyWindowSize = isEvenOdd ? 100 : windowSize;
+  const strategyWindowSize = isEvenOdd ? 1000 : windowSize;
   const strategyDuration = isEvenOdd ? 1 : duration;
 
   // Subscribe to 10 volatility symbols when scanner is enabled.
@@ -554,9 +554,9 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 7, marginTop: 12 }}>
           {[
-            ["Power", direction === "EVEN" ? "Even ≥ 55% and rising" : "Odd ≥ 55% and rising"],
-            ["Rank alignment", "Green + Blue = target parity"],
-            ["Opposing ranks", "Red + Yellow = opposing parity"],
+            ["Power", direction === "EVEN" ? "Even ≥ 52% and rising" : "Odd ≥ 52% and rising"],
+            ["Green + Blue", "Target parity · ≥11.0% / ≥10.7%"],
+            ["Red", "Opposing parity · ≤9.1%"],
             ["Confirmation", "3+ opposing ticks, then confirm"],
           ].map(([label, value]) => (
             <div key={label} style={{ padding: "8px 9px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)" }}>
@@ -566,7 +566,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           ))}
         </div>
         <div style={{ marginTop: 10, color: "var(--muted)", fontSize: 10, lineHeight: 1.45 }}>
-        Start observation to arm the 100-tick strategy. The backend enters on the first target-parity tick after three or more opposing ticks, then applies the fixed-stake sequence and 120-tick cooldown.
+        Start observation to arm the 1,000-tick strategy. The backend waits for a full window, enters on the first target-parity tick after three or more opposing ticks, then applies the fixed-stake sequence and 180-tick cooldown.
         </div>
       </div>
       ) : (
@@ -924,7 +924,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: 8, marginTop: 13 }}>
                       <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
                         <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Parity power</span>
-                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>≥ 55% and rising</strong>
+                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>≥ 52% and rising</strong>
                       </div>
                       <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
                         <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Tick confirmation</span>

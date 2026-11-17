@@ -19,15 +19,16 @@ Even/Odd start and proposal messages omit `barrier`; the frontend must never sen
 placeholder barrier such as `0`.
 
 EVEN/ODD uses an independent Maziwa/Dollar Printer state machine, not the OVER/UNDER
-qualification pipeline. It uses a rolling 100-tick window. Before a trigger is armed,
-the selected parity must have at least 55% power and be rising versus five ticks earlier;
-rank 1 Green and rank 2 Blue must be on the selected parity, while rank 9 Yellow and
-rank 10 Red must be on the opposing parity. It then requires at least three consecutive
-opposing ticks followed immediately by the first selected-parity confirmation tick.
-Red Reverse is excluded.
+qualification pipeline. It uses a rolling 1,000-tick window and waits for the full
+window before evaluating. Before a trigger is armed, the selected parity must have at
+least 52% power and be rising versus ten ticks earlier; rank 1 Green must be at least
+11.0%, rank 2 Blue at least 10.7%, both on the selected parity, and ranks 9 Yellow and
+10 Red on the opposing parity with Red at most 9.1%. Equal ranks use most-recent
+occurrence as the tie-break. It then requires at least three consecutive opposing ticks
+followed immediately by the first selected-parity confirmation tick. Red Reverse is excluded.
 
 The confirmed setup uses the existing one-sequence execution coordinator: fixed stake,
-up to three 1-tick buys, stop after two consecutive losses, 120-tick cooldown after
+up to three 1-tick buys, stop after two consecutive losses, 180-tick cooldown after
 completion or two losses, and no automatic restart during cooldown. Reconnect replay
 preserves the contract type and continues to omit the barrier for EVEN/ODD.
 
