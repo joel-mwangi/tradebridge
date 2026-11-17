@@ -836,7 +836,7 @@ export function useTradingSession(
     });
   }
 
-  function startStrategy(params: { symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string; triggerSource?: "manual" | "scanner"; stake?: number; duration?: number; currency?: string }) {
+  function startStrategy(params: { symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string; triggerSource?: "manual" | "scanner"; stake?: number; duration?: number; maxBuys?: number; currency?: string }) {
     const activeSocket = socketRef.current;
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
     if ((account?.account_type ?? "").toLowerCase() !== "demo") return;
@@ -858,6 +858,7 @@ export function useTradingSession(
           : {}),
         ...(params.stake !== undefined ? { stake: params.stake } : {}),
         ...(params.duration !== undefined ? { duration: params.duration } : {}),
+        ...(params.maxBuys !== undefined ? { max_buys: params.maxBuys } : {}),
         ...(params.currency !== undefined ? { currency: params.currency } : {}),
       },
     }));

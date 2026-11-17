@@ -100,7 +100,7 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, contractType, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected, stake, duration, currency, onSymbolChange, onAutoExecute, isDemoAccount }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER" | "EVEN" | "ODD"; contractType?: string; onDirectionChange: (direction: "OVER" | "UNDER" | "EVEN" | "ODD") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string; stake: number; duration: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean; onSymbolChange?: (symbol: string) => void; onAutoExecute?: (params: { symbol: string; contract_type: string; barrier: number | null; stake: number; duration: number; currency: string }) => void; isDemoAccount?: boolean }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, contractType, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected, stake, duration, currency, onSymbolChange, onAutoExecute, isDemoAccount }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER" | "EVEN" | "ODD"; contractType?: string; onDirectionChange: (direction: "OVER" | "UNDER" | "EVEN" | "ODD") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string; stake: number; duration: number; maxBuys?: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean; onSymbolChange?: (symbol: string) => void; onAutoExecute?: (params: { symbol: string; contract_type: string; barrier: number | null; stake: number; duration: number; max_buys?: number; currency: string }) => void; isDemoAccount?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
   const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string } | null>(null);
@@ -115,6 +115,9 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const [events, setEvents] = useState<Array<{ key: string; kind: "tick" | "status" | "warning"; time: number; digit?: number }>>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundVolume, setSoundVolume] = useState(0.35);
+  const [strategyMode, setStrategyMode] = useState<"digit" | "rise-fall">("digit");
+  const [riseFallDirection, setRiseFallDirection] = useState<"CALL" | "PUT">("CALL");
+  const [maxBuysInput, setMaxBuysInput] = useState("3");
   const audioContextRef = useRef<AudioContext | null>(null);
   const previousTransportRef = useRef<typeof transport | null>(null);
   const previousStrategyStateRef = useRef<string | null>(null);
@@ -157,7 +160,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
 
   // Auto-execute logic.
   useEffect(() => {
-    if (!autoExecuteEnabled || direction === "EVEN" || direction === "ODD") return;
+    if (!autoExecuteEnabled || strategyMode !== "digit" || direction === "EVEN" || direction === "ODD") return;
     if (!(isDemoAccount && sessionConnected)) return;
     const executionState = executionStatus?.state ?? "";
     if (["waiting_proposal", "waiting_buy", "waiting_settlement"].includes(executionState)) return;
@@ -182,7 +185,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     setAutoExecNotification(notification);
     if (autoExecNotifTimerRef.current) clearTimeout(autoExecNotifTimerRef.current);
     autoExecNotifTimerRef.current = setTimeout(() => setAutoExecNotification(null), 5_000);
-  }, [scannerResults, autoExecuteEnabled, direction, isDemoAccount, sessionConnected, executionStatus, symbol, onSymbolChange, onAutoExecute, stake, strategyDuration, currency]);
+  }, [scannerResults, autoExecuteEnabled, strategyMode, direction, isDemoAccount, sessionConnected, executionStatus, symbol, onSymbolChange, onAutoExecute, stake, strategyDuration, currency]);
 
   useEffect(() => {
     try {
@@ -397,11 +400,11 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (action === "start" && !symbol) return;
     if (action === "start") {
       setStatus(null);
-      const selectedContractType = contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER");
+      const selectedContractType = strategyMode === "rise-fall" ? riseFallDirection : contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER");
       lastStrategyParamsRef.current = { symbol, windowSize: strategyWindowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
-      onStrategyStart?.({ symbol, windowSize: strategyWindowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType, stake, duration: strategyDuration, currency });
+      onStrategyStart?.({ symbol, windowSize: strategyWindowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" || strategyMode === "rise-fall" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType, stake, duration: strategyMode === "rise-fall" ? 1 : strategyDuration, maxBuys: Number(maxBuysInput), currency });
     }
     if (action === "stop") {
       lastStrategyParamsRef.current = null;
@@ -413,13 +416,16 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       symbol,
       window_size: strategyWindowSize,
       direction: direction === "UNDER" ? "under" : "over",
-      contract_type: contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER"),
-      ...((direction === "EVEN" || direction === "ODD") ? {} : { barrier }),
+      contract_type: strategyMode === "rise-fall" ? riseFallDirection : contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER"),
+      ...((direction === "EVEN" || direction === "ODD" || strategyMode === "rise-fall") ? {} : { barrier }),
+      ...(strategyMode === "rise-fall" ? { duration: 1, duration_unit: "t", max_buys: Number(maxBuysInput) } : {}),
     } : { action } }));
   }
 
+  const riseFallMaxBuys = Number(maxBuysInput);
   const executionSettingsValid = Number.isFinite(stake) && stake >= 0.35 && stake <= 1000
     && Number.isInteger(duration) && duration >= 1 && duration <= 10;
+  const riseFallSettingsValid = Number.isInteger(riseFallMaxBuys) && riseFallMaxBuys >= 1 && riseFallMaxBuys <= 10;
   const state = status?.state ?? "idle";
   // The public observation socket stays selected after it emits a signal, while
   // execution completion arrives on the authenticated socket. Let a completed
@@ -532,7 +538,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           </div>
         </div>
         <div style={{ display: "flex", gap: 7 }}>
-          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active || !executionSettingsValid} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active || !executionSettingsValid ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
+          <button type="button" onClick={() => send("start")} disabled={!symbol || busy || active || !executionSettingsValid || (strategyMode === "rise-fall" && !riseFallSettingsValid)} aria-label="Start observation" title="Start" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: 0, borderRadius: 10, background: active ? "var(--line)" : "var(--teal)", color: "#fff", opacity: !symbol || busy || active || !executionSettingsValid || (strategyMode === "rise-fall" && !riseFallSettingsValid) ? .5 : 1, cursor: "pointer" }}><Icon name="play" /></button>
           <button type="button" onClick={() => send("stop")} disabled={busy || !active} aria-label="Stop observation" title="Stop" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy || !active ? .4 : 1, cursor: "pointer" }}><Icon name="stop" /></button>
           <button type="button" onClick={() => send("status")} disabled={busy} aria-label="Refresh status" title="Refresh" style={{ width: 38, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--ink)", opacity: busy ? .5 : 1, cursor: "pointer" }}><Icon name="refresh" /></button>
         </div>
@@ -673,7 +679,31 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       )}
       {/* ── End automatic execution guidance ──────────────────────────────── */}
 
-      <div aria-label="Strategy contract type" style={{ display: "grid", gap: 8, marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
+      <div aria-label="Select strategy family" style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        {(["digit", "rise-fall"] as const).map((mode) => (
+          <button key={mode} type="button" aria-pressed={strategyMode === mode} disabled={isExecutionActive} onClick={() => setStrategyMode(mode)} style={{ flex: 1, padding: "9px 8px", border: `1px solid ${strategyMode === mode ? "var(--teal)" : "var(--line)"}`, borderRadius: 9, background: strategyMode === mode ? "color-mix(in srgb, var(--teal) 14%, transparent)" : "transparent", color: strategyMode === mode ? "var(--teal)" : "var(--ink)", fontSize: 11, fontWeight: 850, cursor: isExecutionActive ? "not-allowed" : "pointer" }}>
+            {mode === "digit" ? "Digit strategy" : "Rise / Fall"}
+          </button>
+        ))}
+      </div>
+
+      {strategyMode === "rise-fall" && (
+        <div aria-label="Rise Fall strategy settings" style={{ display: "grid", gap: 9, marginTop: 10, padding: 12, border: "1px solid #60a5fa55", borderRadius: 12, background: "color-mix(in srgb, #60a5fa 6%, var(--surface-2, var(--sidebar-bg)))" }}>
+          <strong style={{ color: "#60a5fa", fontSize: 12 }}>2-minute candle momentum</strong>
+          <span style={{ color: "var(--muted)", fontSize: 10, lineHeight: 1.4 }}>Strong candle body aligned with the rising/falling trend. Each contract expires after 1 tick.</span>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 7 }}>
+            {(["CALL", "PUT"] as const).map((option) => (
+              <button key={option} type="button" aria-pressed={riseFallDirection === option} disabled={isExecutionActive} onClick={() => setRiseFallDirection(option)} style={{ padding: "9px 5px", border: `1px solid ${riseFallDirection === option ? (option === "CALL" ? "#35d6a0" : "#f06f79") : "var(--line)"}`, borderRadius: 8, background: "transparent", color: riseFallDirection === option ? (option === "CALL" ? "#35d6a0" : "#f06f79") : "var(--ink)", fontWeight: 850, fontSize: 11 }}>{option === "CALL" ? "↑ RISE" : "↓ FALL"}</button>
+            ))}
+            <label style={{ display: "grid", gap: 3, color: "var(--muted)", fontSize: 9 }}>
+              Max trades
+              <input aria-label="Maximum sequential trades" type="number" min={1} max={10} step={1} value={maxBuysInput} disabled={isExecutionActive} onChange={(event) => setMaxBuysInput(event.target.value)} style={{ width: "100%", minHeight: 32, border: "1px solid var(--line)", borderRadius: 7, background: "var(--surface)", color: "var(--ink)", padding: "5px 7px" }} />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {strategyMode === "digit" && <div aria-label="Strategy contract type" style={{ display: "grid", gap: 8, marginTop: 14, padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <div style={{ display: "grid", gap: 3 }}>
             <strong style={{ color: "var(--ink)", fontSize: 12 }}>Contract type</strong>
@@ -690,7 +720,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
             </button>;
           })}
         </div>
-      </div>
+      </div>}
 
       <div aria-label="Strategy execution settings from Buy panel" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 10, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <span style={{ color: "var(--muted)", fontSize: 10 }}>Execution settings · from Buy panel</span>

@@ -905,6 +905,7 @@ export default function TradingWorkspace() {
                       triggerSource: "scanner",
                       stake: params.stake,
                       duration: params.duration,
+                      maxBuys: params.max_buys,
                       currency: params.currency,
                     });
                   } : undefined} isDemoAccount={activeAccountIsDemo} />
