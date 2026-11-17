@@ -215,7 +215,7 @@ export default function DemoTradeTicket({
         <label className={styles.fieldLabel} htmlFor="tradebridge-stake">Stake</label>
         <div className={styles.inputShell}>
           <span>{account?.currency ?? "—"}</span>
-          <input id="tradebridge-stake" type="number" inputMode="decimal" min="1" max={maxStake} step="1" value={stake} onChange={(event) => onStakeChange(event.target.value)} disabled={!ready || busy} />
+          <input id="tradebridge-stake" type="number" inputMode="decimal" min="0.35" max={maxStake} step="0.01" value={stake} onChange={(event) => onStakeChange(event.target.value)} disabled={!ready || busy} />
         </div>
         <div className={styles.presets + " " + styles.compactPresets} aria-label="Stake presets">
           {(isRealAccount ? [1, 2, 5, 10].filter((value) => value <= maxStake) : [1, 5, 10, 25]).map((value) => <button key={value} type="button" className={stake === String(value) ? styles.presetActive : styles.preset} onClick={() => onStakeChange(String(value))} disabled={!ready || busy}>{value}</button>)}
@@ -233,7 +233,7 @@ export default function DemoTradeTicket({
       </div>
     </div>
     {visibleStatus && <p className={styles.inlineHint} role="status">{visibleStatus}</p>}
-    <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 1 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
+    <button type="button" className={styles.buyButton + " " + styles["buyButton" + (activePrediction === "OVER" ? "Over" : activePrediction === "UNDER" ? "Under" : activePrediction === "EVEN" ? "Even" : activePrediction === "ODD" ? "Odd" : activePrediction === "MATCHES" ? "Matches" : "Differs")]} onClick={submitQuote} disabled={!ready || busy || !market || Number(stake) < 0.35 || Number(stake) > maxStake || !Number.isFinite(Number(stake)) || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 10} aria-label={"Buy " + getContractLabel(contractType, requiresTarget ? String(target) : undefined)}>
       {busy ? "Processing…" : "Buy"}
     </button>
     {!connected && <p className={styles.inlineHint}>Connect Deriv to enable Buy.</p>}

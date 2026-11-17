@@ -162,7 +162,7 @@ export default function TradingWorkspace() {
   const [tradeView, setTradeView] = useState<"analyse" | "charts" | "strategy">("analyse");
   const [tradeProduct, setTradeProduct] = useState<"options" | "multipliers">("options");
   const [digitWindowSize, setDigitWindowSize] = useState(1000);
-  const [tradeStake, setTradeStake] = useState("1");
+  const [tradeStake, setTradeStake] = useState("0.35");
   const [tradeDuration, setTradeDuration] = useState("5");
 
   const [digitMode, setDigitModeState] = useState<DigitContractMode>("over-under");

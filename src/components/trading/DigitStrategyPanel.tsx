@@ -418,7 +418,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     } : { action } }));
   }
 
-  const executionSettingsValid = Number.isFinite(stake) && stake >= 1 && stake <= 1000
+  const executionSettingsValid = Number.isFinite(stake) && stake >= 0.35 && stake <= 1000
     && Number.isInteger(duration) && duration >= 1 && duration <= 10;
   const state = status?.state ?? "idle";
   // The public observation socket stays selected after it emits a signal, while
