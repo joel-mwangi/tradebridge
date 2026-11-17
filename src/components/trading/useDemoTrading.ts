@@ -323,8 +323,12 @@ export function useTradingSession(
                 action: "start",
                 symbol: lastParams.symbol,
                 window_size: lastParams.windowSize,
-                barrier: lastParams.barrier,
                 direction: lastParams.direction,
+                ...(lastParams.contractType ? { contract_type: lastParams.contractType } : {}),
+                ...(lastParams.contractType !== "DIGITEVEN" && lastParams.contractType !== "DIGITODD"
+                  ? { barrier: lastParams.barrier }
+                  : {}),
+                ...(lastParams.triggerSource ? { trigger_source: lastParams.triggerSource } : {}),
                 ...(lastParams.stake !== undefined ? { stake: lastParams.stake } : {}),
                 ...(lastParams.duration !== undefined ? { duration: lastParams.duration } : {}),
                 ...(lastParams.currency !== undefined ? { currency: lastParams.currency } : {}),
@@ -832,7 +836,7 @@ export function useTradingSession(
     });
   }
 
-  function startStrategy(params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; contractType?: string; stake?: number; duration?: number; currency?: string }) {
+  function startStrategy(params: { symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string; triggerSource?: "manual" | "scanner"; stake?: number; duration?: number; currency?: string }) {
     const activeSocket = socketRef.current;
     if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return;
     if ((account?.account_type ?? "").toLowerCase() !== "demo") return;
@@ -846,9 +850,12 @@ export function useTradingSession(
         action: "start",
         symbol: params.symbol,
         window_size: params.windowSize,
-        barrier: params.barrier,
         direction: params.direction,
         ...(params.contractType ? { contract_type: params.contractType } : {}),
+        ...(params.triggerSource ? { trigger_source: params.triggerSource } : {}),
+        ...(params.contractType !== "DIGITEVEN" && params.contractType !== "DIGITODD"
+          ? { barrier: params.barrier }
+          : {}),
         ...(params.stake !== undefined ? { stake: params.stake } : {}),
         ...(params.duration !== undefined ? { duration: params.duration } : {}),
         ...(params.currency !== undefined ? { currency: params.currency } : {}),

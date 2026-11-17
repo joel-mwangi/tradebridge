@@ -12,6 +12,23 @@ The user's latest explicit strategy discussion is authoritative. See [STRATEGY_S
 - An unknown/unreconciled outcome blocks further buys and requires reconciliation. Never automatically retry an order with an unknown outcome.
 - Real-account auto-execution remains disabled.
 
+## EVEN/ODD automatic execution
+
+The strategy panel supports `DIGITEVEN` and `DIGITODD` in addition to Over/Under.
+Even/Odd start and proposal messages omit `barrier`; the frontend must never send a
+placeholder barrier such as `0`.
+
+There are two Demo trigger paths:
+
+1. The market scanner can select an EVEN/ODD result. The authenticated strategy start
+   includes `trigger_source: "scanner"` and the backend executes on the next valid tick.
+2. A manually armed EVEN/ODD strategy waits for the parity sequence: three odd ticks
+   trigger Even, and three even ticks trigger Odd.
+
+Both paths use the backend execution coordinator and its one-sequence lock. A scanner
+trigger and parity trigger cannot create duplicate sequences. Reconnect replay preserves
+the contract type and continues to omit the barrier for Even/Odd.
+
 ## Operational safeguards
 
 - Stake is configurable in the panel (minimum 1, maximum 1000 account-currency units).

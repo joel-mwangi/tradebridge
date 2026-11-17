@@ -182,8 +182,8 @@ export default function TradingWorkspace() {
     if (prediction === "OVER" && digitTarget > 8) setDigitTarget(5);
   }
 
-  function setStrategyDirection(direction: "OVER" | "UNDER") {
-    setDigitModeState("over-under");
+  function setStrategyDirection(direction: "OVER" | "UNDER" | "EVEN" | "ODD") {
+    setDigitModeState(direction === "EVEN" || direction === "ODD" ? "even-odd" : "over-under");
     setDigitPrediction(direction);
     if (direction === "UNDER" && digitTarget < 1) setDigitTarget(5);
     if (direction === "OVER" && digitTarget > 8) setDigitTarget(5);
@@ -875,7 +875,7 @@ export default function TradingWorkspace() {
                 )}
 
                 {tradeProduct === "options" && tradeView === "strategy" && (
-                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : "OVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} stake={Number(tradeStake)} duration={Number(tradeDuration)} currency={activeAccount?.currency ?? "USD"} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} onSymbolChange={(sym) => selectMarket(sym)} onAutoExecute={activeAccountIsDemo && sessionConnected ? (params) => {
+                  <DigitStrategyPanel symbol={selectedSymbol} windowSize={digitWindowSize} barrier={digitTarget} direction={digitPrediction === "UNDER" ? "UNDER" : digitPrediction === "EVEN" ? "EVEN" : digitPrediction === "ODD" ? "ODD" : "OVER"} contractType={digitPrediction === "EVEN" ? "DIGITEVEN" : digitPrediction === "ODD" ? "DIGITODD" : digitPrediction === "UNDER" ? "DIGITUNDER" : "DIGITOVER"} onDirectionChange={setStrategyDirection} frequency={selectedMarket ? snapshots[selectedMarket.symbol]?.digitFrequency : undefined} executionStatus={trading.strategyExecutionStatus} contractUpdate={trading.strategyContractUpdate} stake={Number(tradeStake)} duration={Number(tradeDuration)} currency={activeAccount?.currency ?? "USD"} onStrategyStart={activeAccountIsDemo && sessionConnected ? trading.startStrategy : undefined} onStrategyStop={activeAccountIsDemo && sessionConnected ? trading.stopStrategy : undefined} sessionConnected={sessionConnected} onSymbolChange={(sym) => selectMarket(sym)} onAutoExecute={activeAccountIsDemo && sessionConnected ? (params) => {
                     const ct = params.contract_type.toUpperCase();
                     // Map all 6 digit contract types to startStrategy params.
                     // OVER/UNDER use direction; others send contract_type directly.
@@ -888,9 +888,10 @@ export default function TradingWorkspace() {
                       windowSize: digitWindowSize,
                       // For EVEN/ODD barrier is irrelevant; use 0 as a neutral placeholder.
                       // For OVER/UNDER/MATCHES/DIFFERS the scanner supplies the correct barrier.
-                      barrier: params.barrier ?? 0,
+                      ...(params.barrier === null ? {} : { barrier: params.barrier }),
                       direction,
                       contractType: ct,
+                      triggerSource: "scanner",
                       stake: params.stake,
                       duration: params.duration,
                       currency: params.currency,

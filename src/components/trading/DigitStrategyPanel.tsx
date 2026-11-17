@@ -100,10 +100,10 @@ function Icon({ name, size = 17 }: { name: "play" | "stop" | "refresh" | "signal
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected, stake, duration, currency, onSymbolChange, onAutoExecute, isDemoAccount }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER"; onDirectionChange: (direction: "OVER" | "UNDER") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier: number; direction: "over" | "under"; stake: number; duration: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean; onSymbolChange?: (symbol: string) => void; onAutoExecute?: (params: { symbol: string; contract_type: string; barrier: number | null; stake: number; duration: number; currency: string }) => void; isDemoAccount?: boolean }) {
+export default function DigitStrategyPanel({ symbol, windowSize, barrier, direction, contractType, onDirectionChange, frequency, executionStatus, contractUpdate, onStrategyStart, onStrategyStop, sessionConnected, stake, duration, currency, onSymbolChange, onAutoExecute, isDemoAccount }: { symbol: string; windowSize: number; barrier: number; direction: "OVER" | "UNDER" | "EVEN" | "ODD"; contractType?: string; onDirectionChange: (direction: "OVER" | "UNDER" | "EVEN" | "ODD") => void; frequency?: import("./types").BackendDigitFrequency; executionStatus?: StrategyExecutionStatus | null; contractUpdate?: StrategyContractUpdate | null; stake: number; duration: number; currency: string; onStrategyStart?: (params: { symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string; stake: number; duration: number; currency: string }) => void; onStrategyStop?: () => void; sessionConnected?: boolean; onSymbolChange?: (symbol: string) => void; onAutoExecute?: (params: { symbol: string; contract_type: string; barrier: number | null; stake: number; duration: number; currency: string }) => void; isDemoAccount?: boolean }) {
   const socketRef = useRef<WebSocket | null>(null);
   const seenTicksRef = useRef(new Set<string>());
-  const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier: number; direction: "over" | "under" } | null>(null);
+  const lastStrategyParamsRef = useRef<{ symbol: string; windowSize: number; barrier?: number; direction: "over" | "under"; contractType?: string } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [transport, setTransport] = useState<"connecting" | "connected" | "stale" | "disconnected" | "unconfigured">("connecting");
   const [status, setStatus] = useState<StrategyStatus | null>(null);
@@ -293,7 +293,10 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
             action: "start",
             symbol: lastParams.symbol,
             window_size: lastParams.windowSize,
-            barrier: lastParams.barrier,
+            ...(lastParams.contractType !== "DIGITEVEN" && lastParams.contractType !== "DIGITODD"
+              ? { barrier: lastParams.barrier }
+              : {}),
+            ...(lastParams.contractType ? { contract_type: lastParams.contractType } : {}),
             direction: lastParams.direction,
           },
         }));
@@ -361,7 +364,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   useEffect(() => {
     const active = ["observing", "waiting_for_more_data", "selected"].includes(status?.state ?? "");
     if (!active || !symbol || !Number.isInteger(windowSize)) return;
-    if (status?.symbol === symbol && status?.digit_window_size === windowSize && status?.barrier === barrier && status?.requested_direction === direction.toLowerCase()) return;
+    if (status?.symbol === symbol && status?.digit_window_size === windowSize && (direction === "EVEN" || direction === "ODD" || status?.barrier === barrier) && status?.requested_direction === (direction === "EVEN" || direction === "ODD" ? "over" : direction.toLowerCase())) return;
     // Never stop the session mid-execution — param drift during execution is
     // expected when the user changes barrier/direction. The backend keeps running.
     const executionRunning = ["waiting_proposal", "waiting_buy", "waiting_settlement"].includes(executionStatus?.state ?? "");
@@ -391,17 +394,25 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (action === "start" && !symbol) return;
     if (action === "start") {
       setStatus(null);
-      lastStrategyParamsRef.current = { symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under" };
+      const selectedContractType = contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER");
+      lastStrategyParamsRef.current = { symbol, windowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
-      onStrategyStart?.({ symbol, windowSize, barrier, direction: direction.toLowerCase() as "over" | "under", stake, duration, currency });
+      onStrategyStart?.({ symbol, windowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType, stake, duration, currency });
     }
     if (action === "stop") {
       lastStrategyParamsRef.current = null;
       onStrategyStop?.();
     }
     setBusy(true);
-    socket.send(JSON.stringify({ strategy: action === "start" ? { action, symbol, window_size: windowSize, barrier, direction: direction.toLowerCase() } : { action } }));
+    socket.send(JSON.stringify({ strategy: action === "start" ? {
+      action,
+      symbol,
+      window_size: windowSize,
+      direction: direction === "UNDER" ? "under" : "over",
+      contract_type: contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER"),
+      ...((direction === "EVEN" || direction === "ODD") ? {} : { barrier }),
+    } : { action } }));
   }
 
   const executionSettingsValid = Number.isFinite(stake) && stake >= 1 && stake <= 1000
@@ -508,7 +519,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
               <Icon name="eye" size={12} />
               <span>{windowSize.toLocaleString()}</span>
               <span>·</span>
-              <span>Barrier {barrier}</span>
+              <span>{direction === "EVEN" || direction === "ODD" ? "No barrier" : `Barrier ${barrier}`}</span>
               <span>·</span>
               <Icon name="shield" size={12} />
               <span aria-label="Execution status received from authenticated trading session">Execution</span>
@@ -635,12 +646,12 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           </div>
           <span style={{ color: "var(--muted)", fontSize: 10 }}>Selected: <strong style={{ color: "var(--ink)" }}>{direction}</strong></span>
         </div>
-        <div role="group" aria-label="Select Over or Under contract" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-          {(["OVER", "UNDER"] as const).map((option) => {
+        <div role="group" aria-label="Select digit strategy contract" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+          {(["OVER", "UNDER", "EVEN", "ODD"] as const).map((option) => {
             const selected = direction === option;
-            const accent = option === "OVER" ? "#35d6a0" : "#60a5fa";
-            return <button key={option} type="button" aria-pressed={selected} disabled={isExecutionActive} onClick={() => { if (option !== direction) onDirectionChange(option); }} style={{ minHeight: 42, border: `1px solid ${selected ? accent : "var(--line)"}`, borderRadius: 9, padding: "9px 12px", background: selected ? `color-mix(in srgb, ${accent} 14%, transparent)` : "transparent", color: selected ? accent : isExecutionActive ? "var(--muted)" : "var(--ink)", fontSize: 12, fontWeight: 850, letterSpacing: ".06em", cursor: isExecutionActive ? "not-allowed" : "pointer", transition: "background .15s ease, border-color .15s ease", opacity: isExecutionActive && !selected ? 0.45 : 1 }}>
-              {option === "OVER" ? "↑ OVER" : "↓ UNDER"}
+            const accent = option === "OVER" ? "#35d6a0" : option === "UNDER" ? "#60a5fa" : option === "EVEN" ? "#f4b740" : "#c084fc";
+            return <button key={option} type="button" aria-pressed={selected} disabled={isExecutionActive} onClick={() => { if (option !== direction) onDirectionChange(option); }} style={{ minHeight: 42, border: `1px solid ${selected ? accent : "var(--line)"}`, borderRadius: 9, padding: "9px 6px", background: selected ? `color-mix(in srgb, ${accent} 14%, transparent)` : "transparent", color: selected ? accent : isExecutionActive ? "var(--muted)" : "var(--ink)", fontSize: 11, fontWeight: 850, letterSpacing: ".04em", cursor: isExecutionActive ? "not-allowed" : "pointer", transition: "background .15s ease, border-color .15s ease", opacity: isExecutionActive && !selected ? 0.45 : 1 }}>
+              {option === "OVER" ? "↑ OVER" : option === "UNDER" ? "↓ UNDER" : option}
             </button>;
           })}
         </div>
