@@ -30,6 +30,25 @@
 .scanLiveDot { width:6px; height:6px; flex:0 0 6px; border-radius:50%; background:#2dd4bf; box-shadow:0 0 7px rgba(45,212,191,.75); }
 @keyframes scanSpin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .scanButtonIcon i { animation:none; } }
+.scanLeaderboard { display:grid; gap:8px; }
+.scanMarketRow { display:grid; grid-template-columns:24px minmax(0,1fr) auto; align-items:center; gap:9px; padding:9px 0; border-top:1px solid var(--line); }
+.scanMarketBest { margin:0 -7px; padding:10px 7px; border:1px solid rgba(45,212,191,.35); border-radius:8px; background:rgba(20,184,166,.07); }
+.scanRank { color:var(--muted); font-size:11px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; }
+.scanMarketBest .scanRank { color:#5eead4; }
+.scanMarketMain { min-width:0; }
+.scanMarketLabel { display:flex; align-items:center; gap:7px; min-width:0; }
+.scanMarketLabel strong { color:var(--ink); font-size:12px; }
+.scanMarketLabel span { padding:2px 6px; border-radius:5px; font-size:9px; font-weight:800; letter-spacing:.04em; }
+.scanEven { color:#5eead4; background:rgba(45,212,191,.13); }
+.scanOdd { color:#c4b5fd; background:rgba(139,92,246,.14); }
+.scanMarketLabel em { color:#fbbf24; font-size:8px; font-style:normal; font-weight:800; letter-spacing:.06em; }
+.scanBarTrack { height:6px; margin-top:7px; overflow:hidden; border-radius:99px; background:rgba(148,163,184,.14); }
+.scanBar { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#14b8a6,#60a5fa); transition:width .35s ease; }
+.scanMarketBest .scanBar { background:linear-gradient(90deg,#2dd4bf,#a7f3d0); }
+.scanMarketMain p { margin:5px 0 0; color:var(--muted); font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.scanUseButton { min-width:68px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--ink); font-size:9px; font-weight:750; cursor:pointer; }
+.scanUseButton:hover { border-color:var(--teal); color:var(--teal); }
+.scanLeaderboardNote { margin:2px 0 0; color:var(--muted); font-size:9px; line-height:1.4; }
 .frequencyGrid { display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:12px; }
 .frequencyItem { min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
 .ring { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; width:100%; max-width:88px; aspect-ratio:1 / 1; justify-self:center; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }

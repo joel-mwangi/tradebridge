@@ -85,12 +85,31 @@ export default function DigitAnalysis({
           ? "Reviewing 1,000-tick parity conditions across supported markets"
           : "Recommendation only · no trade will be placed"}
       </div>
-      {maziwaResults.length > 0 ? maziwaResults.map((result) => (
-        <div key={`${result.symbol}-${result.contract_type}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
-          <div><strong>{result.symbol} · {result.contract_type === "DIGITEVEN" ? "EVEN" : "ODD"}</strong><p style={{ margin: "3px 0 0", color: "var(--muted)", fontSize: 11 }}>{result.parity_power.toFixed(1)}% power · {result.status.replaceAll("_", " ")} · score {result.score.toFixed(0)}</p></div>
-          <button type="button" onClick={() => onUseMaziwaRecommendation(result)}>Use {result.contract_type === "DIGITEVEN" ? "EVEN" : "ODD"}</button>
+      {maziwaResults.length > 0 ? (
+        <div className={styles.scanLeaderboard} aria-label="Top recommended markets">
+          {maziwaResults.map((result, index) => {
+            const side = result.contract_type === "DIGITEVEN" ? "EVEN" : "ODD";
+            return (
+              <div className={`${styles.scanMarketRow} ${index === 0 ? styles.scanMarketBest : ""}`} key={`${result.symbol}-${result.contract_type}`}>
+                <span className={styles.scanRank}>{index + 1}</span>
+                <div className={styles.scanMarketMain}>
+                  <div className={styles.scanMarketLabel}>
+                    <strong>{result.symbol}</strong>
+                    <span className={side === "EVEN" ? styles.scanEven : styles.scanOdd}>{side}</span>
+                    {index === 0 && <em>BEST MATCH</em>}
+                  </div>
+                  <div className={styles.scanBarTrack} aria-label={`Score ${result.score.toFixed(0)} out of 100`}>
+                    <span className={styles.scanBar} style={{ width: `${Math.max(4, Math.min(100, result.score))}%` }} />
+                  </div>
+                  <p>{result.parity_power.toFixed(1)}% parity power · score {result.score.toFixed(0)} · {result.status.replaceAll("_", " ")}</p>
+                </div>
+                <button type="button" className={styles.scanUseButton} onClick={() => onUseMaziwaRecommendation(result)}>Use {side}</button>
+              </div>
+            );
+          })}
+          <p className={styles.scanLeaderboardNote}>Rankings update as live tick data changes. The first row is the current strongest qualified setup.</p>
         </div>
-      )) : <p style={{ color: "var(--muted)", fontSize: 11 }}>Scan to find the strongest market and recommended side.</p>}
+      ) : <p style={{ color: "var(--muted)", fontSize: 11 }}>Scan to find the strongest market and recommended side.</p>}
     </section>
     <div className={styles.controls}>
       <label className={styles.control}><span>Contract type</span><select value={mode} onChange={(e) => onModeChange(e.target.value as DigitContractMode)}>
