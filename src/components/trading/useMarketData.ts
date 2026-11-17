@@ -394,5 +394,7 @@ export function useMarketData() {
     selectMarket,
     candlesByKey,
     requestCandles,
+    marketSocketRef: socketRef,
+    marketRetryCount: retryCount,
   };
 }

@@ -22,6 +22,7 @@ import { MostTradedMarkets } from "./MostTradedMarkets";
 import { Skeleton } from "./Skeleton";
 import { logger } from "../../lib/logger.mjs";
 import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/client";
+import { useMaziwaScanner } from "./useMaziwaScanner";
 
 type AccountsResponse = {
   connected?: boolean;
@@ -202,8 +203,9 @@ export default function TradingWorkspace() {
 
   const {
     markets, snapshots, connection, selectedMarket, selectedSymbol, selectMarket,
-    candlesByKey, requestCandles,
+    candlesByKey, requestCandles, marketSocketRef, marketRetryCount,
   } = useMarketData();
+  const maziwaScanner = useMaziwaScanner(marketSocketRef, marketRetryCount);
 
   useEffect(() => {
     if (page !== "trade") return;
@@ -824,6 +826,15 @@ export default function TradingWorkspace() {
                           onPredictionChange={setPredictionAndValidateTarget}
                           target={digitTarget}
                           onTargetChange={setDigitTarget}
+                          maziwaResults={maziwaScanner.results}
+                          maziwaScanning={maziwaScanner.scanning}
+                          onScanMaziwaMarkets={maziwaScanner.scanMarkets}
+                          onUseMaziwaRecommendation={(result) => {
+                            selectMarket(result.symbol);
+                            setDigitModeState("even-odd");
+                            setDigitPrediction(result.contract_type === "DIGITEVEN" ? "EVEN" : "ODD");
+                            setTradeView("strategy");
+                          }}
                         />
                       </div>
                       <div className={styles.marketColumn}>

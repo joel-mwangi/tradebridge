@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { DigitContractMode, DigitPrediction, MarketInstrument, MarketSnapshot } from "./types";
+import type { DigitContractMode, DigitPrediction, MarketInstrument, MarketSnapshot, MaziwaMarketResult } from "./types";
 import styles from "./DigitAnalysis.module.css";
 
 const DIGITS = Array.from({ length: 10 }, (_, i) => i);
@@ -15,6 +15,10 @@ export default function DigitAnalysis({
   prediction,
   target,
   onTargetChange,
+  maziwaResults,
+  maziwaScanning,
+  onScanMaziwaMarkets,
+  onUseMaziwaRecommendation,
 }: {
   market: MarketInstrument | null;
   snapshot?: MarketSnapshot;
@@ -26,6 +30,10 @@ export default function DigitAnalysis({
   onPredictionChange?: (prediction: DigitPrediction) => void;
   target: number;
   onTargetChange: (target: number) => void;
+  maziwaResults: MaziwaMarketResult[];
+  maziwaScanning: boolean;
+  onScanMaziwaMarkets: () => boolean;
+  onUseMaziwaRecommendation: (result: MaziwaMarketResult) => void;
 }) {
   const validTargets = mode === "over-under"
     ? DIGITS.filter((digit) => prediction === "UNDER" ? digit >= 1 : digit <= 8)
@@ -54,6 +62,20 @@ export default function DigitAnalysis({
   };
 
   return <section className={styles.root} aria-label="Digit analysis">
+    <section className={styles.panel} style={{ marginBottom: 12 }}>
+      <div className={styles.panelTitle}>
+        <div><h3>Maziwa market scan</h3><p>Compare 1,000-tick EVEN/ODD setups without starting execution.</p></div>
+        <button type="button" onClick={onScanMaziwaMarkets} disabled={maziwaScanning} aria-label="Scan markets for the best Maziwa EVEN ODD setup">
+          {maziwaScanning ? "Scanning…" : "Scan markets"}
+        </button>
+      </div>
+      {maziwaResults.length > 0 ? maziwaResults.map((result) => (
+        <div key={`${result.symbol}-${result.contract_type}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
+          <div><strong>{result.symbol} · {result.contract_type === "DIGITEVEN" ? "EVEN" : "ODD"}</strong><p style={{ margin: "3px 0 0", color: "var(--muted)", fontSize: 11 }}>{result.parity_power.toFixed(1)}% power · {result.status.replaceAll("_", " ")} · score {result.score.toFixed(0)}</p></div>
+          <button type="button" onClick={() => onUseMaziwaRecommendation(result)}>Use {result.contract_type === "DIGITEVEN" ? "EVEN" : "ODD"}</button>
+        </div>
+      )) : <p style={{ color: "var(--muted)", fontSize: 11 }}>Scan to find the strongest market and recommended side.</p>}
+    </section>
     <div className={styles.controls}>
       <label className={styles.control}><span>Contract type</span><select value={mode} onChange={(e) => onModeChange(e.target.value as DigitContractMode)}>
         <option value="over-under">Over / Under</option><option value="even-odd">Even / Odd</option><option value="matches-differs">Matches / Differs</option>

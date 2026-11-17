@@ -112,6 +112,19 @@ export interface ScannerResult {
   scanned_at: number;
 }
 
+export interface MaziwaMarketResult {
+  symbol: string;
+  contract_type: "DIGITEVEN" | "DIGITODD";
+  score: number;
+  status: "ready_for_confirmation" | "armed_waiting_for_streak";
+  parity_power: number;
+  power_rising: boolean;
+  rank_alignment: boolean;
+  sample_size: number;
+  reason: string;
+  scanned_at: number;
+}
+
 export interface BackendDigitFrequencyWindow {
   window_size: number;
   sample_size: number;
