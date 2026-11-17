@@ -136,6 +136,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   );
   const [autoExecNotification, setAutoExecNotification] = useState<string | null>(null);
   const autoExecNotifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEvenOdd = direction === "EVEN" || direction === "ODD";
+  const strategyDuration = isEvenOdd ? 1 : duration;
 
   // Subscribe to 10 volatility symbols when scanner is enabled.
   // retryCount is included so subscriptions are re-sent after a reconnect —
@@ -172,14 +174,14 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       contract_type: topResult.contract_type,
       barrier: topResult.barrier,
       stake,
-      duration,
+      duration: strategyDuration,
       currency,
     });
     const notification = `Auto-switching to ${topResult.symbol} · ${topResult.contract_type}${topResult.barrier !== null ? ` ${topResult.barrier}` : ""}`;
     setAutoExecNotification(notification);
     if (autoExecNotifTimerRef.current) clearTimeout(autoExecNotifTimerRef.current);
     autoExecNotifTimerRef.current = setTimeout(() => setAutoExecNotification(null), 5_000);
-  }, [scannerResults, autoExecuteEnabled, direction, isDemoAccount, sessionConnected, executionStatus, symbol, onSymbolChange, onAutoExecute, stake, duration, currency]);
+  }, [scannerResults, autoExecuteEnabled, direction, isDemoAccount, sessionConnected, executionStatus, symbol, onSymbolChange, onAutoExecute, stake, strategyDuration, currency]);
 
   useEffect(() => {
     try {
@@ -398,7 +400,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
       lastStrategyParamsRef.current = { symbol, windowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
-      onStrategyStart?.({ symbol, windowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType, stake, duration, currency });
+      onStrategyStart?.({ symbol, windowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType, stake, duration: strategyDuration, currency });
     }
     if (action === "stop") {
       lastStrategyParamsRef.current = null;
@@ -487,7 +489,6 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   // the execution card already covers the current state and showing 'idle/disconnected'
   // from the public feed alongside an active trade is confusing.
   const showStrategyStatus = Boolean(status) && !isExecutionActive;
-  const isEvenOdd = direction === "EVEN" || direction === "ODD";
   const matchingContractUpdate = contractUpdate
     && (!activeContractId || contractUpdate.contractId === activeContractId)
     ? contractUpdate
@@ -692,7 +693,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
 
       <div aria-label="Strategy execution settings from Buy panel" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 10, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
         <span style={{ color: "var(--muted)", fontSize: 10 }}>Execution settings · from Buy panel</span>
-        <strong style={{ color: "var(--ink)", fontSize: 11 }}>{currency} {Number.isFinite(stake) ? stake : "—"} · {Number.isInteger(duration) ? duration : "—"} {duration === 1 ? "tick" : "ticks"} per buy</strong>
+        <strong style={{ color: "var(--ink)", fontSize: 11 }}>{currency} {Number.isFinite(stake) ? stake : "—"} · {Number.isInteger(strategyDuration) ? strategyDuration : "—"} {strategyDuration === 1 ? "tick" : "ticks"} per buy</strong>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 12, padding: "9px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2, var(--sidebar-bg))" }}>
