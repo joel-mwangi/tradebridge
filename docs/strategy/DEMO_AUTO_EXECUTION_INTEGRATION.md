@@ -18,16 +18,17 @@ The strategy panel supports `DIGITEVEN` and `DIGITODD` in addition to Over/Under
 Even/Odd start and proposal messages omit `barrier`; the frontend must never send a
 placeholder barrier such as `0`.
 
-There are two Demo trigger paths:
+EVEN/ODD uses an independent filtered parity strategy, not the OVER/UNDER qualification
+pipeline. Before a trigger is armed, the backend requires 58% Even or 70% Odd overall
+parity power, Green and Blue on the selected parity at 11.5% or higher, Red and Yellow
+on the opposing parity at 9.0% or lower, and no alternating chop. It then requires three
+or four opposing ticks followed by a selected-parity confirmation within three ticks.
+Red Reverse is excluded.
 
-1. The market scanner can select an EVEN/ODD result. The authenticated strategy start
-   includes `trigger_source: "scanner"` and the backend executes on the next valid tick.
-2. A manually armed EVEN/ODD strategy waits for the parity sequence: three odd ticks
-   trigger Even, and three even ticks trigger Odd.
-
-Both paths use the backend execution coordinator and its one-sequence lock. A scanner
-trigger and parity trigger cannot create duplicate sequences. Reconnect replay preserves
-the contract type and continues to omit the barrier for Even/Odd.
+The confirmed setup uses the existing one-sequence execution coordinator: fixed stake,
+up to three 1-tick buys, stop after two consecutive losses, mandatory reset after the
+cycle, and no automatic restart. Reconnect replay preserves the contract type and
+continues to omit the barrier for Even/Odd.
 
 ## Operational safeguards
 
