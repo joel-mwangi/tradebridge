@@ -18,17 +18,18 @@ The strategy panel supports `DIGITEVEN` and `DIGITODD` in addition to Over/Under
 Even/Odd start and proposal messages omit `barrier`; the frontend must never send a
 placeholder barrier such as `0`.
 
-EVEN/ODD uses an independent filtered parity strategy, not the OVER/UNDER qualification
-pipeline. Before a trigger is armed, the backend requires 58% Even or 70% Odd overall
-parity power, Green and Blue on the selected parity at 11.5% or higher, Red and Yellow
-on the opposing parity at 9.0% or lower, and no alternating chop. It then requires three
-or four opposing ticks followed by a selected-parity confirmation within three ticks.
+EVEN/ODD uses an independent Maziwa/Dollar Printer state machine, not the OVER/UNDER
+qualification pipeline. It uses a rolling 100-tick window. Before a trigger is armed,
+the selected parity must have at least 55% power and be rising versus five ticks earlier;
+rank 1 Green and rank 2 Blue must be on the selected parity, while rank 9 Yellow and
+rank 10 Red must be on the opposing parity. It then requires at least three consecutive
+opposing ticks followed immediately by the first selected-parity confirmation tick.
 Red Reverse is excluded.
 
 The confirmed setup uses the existing one-sequence execution coordinator: fixed stake,
-up to three 1-tick buys, stop after two consecutive losses, mandatory reset after the
-cycle, and no automatic restart. Reconnect replay preserves the contract type and
-continues to omit the barrier for Even/Odd.
+up to three 1-tick buys, stop after two consecutive losses, 120-tick cooldown after
+completion or two losses, and no automatic restart during cooldown. Reconnect replay
+preserves the contract type and continues to omit the barrier for EVEN/ODD.
 
 ## Operational safeguards
 

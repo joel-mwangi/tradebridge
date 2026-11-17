@@ -137,6 +137,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
   const [autoExecNotification, setAutoExecNotification] = useState<string | null>(null);
   const autoExecNotifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEvenOdd = direction === "EVEN" || direction === "ODD";
+  const strategyWindowSize = isEvenOdd ? 100 : windowSize;
   const strategyDuration = isEvenOdd ? 1 : duration;
 
   // Subscribe to 10 volatility symbols when scanner is enabled.
@@ -365,8 +366,8 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
 
   useEffect(() => {
     const active = ["observing", "waiting_for_more_data", "selected"].includes(status?.state ?? "");
-    if (!active || !symbol || !Number.isInteger(windowSize)) return;
-    if (status?.symbol === symbol && status?.digit_window_size === windowSize && (direction === "EVEN" || direction === "ODD" || status?.barrier === barrier) && status?.requested_direction === (direction === "EVEN" || direction === "ODD" ? "over" : direction.toLowerCase())) return;
+    if (!active || !symbol || !Number.isInteger(strategyWindowSize)) return;
+    if (status?.symbol === symbol && status?.digit_window_size === strategyWindowSize && (direction === "EVEN" || direction === "ODD" || status?.barrier === barrier) && status?.requested_direction === (direction === "EVEN" || direction === "ODD" ? "over" : direction.toLowerCase())) return;
     // Never stop the session mid-execution — param drift during execution is
     // expected when the user changes barrier/direction. The backend keeps running.
     const executionRunning = ["waiting_proposal", "waiting_buy", "waiting_settlement"].includes(executionStatus?.state ?? "");
@@ -377,7 +378,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     setBusy(true);
     socket.send(JSON.stringify({ strategy: { action: "stop" } }));
-  }, [symbol, windowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier, status?.requested_direction, onStrategyStop, executionStatus]);
+  }, [symbol, strategyWindowSize, barrier, direction, status?.state, status?.symbol, status?.digit_window_size, status?.barrier, status?.requested_direction, onStrategyStop, executionStatus]);
 
   useEffect(() => {
     if (!lastTickAt) return;
@@ -397,10 +398,10 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     if (action === "start") {
       setStatus(null);
       const selectedContractType = contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER");
-      lastStrategyParamsRef.current = { symbol, windowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType };
+      lastStrategyParamsRef.current = { symbol, windowSize: strategyWindowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType };
       // Start the strategy on the authenticated backend trading proxy simultaneously
       // so execution fires the moment the signal is detected — no re-auth round-trip.
-      onStrategyStart?.({ symbol, windowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType, stake, duration: strategyDuration, currency });
+      onStrategyStart?.({ symbol, windowSize: strategyWindowSize, ...(selectedContractType === "DIGITEVEN" || selectedContractType === "DIGITODD" ? {} : { barrier }), direction: direction === "UNDER" ? "under" : "over", contractType: selectedContractType, stake, duration: strategyDuration, currency });
     }
     if (action === "stop") {
       lastStrategyParamsRef.current = null;
@@ -410,7 +411,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     socket.send(JSON.stringify({ strategy: action === "start" ? {
       action,
       symbol,
-      window_size: windowSize,
+      window_size: strategyWindowSize,
       direction: direction === "UNDER" ? "under" : "over",
       contract_type: contractType ?? (direction === "EVEN" ? "DIGITEVEN" : direction === "ODD" ? "DIGITODD" : direction === "UNDER" ? "DIGITUNDER" : "DIGITOVER"),
       ...((direction === "EVEN" || direction === "ODD") ? {} : { barrier }),
@@ -432,7 +433,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
     && !executionTerminal;
   const healthColor = transport === "connected" ? "#35d6a0" : transport === "stale" ? "#f4b740" : "#f06f79";
   const tickAge = lastTickAt ? Math.max(0, Math.floor((Date.now() - lastTickAt) / 1000)) : null;
-  const frequencyWindow = frequency?.symbol === symbol ? frequency.windows?.[String(windowSize)] : undefined;
+  const frequencyWindow = frequency?.symbol === symbol ? frequency.windows?.[String(strategyWindowSize)] : undefined;
   const counts = DIGITS.map((digit) => frequencyWindow?.counts?.[String(digit)] ?? 0);
   const total = frequencyWindow?.sample_size ?? 0;
   const hasFrequency = Boolean(frequencyWindow && total > 0);
@@ -519,7 +520,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--muted)", fontSize: 10 }}>
               <Icon name="eye" size={12} />
-              <span>{windowSize.toLocaleString()}</span>
+              <span>{strategyWindowSize.toLocaleString()}</span>
               <span>·</span>
               <span>{direction === "EVEN" || direction === "ODD" ? "No barrier" : `Barrier ${barrier}`}</span>
               <span>·</span>
@@ -553,10 +554,10 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 7, marginTop: 12 }}>
           {[
-            ["Power", direction === "EVEN" ? "Even ≥ 58%" : "Odd ≥ 70%"],
-            ["Confluence", "Green + Blue ≥ 11.5%"],
-            ["Opposing digits", "Red + Yellow ≤ 9%"],
-            ["Confirmation", "3–4 opposing ticks, then confirm"],
+            ["Power", direction === "EVEN" ? "Even ≥ 55% and rising" : "Odd ≥ 55% and rising"],
+            ["Rank alignment", "Green + Blue = target parity"],
+            ["Opposing ranks", "Red + Yellow = opposing parity"],
+            ["Confirmation", "3+ opposing ticks, then confirm"],
           ].map(([label, value]) => (
             <div key={label} style={{ padding: "8px 9px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)" }}>
               <span style={{ display: "block", color: "var(--muted)", fontSize: 9 }}>{label}</span>
@@ -565,7 +566,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
           ))}
         </div>
         <div style={{ marginTop: 10, color: "var(--muted)", fontSize: 10, lineHeight: 1.45 }}>
-          Start observation to arm the strategy. The backend waits for confirmation within three ticks, then uses the fixed-stake sequence.
+        Start observation to arm the 100-tick strategy. The backend enters on the first target-parity tick after three or more opposing ticks, then applies the fixed-stake sequence and 120-tick cooldown.
         </div>
       </div>
       ) : (
@@ -923,11 +924,11 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: 8, marginTop: 13 }}>
                       <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
                         <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Parity power</span>
-                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{direction === "EVEN" ? "Even ≥ 58%" : "Odd ≥ 70%"}</strong>
+                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>≥ 55% and rising</strong>
                       </div>
                       <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
                         <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Tick confirmation</span>
-                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{status?.trigger_digit != null ? `Digit ${status.trigger_digit}` : "3–4 then confirm"}</strong>
+                        <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>{status?.trigger_digit != null ? `Digit ${status.trigger_digit}` : "3+ then confirm"}</strong>
                       </div>
                       <div style={{ padding: 10, borderRadius: 10, border: "1px solid var(--line)" }}>
                         <span style={{ display: "block", color: "var(--muted)", fontSize: 10 }}>Market feed</span>
@@ -952,7 +953,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
                 </p>
               )}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                <span style={{ color: "var(--muted)", fontSize: 10 }}>Execution: {s.execution_enabled ? "enabled by backend" : "disabled"} · Window: {s.digit_window_size?.toLocaleString() ?? windowSize.toLocaleString()} digits</span>
+                <span style={{ color: "var(--muted)", fontSize: 10 }}>Execution: {s.execution_enabled ? "enabled by backend" : "disabled"} · Window: {s.digit_window_size?.toLocaleString() ?? strategyWindowSize.toLocaleString()} digits</span>
                 <button type="button" onClick={() => setStatusDetailsOpen((open) => !open)} aria-expanded={statusDetailsOpen} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "7px 9px", background: "transparent", color: "var(--ink)", fontSize: 10, fontWeight: 750, cursor: "pointer" }}>{statusDetailsOpen ? "Hide developer details" : "Developer details (JSON)"}</button>
               </div>
               {statusDetailsOpen && (
@@ -1003,7 +1004,7 @@ export default function DigitStrategyPanel({ symbol, windowSize, barrier, direct
         })}
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, marginTop: 8, color: "var(--muted)", fontSize: 9 }}>
-        <span>{hasFrequency ? `${total.toLocaleString()} / ${windowSize.toLocaleString()} ticks` : "Waiting for backend frequency snapshot"}</span>
+        <span>{hasFrequency ? `${total.toLocaleString()} / ${strategyWindowSize.toLocaleString()} ticks` : "Waiting for backend frequency snapshot"}</span>
         <span style={{ color: "#4ade80" }}>● Highest</span><span style={{ color: "#60a5fa" }}>● 2nd highest</span><span style={{ color: "#f87171" }}>● Lowest</span><span style={{ color: "#fbbf24" }}>● 2nd lowest</span>
       </div>
 
