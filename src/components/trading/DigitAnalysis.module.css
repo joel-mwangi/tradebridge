@@ -20,6 +20,16 @@
 .panelTitle { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:16px; }
 .panelTitle h3 { margin:0; color:var(--ink); font-size:14px; font-weight:800; }
 .panelTitle p { margin:5px 0 0; color:var(--muted); font-size:10px; }
+.scanButton { display:inline-flex; align-items:center; gap:7px; min-height:36px; padding:8px 13px; border:1px solid rgba(45,212,191,.45); border-radius:8px; background:linear-gradient(135deg,rgba(20,184,166,.18),rgba(34,211,238,.10)); color:#5eead4; box-shadow:0 4px 14px rgba(20,184,166,.10); font-size:11px; font-weight:800; letter-spacing:.01em; cursor:pointer; transition:all .18s ease; }
+.scanButton:hover:not(:disabled) { border-color:#5eead4; background:linear-gradient(135deg,rgba(20,184,166,.28),rgba(34,211,238,.16)); box-shadow:0 5px 18px rgba(20,184,166,.18); transform:translateY(-1px); }
+.scanButton:disabled { opacity:1; cursor:wait; }
+.scanButtonBusy { border-color:rgba(96,165,250,.5); background:linear-gradient(135deg,rgba(37,99,235,.18),rgba(20,184,166,.14)); color:#bfdbfe; }
+.scanButtonIcon { display:inline-grid; place-items:center; width:17px; height:17px; border:1px solid currentColor; border-radius:50%; font-size:13px; line-height:1; }
+.scanButtonIcon i { width:7px; height:7px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:scanSpin .8s linear infinite; }
+.scanTrustRow { display:flex; align-items:center; gap:7px; margin-top:-7px; color:var(--muted); font-size:9px; line-height:1.4; }
+.scanLiveDot { width:6px; height:6px; flex:0 0 6px; border-radius:50%; background:#2dd4bf; box-shadow:0 0 7px rgba(45,212,191,.75); }
+@keyframes scanSpin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .scanButtonIcon i { animation:none; } }
 .frequencyGrid { display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:12px; }
 .frequencyItem { min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
 .ring { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; width:100%; max-width:88px; aspect-ratio:1 / 1; justify-self:center; border:2px solid var(--border); border-radius:50%; background:var(--surface); color:var(--ink); transition:all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }

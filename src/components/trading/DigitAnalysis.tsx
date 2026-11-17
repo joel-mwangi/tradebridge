@@ -65,9 +65,25 @@ export default function DigitAnalysis({
     <section className={styles.panel} style={{ marginBottom: 12 }}>
       <div className={styles.panelTitle}>
         <div><h3>Maziwa market scan</h3><p>Compare 1,000-tick EVEN/ODD setups without starting execution.</p></div>
-        <button type="button" onClick={onScanMaziwaMarkets} disabled={maziwaScanning} aria-label="Scan markets for the best Maziwa EVEN ODD setup">
-          {maziwaScanning ? "Scanning…" : "Scan markets"}
+        <button
+          type="button"
+          className={`${styles.scanButton} ${maziwaScanning ? styles.scanButtonBusy : ""}`}
+          onClick={onScanMaziwaMarkets}
+          disabled={maziwaScanning}
+          aria-label="Scan markets for the best Maziwa EVEN ODD setup"
+          aria-busy={maziwaScanning}
+        >
+          <span className={styles.scanButtonIcon} aria-hidden="true">
+            {maziwaScanning ? <i /> : "↗"}
+          </span>
+          {maziwaScanning ? "Analyzing markets" : "Find best market"}
         </button>
+      </div>
+      <div className={styles.scanTrustRow} aria-live="polite">
+        <span className={styles.scanLiveDot} aria-hidden="true" />
+        {maziwaScanning
+          ? "Reviewing 1,000-tick parity conditions across supported markets"
+          : "Recommendation only · no trade will be placed"}
       </div>
       {maziwaResults.length > 0 ? maziwaResults.map((result) => (
         <div key={`${result.symbol}-${result.contract_type}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
