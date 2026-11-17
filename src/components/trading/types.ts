@@ -116,7 +116,7 @@ export interface MaziwaMarketResult {
   symbol: string;
   contract_type: "DIGITEVEN" | "DIGITODD";
   score: number;
-  status: "ready_for_confirmation" | "armed_waiting_for_streak";
+  status: "qualified_waiting_for_confirmation";
   parity_power: number;
   power_rising: boolean;
   rank_alignment: boolean;
