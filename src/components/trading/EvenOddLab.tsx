@@ -143,8 +143,9 @@ export default function EvenOddLab() {
   const qualityData = quality?.quality && typeof quality.quality === "object" ? quality.quality as Record<string, unknown> : null;
   const candidateModels = models.filter((model) => model.status === "candidate");
   const validatedModels = models.filter((model) => model.status === "validated");
-  const activeSequences = Array.isArray(sequenceDetails?.sequences)
-    ? sequenceDetails.sequences as SequenceRecord[]
+  const sequenceRows = sequenceDetails?.sequences;
+  const activeSequences = Array.isArray(sequenceRows)
+    ? sequenceRows as SequenceRecord[]
     : [];
 
   async function runAction(key: string, action: () => Promise<void>) {
