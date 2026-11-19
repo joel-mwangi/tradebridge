@@ -44,7 +44,7 @@ test("backtesting and performance read persisted evaluation reports and disclose
 test("Even/Odd Lab preserves the non-execution boundary", () => {
   assert.match(lab, /order_execution_enabled/);
   assert.match(lab, /do not place, buy or close Deriv contracts/i);
-  assert.match(panels, /Broker execution[\s\S]*Disabled/);
+  assert.match(panels, /BROKER EXECUTION[\s\S]*Disabled/);
   assert.match(panels, /does not execute a contract/i);
 });
 
