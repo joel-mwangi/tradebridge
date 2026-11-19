@@ -137,6 +137,56 @@ export default function EvenOddLab() {
     const odd = history.length - even;
     return { even, odd, evenPct: history.length ? even / history.length * 100 : 0, oddPct: history.length ? odd / history.length * 100 : 0 };
   }, [history]);
+
+  const digitDistribution = useMemo(() => {
+    const counts = Array.from({ length: 10 }, (_, digit) => ({
+      digit,
+      count: history.filter((tick) => tick.last_digit === digit).length,
+    }));
+    const maxCount = Math.max(1, ...counts.map((item) => item.count));
+    return counts.map((item) => ({
+      ...item,
+      percentage: history.length ? item.count / history.length * 100 : 0,
+      barWidth: item.count / maxCount * 100,
+    }));
+  }, [history]);
+
+  const sequenceStats = useMemo(() => {
+    const transitions = { evenToEven: 0, evenToOdd: 0, oddToEven: 0, oddToOdd: 0 };
+    let longestEven = 0;
+    let longestOdd = 0;
+    let runningParity: "even" | "odd" | null = null;
+    let runningLength = 0;
+    for (let index = 0; index < history.length; index += 1) {
+      const parityValue = history[index].last_digit % 2 === 0 ? "even" : "odd";
+      if (index > 0) {
+        const previous = history[index - 1].last_digit % 2 === 0 ? "even" : "odd";
+        const key = previous === "even"
+          ? parityValue === "even" ? "evenToEven" : "evenToOdd"
+          : parityValue === "even" ? "oddToEven" : "oddToOdd";
+        transitions[key] += 1;
+      }
+      runningLength = parityValue === runningParity ? runningLength + 1 : 1;
+      runningParity = parityValue;
+      if (parityValue === "even") longestEven = Math.max(longestEven, runningLength);
+      else longestOdd = Math.max(longestOdd, runningLength);
+    }
+    const latestParity = history.length
+      ? history[history.length - 1].last_digit % 2 === 0 ? "even" : "odd"
+      : null;
+    let currentStreak = 0;
+    for (let index = history.length - 1; index >= 0 && latestParity; index -= 1) {
+      const value = history[index].last_digit % 2 === 0 ? "even" : "odd";
+      if (value !== latestParity) break;
+      currentStreak += 1;
+    }
+    const windows = [50, 100, 250, 500, 1000].map((size) => {
+      const rows = history.slice(-size);
+      const even = rows.filter((tick) => tick.last_digit % 2 === 0).length;
+      return { size, count: rows.length, evenPct: rows.length ? even / rows.length * 100 : 0 };
+    }).filter((item) => item.count > 0);
+    return { transitions, longestEven, longestOdd, latestParity, currentStreak, windows };
+  }, [history]);
   const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
   const latestTicks = history.slice(-7);
   const latestThree = history.slice(-3);
@@ -404,6 +454,37 @@ export default function EvenOddLab() {
           {qualityData ? <JsonPanel value={qualityData} /> : <p className={styles.empty}>Quality information is not available yet.</p>}
         </section>
       </div>
+
+      <div className={styles.overviewGrid}>
+        <section className={styles.panel}>
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>LAST-DIGIT DISTRIBUTION</p><h2>Digit frequency · 0–9</h2><p>Observed counts and percentages across the currently loaded {history.length} persisted ticks.</p></div><span className={styles.auditBadge}>DESCRIPTIVE</span></div>
+          <div className={styles.digitBars}>
+            {digitDistribution.map((item) => <div className={styles.digitBarRow} key={item.digit}>
+              <b>{item.digit}</b><div className={styles.digitTrack}><span style={{ width: item.barWidth + "%" }} /></div>
+              <span>{item.count}</span><small>{item.percentage.toFixed(1)}%</small>
+            </div>)}
+          </div>
+          <p className={styles.helper}>Unequal frequencies in a finite sample are not evidence of a persistent edge. Compare rolling windows and chronological out-of-sample results.</p>
+        </section>
+        <section className={styles.panel}>
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>SEQUENCE CHARACTERISTICS</p><h2>Streaks & transitions</h2><p>Descriptive parity sequence statistics in chronological order.</p></div></div>
+          <div className={styles.modelSummary}>
+            <div><strong>{sequenceStats.currentStreak}</strong><span>Current {sequenceStats.latestParity ?? "—"} streak</span></div>
+            <div><strong>{sequenceStats.longestEven}</strong><span>Longest even streak</span></div>
+            <div><strong>{sequenceStats.longestOdd}</strong><span>Longest odd streak</span></div>
+          </div>
+          <div className={styles.transitionGrid}>
+            <span></span><b>Next even</b><b>Next odd</b>
+            <strong>Previous even</strong><span>{sequenceStats.transitions.evenToEven}</span><span>{sequenceStats.transitions.evenToOdd}</span>
+            <strong>Previous odd</strong><span>{sequenceStats.transitions.oddToEven}</span><span>{sequenceStats.transitions.oddToOdd}</span>
+          </div>
+          <h3 className={styles.subheading}>Rolling even frequency</h3>
+          <div className={styles.rollingRows}>
+            {sequenceStats.windows.map((window) => <div key={window.size}><span>{window.size} ticks</span><b>{window.evenPct.toFixed(1)}%</b><small>{window.count} available</small></div>)}
+          </div>
+          <p className={styles.helper}>Transition counts and streaks describe past observations only; they do not imply that the next outcome follows the current run.</p>
+        </section>
+      </div>
     </>}
 
     {activeView === "history" && <section className={styles.panel}>
@@ -415,12 +496,21 @@ export default function EvenOddLab() {
       <section className={styles.panel}>
         <div className={styles.panelHeading}><div><p className={styles.eyebrow}>MODEL REGISTRY</p><h2>Research models</h2><p>Candidate and independently validated model metadata for {symbol}.</p></div></div>
         <div className={styles.modelSummary}><div><strong>{candidateModels.length}</strong><span>Candidate</span></div><div><strong>{validatedModels.length}</strong><span>Validated</span></div><div><strong>{runs.length}</strong><span>Research runs</span></div></div>
+        <div className={styles.researchLaunch}>
+          <div><strong>Run a new chronological experiment</strong><p>Launch the manually dispatched backend workflow. It collects or evaluates persisted history, audits quality, trains a candidate and runs chronological walk-forward evaluation. It never validates or authorizes execution automatically.</p></div>
+          <a href="https://github.com/joel-mwangi/ai-tradingbridge/actions/workflows/even-odd-research.yml" target="_blank" rel="noreferrer">Open research workflow ↗</a>
+        </div>
         {models.length ? <div className={styles.modelTable}><table><thead><tr><th>Model</th><th>Version</th><th>Status</th><th>Train</th><th>Validation</th><th>Test</th><th>Created</th></tr></thead><tbody>{models.map((model) => <tr key={model.id}><td>{model.model_name ?? model.id.slice(0, 8)}</td><td>{model.model_version ?? "—"}</td><td><span className={model.status === "validated" ? styles.validated : styles.candidate}>{model.status ?? "unknown"}</span></td><td>{model.training_rows ?? "—"}</td><td>{model.validation_rows ?? "—"}</td><td>{model.test_rows ?? "—"}</td><td>{model.created_at ? new Date(model.created_at).toLocaleDateString() : "—"}</td></tr>)}</tbody></table></div> : <p className={styles.empty}>No model records yet. Run the backend research pipeline locally after collecting sufficient quality-checked history.</p>}
+        {selectedModel && <div className={styles.resultBox}>
+          <strong>Selected model evidence · {selectedModel.model_name ?? selectedModel.id.slice(0, 8)} · {selectedModel.status ?? "unknown"}</strong>
+          <p className={styles.helper}>Inspect the persisted evaluation report before interpreting a forecast. A candidate is not an approved predictive model.</p>
+          <JsonPanel value={selectedModel.metrics ?? { message: "No evaluation metrics are stored for this model." }} />
+        </div>}
         <div className={styles.formGrid}>
           <Field label="Select model for research"><select value={selectedModelId} onChange={(event) => { setSelectedModelId(event.target.value); setForecast(null); }}><option value="">Select model</option>{models.map((model) => <option value={model.id} key={model.id}>{model.model_version ?? model.id} · {model.status}</option>)}</select></Field>
           <div className={styles.actionField}><span>Research-only forecast</span><button type="button" className={styles.secondaryButton} onClick={() => void loadForecast()} disabled={!!busy || !selectedModel}>{busy === "forecast" ? "Evaluating…" : "Inspect latest forecast"}</button></div>
         </div>
-        {forecast && <div className={styles.forecastPanel}><div><span>MODEL STATUS</span><b>{String(forecast.model_status ?? "—")}</b></div><div><span>EVEN PROBABILITY</span><b>{Number.isFinite(forecastProbability) ? (forecastProbability * 100).toFixed(2) + "%" : "—"}</b></div><div><span>ODD PROBABILITY</span><b>{Number.isFinite(Number(forecast.probability_odd)) ? (Number(forecast.probability_odd) * 100).toFixed(2) + "%" : "—"}</b></div><div><span>DATA AGE</span><b>{forecast.data_age_seconds === undefined ? "—" : Number(forecast.data_age_seconds).toFixed(2) + "s"}</b></div><p>{String(forecast.warning ?? "Research forecast only. Not a trade signal.")}</p></div>}
+        {forecast && <div className={styles.forecastPanel}><div><span>MODEL STATUS</span><b>{String(forecast.model_status ?? "—")}</b></div><div><span>EVEN PROBABILITY</span><b>{Number.isFinite(forecastProbability) ? (forecastProbability * 100).toFixed(2) + "%" : "—"}</b></div><div><span>ODD PROBABILITY</span><b>{Number.isFinite(Number(forecast.probability_odd)) ? (Number(forecast.probability_odd) * 100).toFixed(2) + "%" : "—"}</b></div><div><span>DATA AGE</span><b>{forecast.data_age_seconds === undefined ? "—" : Number(forecast.data_age_seconds).toFixed(2) + "s"}</b></div><div><span>LOWER EVEN BOUND</span><b>{forecast.lower_even_probability !== null && forecast.lower_even_probability !== undefined && Number.isFinite(Number(forecast.lower_even_probability)) ? (Number(forecast.lower_even_probability) * 100).toFixed(2) + "%" : "Unavailable"}</b></div><div><span>UPPER EVEN BOUND</span><b>{forecast.upper_even_probability !== null && forecast.upper_even_probability !== undefined && Number.isFinite(Number(forecast.upper_even_probability)) ? (Number(forecast.upper_even_probability) * 100).toFixed(2) + "%" : "Unavailable"}</b></div><div><span>UNCERTAINTY VALIDATED</span><b>{forecast.uncertainty_validated === true ? "Yes" : "No"}</b></div><div><span>ENTRY PREREQUISITES</span><b>{forecast.entry_gate_prerequisites_passed === true ? "Passed" : "Not passed"}</b></div><p>{String(forecast.warning ?? "Research forecast only. Not a trade signal.")} {String(forecast.uncertainty_method ?? "Uncertainty method unavailable")} · {String(forecast.sample_size ?? "—")} observations.</p></div>}
       </section>
       <section className={styles.panel}>
         <div className={styles.panelHeading}><div><p className={styles.eyebrow}>EXPERIMENT LOG</p><h2>Research runs</h2><p>Training, evaluation and data-quality audit history.</p></div></div>
@@ -465,8 +555,28 @@ export default function EvenOddLab() {
         <p className={styles.helper}>Entry checks require three consecutive persisted ticks, fresh data (maximum 10 seconds), a validated model and the backend’s payout-adjusted risk gates. Refresh or collect ticks immediately before evaluation.</p>
         {!selectedModel && <p className={styles.empty}>No model selected. Open Models & research to select one.</p>}
         {selectedModel && selectedModel.status !== "validated" && <p className={styles.empty}>Selected model is {selectedModel.status}. Entry evaluation and sequence planning remain unavailable until independent validation.</p>}
-        {entryResult && <div className={styles.resultBox}><strong>Entry evaluation · {String(entryResult.status ?? "unknown").toUpperCase()}</strong><p>{String(entryResult.reason ?? "Backend evaluation completed. No order was placed.")}</p><JsonPanel value={entryResult} /></div>}
-        {planResult && <div className={styles.resultBox}><strong>Adaptive sequence plan · {String(planResult.status ?? "unknown").toUpperCase()}</strong><div><span>Planned upper bound</span><b>{String(planResult.planned_trades ?? 0)} trade(s), max 7</b></div><p>{String(planResult.plan_reason ?? planResult.reason ?? "")}</p><p className={styles.helper}>{String(planResult.warning ?? "No order was placed.")}</p><JsonPanel value={planResult} />
+        {entryResult && <div className={styles.resultBox}>
+          <strong>Hybrid entry evaluation · {String(entryResult.status ?? "unknown").toUpperCase()}</strong>
+          <p>{String(entryResult.reason ?? "Backend evaluation completed. No order was placed.")}</p>
+          {entryResult.status === "candidate" && <div className={styles.forecastPanel}>
+            <div><span>RESEARCH SIDE</span><b>{String(entryResult.side ?? "—").toUpperCase()}</b></div>
+            <div><span>CONFIRMATIONS</span><b>{String(entryResult.confirmations ?? "—")}</b></div>
+            <div><span>CONSERVATIVE EV</span><b>{formatMoney(entryResult.conservative_expected_value, String(session.currency ?? currency))}</b></div>
+            <div><span>EDGE OVER BREAK-EVEN</span><b>{Number.isFinite(Number(entryResult.edge_over_break_even)) ? (Number(entryResult.edge_over_break_even) * 100).toFixed(2) + " pp" : "—"}</b></div>
+            <p>Research candidate only. No order is authorized or submitted.</p>
+          </div>}
+          <JsonPanel value={entryResult} />
+        </div>}
+        {planResult && <div className={styles.resultBox}><strong>Adaptive sequence plan · {String(planResult.status ?? "unknown").toUpperCase()}</strong><div><span>Planned upper bound</span><b>{String(planResult.planned_trades ?? 0)} trade(s), max 7</b></div><p>{String(planResult.plan_reason ?? planResult.reason ?? "")}</p><p className={styles.helper}>{String(planResult.warning ?? "No order was placed.")}</p>
+          {Array.isArray(planResult.expected_value_by_trade) && <div className={styles.planRows}>
+            <strong>Trade-by-trade conservative evaluation</strong>
+            {(planResult.expected_value_by_trade as unknown[]).map((value, index) => {
+              const conservative = Array.isArray(planResult.conservative_ev_by_trade) ? planResult.conservative_ev_by_trade[index] : undefined;
+              return <div key={index}><span>Trade {index + 1}</span><small>Expected EV {formatMoney(value, String(session.currency ?? currency))}</small><b>Conservative EV {formatMoney(conservative, String(session.currency ?? currency))}</b></div>;
+            })}
+          </div>}
+          <p className={styles.helper}>The planned count is an upper bound, not an instruction to complete every trade. Revalidate the model, uncertainty, payout, opportunity and remaining risk budget after every recorded settlement. Stop immediately when any gate fails.</p>
+          <JsonPanel value={planResult} />
           <button type="button" className={styles.primaryButton} onClick={() => void startSequence()} disabled={!!busy || planResult.status !== "plan" || Number(planResult.planned_trades) < 1}>{busy === "start-sequence" ? "Starting ledger…" : "Confirm and start sequence ledger"}</button>
         </div>}
         {activeSequences.length > 0 && <div className={styles.list}>{activeSequences.map((item) => <article key={String(item.id)}><div><strong>Sequence {String(item.id).slice(0, 8)} · {item.status}</strong><small>{item.completed_trades ?? 0} / {item.planned_trades ?? "—"} trades recorded</small></div><button type="button" className={styles.textButton} onClick={() => void loadSequence(String(item.id))}>View details</button></article>)}</div>}
