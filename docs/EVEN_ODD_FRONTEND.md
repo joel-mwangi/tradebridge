@@ -41,11 +41,21 @@ execution authorization. All API calls are no-store and pass through the
 authenticated Next.js server route.
 
 
-## Important data-ownership limitation
+## Session and sequence ownership
 
-The current backend session schema does not yet bind session rows to the
-signed-in TradeBridge Supabase user. The proxy requires an authenticated user,
-but this is not equivalent to per-user ownership enforcement for session UUIDs.
-Treat session IDs as sensitive and do not expose them to other users. A
-backend ownership migration and user-context enforcement should be completed
-before offering multi-user session privacy guarantees.
+The proxy calls `supabase.auth.getUser()` and derives the authenticated UUID
+from that verified user object. It constructs a fresh upstream request header
+set and injects `X-TradeBridge-User-ID`; it does not forward a browser-supplied
+identity header. FastAPI requires this context together with the private
+server-to-server API token.
+
+The backend stores ownership in the dedicated Even/Odd Supabase project
+(Database 2). Session reads are owner-filtered; sequence reads verify ownership
+through the parent session; sequence-start and settlement database functions
+check the owner inside their atomic transactions. Legacy rows with no owner
+remain inaccessible through user-facing session APIs and are not automatically
+assigned to an account.
+
+The frontend must never connect directly to Database 2 or expose its secret
+key. No cross-project foreign key to the primary TradeBridge Auth database is
+used.
