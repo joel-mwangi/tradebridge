@@ -498,7 +498,7 @@ export default function EvenOddLab() {
         </div>
         <button type="button" className={styles.primaryButton} onClick={() => void recordSettlement()} disabled={!!busy || sequence.status !== "active" || !Object.values(revalidation).every(Boolean) || !settlement.profitIfWin || !settlement.lossIfLose || !settlement.evenProbability || !settlement.lowerEvenProbability || !settlement.upperEvenProbability || !settlement.conservativeExpectedValue || !settlement.realizedProfit}>Record external settlement</button>
         <p className={styles.helper}>All evidence fields must come from the actual evaluation and quote. Do not mark checks true or enter estimates just to bypass validation.</p>
-        {Boolean(sequenceDetails?.sequenceDetail) && <div className={styles.resultBox}><strong>Sequence details</strong><JsonPanel value={sequenceDetails.sequenceDetail} /></div>}
+        {sequenceDetails?.sequenceDetail && <div className={styles.resultBox}><strong>Sequence details</strong><JsonPanel value={sequenceDetails.sequenceDetail} /></div>}
       </section>}
     </>}
   </section>;
