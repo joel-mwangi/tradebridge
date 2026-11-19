@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import styles from "./EvenOddLab.module.css";
 
 type LabStatus = {
@@ -46,7 +47,7 @@ function formatMoney(value: unknown, currency = "USD") {
 function Stat({ label, value, detail }: { label: string; value: string; detail: string }) {
   return <article className={styles.stat}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className={styles.field}><span>{label}</span>{children}</label>;
 }
 function JsonPanel({ value }: { value: unknown }) {
@@ -164,6 +165,8 @@ export default function EvenOddLab() {
     await runAction("payout", async () => {
       const result = await request("payouts?symbol=" + encodeURIComponent(symbol) + "&currency=" + currency + "&stake=" + encodeURIComponent(stake));
       setPayout(result);
+      const selectedQuote = result.even as Record<string, unknown> | undefined;
+      if (selectedQuote) setSettlement((previous) => ({ ...previous, profitIfWin: String(selectedQuote.profit_if_win ?? previous.profitIfWin), lossIfLose: String(selectedQuote.loss_if_lose ?? previous.lossIfLose) }));
     });
   }
 
@@ -214,6 +217,7 @@ export default function EvenOddLab() {
     if (!session?.id || !selectedModel) throw new Error("Select a model and load an active session.");
     if (selectedModel.status !== "validated") throw new Error("Entry evaluation requires a validated model.");
     if (latestThree.length !== 3) throw new Error("At least three persisted ticks are required.");
+    if (latestThree.some((tick) => Date.now() / 1000 - tick.tick_epoch > 10)) throw new Error("The three confirmation ticks are stale. Collect fresh ticks and retry.");
     await runAction("entry", async () => {
       const result = await request("entry-check", {
         method: "POST",
@@ -308,7 +312,7 @@ export default function EvenOddLab() {
   const payoutOdd = payout?.odd as Record<string, unknown> | undefined;
   const forecastProbability = Number(forecast?.probability_even);
   const sessionActive = session?.status === "active";
-  const entryFresh = latestThree.length === 3 && (Date.now() / 1000 - latestThree[2].tick_epoch) <= 10;
+  const entryFresh = latestThree.length === 3 && latestThree.every((tick) => Date.now() / 1000 - tick.tick_epoch <= 10);
 
   return <section className={styles.lab} aria-label="Even/Odd Lab">
     <div className={styles.header}>
@@ -455,7 +459,7 @@ export default function EvenOddLab() {
         <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>External settlement recording only</strong><p>Only record a result after a trade has actually been settled outside this module. This form does not submit, buy, sell or close any contract.</p></div></div>
         <div className={styles.formGrid}>
           <Field label="Trade number"><input type="number" min="1" max="7" value={settlement.tradeNumber} onChange={(event) => setSettlement({ ...settlement, tradeNumber: event.target.value })} /></Field>
-          <Field label="Selected side"><select value={settlement.side} onChange={(event) => setSettlement({ ...settlement, side: event.target.value as "even" | "odd" })}><option value="even">Even</option><option value="odd">Odd</option></select></Field>
+          <Field label="Selected side"><select value={settlement.side} onChange={(event) => { const side = event.target.value as "even" | "odd"; const quote = side === "even" ? payout?.even : payout?.odd; setSettlement({ ...settlement, side, profitIfWin: String(quote?.profit_if_win ?? ""), lossIfLose: String(quote?.loss_if_lose ?? "") }); }}><option value="even">Even</option><option value="odd">Odd</option></select></Field>
           <Field label="Outcome"><select value={settlement.outcome} onChange={(event) => setSettlement({ ...settlement, outcome: event.target.value as "win" | "loss" })}><option value="win">Win</option><option value="loss">Loss</option></select></Field>
           <Field label="Stake"><input type="number" min="0.01" step="0.01" value={stake} onChange={(event) => setStake(event.target.value)} /></Field>
           <Field label="Profit if win"><input type="number" min="0.0001" step="0.0001" value={settlement.profitIfWin} onChange={(event) => setSettlement({ ...settlement, profitIfWin: event.target.value })} /></Field>
@@ -474,7 +478,7 @@ export default function EvenOddLab() {
             ["risk_budget_available", "Remaining risk budget confirmed"],
           ] as const).map(([key, label]) => <label key={key}><input type="checkbox" checked={revalidation[key]} onChange={(event) => setRevalidation({ ...revalidation, [key]: event.target.checked })} />{label}</label>)}
         </div>
-        <button type="button" className={styles.primaryButton} onClick={() => void recordSettlement()} disabled={!!busy || !Object.values(revalidation).every(Boolean) || !settlement.profitIfWin || !settlement.lossIfLose || !settlement.evenProbability || !settlement.lowerEvenProbability || !settlement.upperEvenProbability || !settlement.conservativeExpectedValue || !settlement.realizedProfit}>Record external settlement</button>
+        <button type="button" className={styles.primaryButton} onClick={() => void recordSettlement()} disabled={!!busy || sequence.status !== "active" || !Object.values(revalidation).every(Boolean) || !settlement.profitIfWin || !settlement.lossIfLose || !settlement.evenProbability || !settlement.lowerEvenProbability || !settlement.upperEvenProbability || !settlement.conservativeExpectedValue || !settlement.realizedProfit}>Record external settlement</button>
         <p className={styles.helper}>All evidence fields must come from the actual evaluation and quote. Do not mark checks true or enter estimates just to bypass validation.</p>
         {sequenceDetails?.sequenceDetail && <div className={styles.resultBox}><strong>Sequence details</strong><JsonPanel value={sequenceDetails.sequenceDetail} /></div>}
       </section>}
