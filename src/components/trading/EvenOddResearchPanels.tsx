@@ -193,6 +193,9 @@ export default function EvenOddResearchPanels(props: Props) {
           <MetricCard label="OOS ROWS" value={String(walk.evaluated_rows ?? latestRun.dataset_rows ?? "—")} />
           <MetricCard label="WALK-FORWARD FOLDS" value={String(walk.fold_count ?? 0)} />
           <MetricCard label="VALIDATION STATUS" value="Candidate" note="Independent approval required" />
+          <MetricCard label="PAYOUT-ADJUSTED EV" value="Not computed" note="Historical payout replay is not available" />
+          <MetricCard label="REALIZED DRAWDOWN" value="Not computed" note="No broker execution or complete paper-return series" />
+          <MetricCard label="ENTRY COVERAGE" value="Not computed" note="No validated entry-policy replay yet" />
         </div>
         <div className={styles.overviewGrid}>
           <div><h3 className={styles.subheading}>Model vs 50% baseline</h3>{fmt([["Log-loss improvement", pct(modelComparison.relative_improvement)],["Bootstrap interval", JSON.stringify(modelComparison.confidence_interval ?? "—")],["Statistical result", String(modelComparison.status ?? "Not reported")]])}</div>
