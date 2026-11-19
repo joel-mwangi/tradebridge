@@ -20,7 +20,7 @@ type ModelRow = {
 type ResearchRun = { id: string; market_symbol?: string; status?: string; started_at?: string; completed_at?: string; error_message?: string | null; dataset_rows?: number; model_id?: string };
 type SessionRecord = Record<string, unknown> & { id?: string; market_symbol?: string; status?: string; account_mode?: string; currency?: string; fixed_stake?: string | number; max_session_loss?: string | number; completed_trades?: number; consecutive_losses?: number; realized_profit?: string | number };
 type SequenceRecord = Record<string, unknown> & { id?: string; status?: string; planned_trades?: number; completed_trades?: number };
-type ApiResult = Record<string, any>;
+type ApiResult = Record<string, unknown>;
 const SYMBOLS = ["R_50", "R_75", "1HZ100V", "1HZ75V"] as const;
 const CURRENCIES = ["USD", "EUR", "GBP"] as const;
 
@@ -142,8 +142,8 @@ export default function EvenOddLab() {
   const qualityData = quality?.quality && typeof quality.quality === "object" ? quality.quality as Record<string, unknown> : null;
   const candidateModels = models.filter((model) => model.status === "candidate");
   const validatedModels = models.filter((model) => model.status === "validated");
-  const activeSequences = Array.isArray((sequenceDetails as any)?.sequences)
-    ? (sequenceDetails as any).sequences as SequenceRecord[]
+  const activeSequences = Array.isArray(sequenceDetails?.sequences)
+    ? sequenceDetails.sequences as SequenceRecord[]
     : [];
 
   async function runAction(key: string, action: () => Promise<void>) {
