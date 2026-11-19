@@ -1,4 +1,13 @@
 
+.researchLaunch { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:14px 0; padding:15px; border:1px solid var(--line); border-radius:9px; background:var(--surface); }
+.researchLaunch>div { display:grid; gap:5px; min-width:0; }
+.researchLaunch strong { color:var(--ink); font-size:12px; }
+.researchLaunch p { margin:0; color:var(--muted); font-size:10px; line-height:1.55; }
+.researchLaunch a { flex:0 0 auto; color:var(--teal); font-size:11px; font-weight:850; text-decoration:none; }
+.researchLaunch a:hover { text-decoration:underline; }
+@media (max-width:620px) { .researchLaunch { align-items:flex-start; flex-direction:column; } }
+
+
 .subheading { margin:18px 0 9px; color:var(--ink); font-size:12px; font-weight:850; }
 .digitBars { display:grid; gap:9px; }
 .digitBarRow { display:grid; grid-template-columns:18px minmax(50px,1fr) 34px 48px; align-items:center; gap:10px; font-size:10px; font-variant-numeric:tabular-nums; }
