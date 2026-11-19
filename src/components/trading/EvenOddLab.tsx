@@ -496,7 +496,16 @@ export default function EvenOddLab() {
       <section className={styles.panel}>
         <div className={styles.panelHeading}><div><p className={styles.eyebrow}>MODEL REGISTRY</p><h2>Research models</h2><p>Candidate and independently validated model metadata for {symbol}.</p></div></div>
         <div className={styles.modelSummary}><div><strong>{candidateModels.length}</strong><span>Candidate</span></div><div><strong>{validatedModels.length}</strong><span>Validated</span></div><div><strong>{runs.length}</strong><span>Research runs</span></div></div>
+        <div className={styles.researchLaunch}>
+          <div><strong>Run a new chronological experiment</strong><p>Launch the manually dispatched backend workflow. It collects or evaluates persisted history, audits quality, trains a candidate and runs chronological walk-forward evaluation. It never validates or authorizes execution automatically.</p></div>
+          <a href="https://github.com/joel-mwangi/ai-tradingbridge/actions/workflows/even-odd-research.yml" target="_blank" rel="noreferrer">Open research workflow ↗</a>
+        </div>
         {models.length ? <div className={styles.modelTable}><table><thead><tr><th>Model</th><th>Version</th><th>Status</th><th>Train</th><th>Validation</th><th>Test</th><th>Created</th></tr></thead><tbody>{models.map((model) => <tr key={model.id}><td>{model.model_name ?? model.id.slice(0, 8)}</td><td>{model.model_version ?? "—"}</td><td><span className={model.status === "validated" ? styles.validated : styles.candidate}>{model.status ?? "unknown"}</span></td><td>{model.training_rows ?? "—"}</td><td>{model.validation_rows ?? "—"}</td><td>{model.test_rows ?? "—"}</td><td>{model.created_at ? new Date(model.created_at).toLocaleDateString() : "—"}</td></tr>)}</tbody></table></div> : <p className={styles.empty}>No model records yet. Run the backend research pipeline locally after collecting sufficient quality-checked history.</p>}
+        {selectedModel && <div className={styles.resultBox}>
+          <strong>Selected model evidence · {selectedModel.model_name ?? selectedModel.id.slice(0, 8)} · {selectedModel.status ?? "unknown"}</strong>
+          <p className={styles.helper}>Inspect the persisted evaluation report before interpreting a forecast. A candidate is not an approved predictive model.</p>
+          <JsonPanel value={selectedModel.metrics ?? { message: "No evaluation metrics are stored for this model." }} />
+        </div>}
         <div className={styles.formGrid}>
           <Field label="Select model for research"><select value={selectedModelId} onChange={(event) => { setSelectedModelId(event.target.value); setForecast(null); }}><option value="">Select model</option>{models.map((model) => <option value={model.id} key={model.id}>{model.model_version ?? model.id} · {model.status}</option>)}</select></Field>
           <div className={styles.actionField}><span>Research-only forecast</span><button type="button" className={styles.secondaryButton} onClick={() => void loadForecast()} disabled={!!busy || !selectedModel}>{busy === "forecast" ? "Evaluating…" : "Inspect latest forecast"}</button></div>
