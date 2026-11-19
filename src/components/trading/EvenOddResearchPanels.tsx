@@ -86,14 +86,20 @@ export default function EvenOddResearchPanels(props: Props) {
   const forecastExists = props.forecast !== null;
   const forecastProb = num(forecast.probability_even);
   const forecastOdd = num(forecast.probability_odd);
-  const metrics = (source: Record<string, unknown>) => [
-    ["Accuracy", pct(source.accuracy)],
-    ["Balanced accuracy", pct(source.balanced_accuracy)],
-    ["Precision", pct(source.precision_even)],
-    ["Brier score", metric(source.brier_score)],
-    ["Log loss", metric(source.log_loss)],
-    ["Calibration error", metric(source.expected_calibration_error)],
-  ];
+  const metrics = (source: Record<string, unknown>) => {
+    const matrix = object(source.confusion_matrix);
+    const tp = num(matrix.true_even_predicted_even) ?? 0;
+    const fp = num(matrix.true_odd_predicted_even) ?? 0;
+    const precisionEven = tp + fp > 0 ? tp / (tp + fp) : null;
+    return [
+      ["Accuracy", pct(source.accuracy)],
+      ["Balanced accuracy", pct(source.balanced_accuracy)],
+      ["Even precision", precisionEven === null ? "—" : pct(precisionEven)],
+      ["Brier score", metric(source.brier_score)],
+      ["Log loss", metric(source.log_loss)],
+      ["Calibration error", metric(source.expected_calibration_error)],
+    ] as Array<[string, string]>;
+  };
   const fmt = (rows: Array<[string, string]>) => rows.map(([label, value]) => <div className={styles.metricLine} key={label}><span>{label}</span><strong>{value}</strong></div>);
 
   if (props.view === "ml") return <>
