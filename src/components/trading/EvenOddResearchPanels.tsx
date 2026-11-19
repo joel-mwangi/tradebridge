@@ -126,7 +126,7 @@ export default function EvenOddResearchPanels(props: Props) {
         <MetricCard label="ODD PROBABILITY" value={forecastOdd === null ? "—" : pct(forecastOdd)} />
         <MetricCard label="DATA AGE" value={num(forecast.data_age_seconds) === null ? "—" : metric(forecast.data_age_seconds, 2) + "s"} />
         <p>{String(forecast.warning ?? "Research forecast only. This is not a trading signal.")}</p>
-        {forecast.calibration_interval && <pre className={styles.json}>{JSON.stringify(forecast.calibration_interval, null, 2)}</pre>}
+        {forecast.calibration_interval !== undefined && forecast.calibration_interval !== null ? <pre className={styles.json}>{JSON.stringify(forecast.calibration_interval, null, 2)}</pre> : null}
       </div>}
     </Panel>
     <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Prediction is not proof of edge</strong><p>A probability estimate is not an entry instruction. Validation requires repeatable out-of-sample performance, calibration, payout-adjusted positive expected value and independent review.</p></div></div>
