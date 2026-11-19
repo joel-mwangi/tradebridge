@@ -20,7 +20,7 @@ test("overview exposes digit-frequency and parity-sequence analysis without clai
   assert.match(lab, /Digit frequency & sequence behaviour/);
   assert.match(lab, /Latest 12 digits/);
   assert.match(lab, /Current parity streak/);
-  assert.match(lab, /does not establish a predictive edge/);
+  assert.match(lab, /not evidence of a predictive edge/);
 });
 
 test("entry intelligence is backend-gated and defaults to WAIT without prerequisites", () => {
