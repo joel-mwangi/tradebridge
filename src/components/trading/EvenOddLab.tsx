@@ -63,6 +63,7 @@ export default function EvenOddLab() {
   const [models, setModels] = useState<ModelRow[]>([]);
   const [runs, setRuns] = useState<ResearchRun[]>([]);
   const [quality, setQuality] = useState<ApiResult | null>(null);
+  const [sampleAnalysis, setSampleAnalysis] = useState<ApiResult | null>(null);
   const [collection, setCollection] = useState<ApiResult | null>(null);
   const [payout, setPayout] = useState<ApiResult | null>(null);
   const [forecast, setForecast] = useState<ApiResult | null>(null);
@@ -161,6 +162,14 @@ export default function EvenOddLab() {
     });
   }
 
+  async function analyzeSample() {
+    if (!history.length) throw new Error("Collect or load persisted ticks before running the descriptive analysis.");
+    await runAction("analyze", async () => {
+      const result = await request("analyze", { method: "POST", body: JSON.stringify({ digits: history.slice(-5000).map((tick) => tick.last_digit) }) });
+      setSampleAnalysis(result);
+    });
+  }
+
   async function loadPayout() {
     await runAction("payout", async () => {
       const result = await request("payouts?symbol=" + encodeURIComponent(symbol) + "&currency=" + currency + "&stake=" + encodeURIComponent(stake));
@@ -190,6 +199,8 @@ export default function EvenOddLab() {
       const created = result.session as SessionRecord;
       setSession(created);
       setSessionIdInput(String(created.id ?? ""));
+      setStake(String(created.fixed_stake ?? stake));
+      if (typeof created.currency === "string" && CURRENCIES.includes(created.currency as (typeof CURRENCIES)[number])) setCurrency(created.currency as (typeof CURRENCIES)[number]);
       setSequence(null); setSequenceDetails(null); setPlanResult(null); setEntryResult(null);
       setNotice("Research ledger session created. No broker account was connected and no order was placed.");
       setActiveView("session");
@@ -200,7 +211,11 @@ export default function EvenOddLab() {
     if (!id.trim()) throw new Error("Enter a session ID or create a session first.");
     await runAction("load-session", async () => {
       const result = await request("sessions/" + encodeURIComponent(id.trim()));
-      setSession(result.session as SessionRecord);
+      const loadedSession = result.session as SessionRecord;
+      setSession(loadedSession);
+      setStake(String(loadedSession.fixed_stake ?? stake));
+      if (typeof loadedSession.currency === "string" && CURRENCIES.includes(loadedSession.currency as (typeof CURRENCIES)[number])) setCurrency(loadedSession.currency as (typeof CURRENCIES)[number]);
+      if (loadedSession.account_mode === "research" || loadedSession.account_mode === "demo" || loadedSession.account_mode === "real") setAccountMode(loadedSession.account_mode);
       setSessionIdInput(id.trim());
       setSequenceDetails(result);
       const seqs = Array.isArray(result.sequences) ? result.sequences as SequenceRecord[] : [];
@@ -292,14 +307,14 @@ export default function EvenOddLab() {
     await runAction("settlement", async () => {
       const payload = {
         sequence_id: sequence.id, trade_number: Number(settlement.tradeNumber), side: settlement.side,
-        stake, profit_if_win: settlement.profitIfWin, loss_if_lose: settlement.lossIfLose,
+        stake: String(session?.fixed_stake ?? stake), profit_if_win: settlement.profitIfWin, loss_if_lose: settlement.lossIfLose,
         even_probability: settlement.evenProbability, lower_even_probability: settlement.lowerEvenProbability,
         upper_even_probability: settlement.upperEvenProbability,
         conservative_expected_value: settlement.conservativeExpectedValue,
         revalidation, outcome: settlement.outcome, realized_profit: settlement.realizedProfit,
         external_contract_id: settlement.externalContractId || null,
       };
-      const result = await request("settlements", { method: "POST", body: JSON.stringify(payload) });
+      await request("settlements", { method: "POST", body: JSON.stringify(payload) });
       setNotice("Settlement recorded in the research ledger. This action did not place or close a broker contract.");
       if (session?.id) await loadSession(session.id);
       await loadSequence(sequence.id);
@@ -364,6 +379,8 @@ export default function EvenOddLab() {
           </div>
           <div className={styles.bar}><span style={{ width: parity.evenPct + "%" }} /></div>
           <p className={styles.helper}>Historical frequency is descriptive. It does not establish next-tick predictability or profitability.</p>
+          <button type="button" className={styles.secondaryButton} onClick={() => void analyzeSample()} disabled={!!busy || history.length === 0}>{busy === "analyze" ? "Analyzing…" : "Run descriptive sample analysis"}</button>
+          {sampleAnalysis && <div className={styles.resultBox}><strong>Descriptive analysis · {String(sampleAnalysis.returned_ticks ?? "—")} observations</strong><JsonPanel value={sampleAnalysis.analysis ?? sampleAnalysis} /></div>}
         </section>
       </div>
 
