@@ -21,6 +21,7 @@ type ResearchRun = { id: string; market_symbol?: string; status?: string; starte
 type SessionRecord = Record<string, unknown> & { id?: string; market_symbol?: string; status?: string; account_mode?: string; currency?: string; fixed_stake?: string | number; max_session_loss?: string | number; completed_trades?: number; consecutive_losses?: number; realized_profit?: string | number };
 type SequenceRecord = Record<string, unknown> & { id?: string; status?: string; planned_trades?: number; completed_trades?: number };
 type ApiResult = Record<string, unknown>;
+type PayoutQuote = { payout?: string | number; ask_price?: string | number; profit_if_win?: string | number; loss_if_lose?: string | number };
 const SYMBOLS = ["R_50", "R_75", "1HZ100V", "1HZ75V"] as const;
 const CURRENCIES = ["USD", "EUR", "GBP"] as const;
 
@@ -174,7 +175,7 @@ export default function EvenOddLab() {
     await runAction("payout", async () => {
       const result = await request("payouts?symbol=" + encodeURIComponent(symbol) + "&currency=" + currency + "&stake=" + encodeURIComponent(stake));
       setPayout(result);
-      const selectedQuote = result.even as Record<string, unknown> | undefined;
+      const selectedQuote = result.even as PayoutQuote | undefined;
       if (selectedQuote) setSettlement((previous) => ({ ...previous, profitIfWin: String(selectedQuote.profit_if_win ?? previous.profitIfWin), lossIfLose: String(selectedQuote.loss_if_lose ?? previous.lossIfLose) }));
     });
   }
@@ -322,8 +323,8 @@ export default function EvenOddLab() {
     });
   }
 
-  const payoutEven = payout?.even as Record<string, unknown> | undefined;
-  const payoutOdd = payout?.odd as Record<string, unknown> | undefined;
+  const payoutEven = payout?.even as PayoutQuote | undefined;
+  const payoutOdd = payout?.odd as PayoutQuote | undefined;
   const forecastProbability = Number(forecast?.probability_even);
   const sessionActive = session?.status === "active";
   const entryFresh = latestThree.length === 3 && latestThree.every((tick) => Date.now() / 1000 - tick.tick_epoch <= 10);
@@ -496,7 +497,7 @@ export default function EvenOddLab() {
         </div>
         <button type="button" className={styles.primaryButton} onClick={() => void recordSettlement()} disabled={!!busy || sequence.status !== "active" || !Object.values(revalidation).every(Boolean) || !settlement.profitIfWin || !settlement.lossIfLose || !settlement.evenProbability || !settlement.lowerEvenProbability || !settlement.upperEvenProbability || !settlement.conservativeExpectedValue || !settlement.realizedProfit}>Record external settlement</button>
         <p className={styles.helper}>All evidence fields must come from the actual evaluation and quote. Do not mark checks true or enter estimates just to bypass validation.</p>
-        {sequenceDetails?.sequenceDetail && <div className={styles.resultBox}><strong>Sequence details</strong><JsonPanel value={sequenceDetails.sequenceDetail} /></div>}
+        {Boolean(sequenceDetails?.sequenceDetail) && <div className={styles.resultBox}><strong>Sequence details</strong><JsonPanel value={sequenceDetails.sequenceDetail} /></div>}
       </section>}
     </>}
   </section>;
