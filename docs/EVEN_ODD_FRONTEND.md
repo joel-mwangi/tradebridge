@@ -39,3 +39,13 @@ Tick collection uses the backend's validated request fields:
 cannot provide model probabilities, payout terms, calibration evidence, or
 execution authorization. All API calls are no-store and pass through the
 authenticated Next.js server route.
+
+
+## Important data-ownership limitation
+
+The current backend session schema does not yet bind session rows to the
+signed-in TradeBridge Supabase user. The proxy requires an authenticated user,
+but this is not equivalent to per-user ownership enforcement for session UUIDs.
+Treat session IDs as sensitive and do not expose them to other users. A
+backend ownership migration and user-context enforcement should be completed
+before offering multi-user session privacy guarantees.
