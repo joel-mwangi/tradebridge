@@ -20,6 +20,8 @@ test("overview exposes digit-frequency and parity-sequence analysis without clai
   assert.match(lab, /Digit frequency & sequence behaviour/);
   assert.match(lab, /Latest 12 digits/);
   assert.match(lab, /Current parity streak/);
+  assert.match(lab, /Momentum shift/);
+  assert.match(lab, /Transition/);
   assert.match(lab, /not evidence of a predictive edge/);
 });
 
