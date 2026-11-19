@@ -20,17 +20,36 @@ only allowlisted Even/Odd endpoints using the server token.
 
 ## Current frontend scope
 
-- Service status and execution/model readiness.
-- Market selection, bounded tick collection, and collection result.
-- Persisted tick history and parity distribution summary.
-- Structural data-quality audit.
-- Candidate/validated model registry metadata and research-run history.
+The terminal is organized into six workspaces:
 
-The UI intentionally does not create a trade, start a sequence, or display a
-candidate model forecast as an actionable signal. The backend currently reports
-no validated predictive model and order execution is disabled. Research runs
-are initiated locally on the backend with
-`python -m scripts.even_odd_research --symbol R_50 --walk-forward`.
+- **Overview:** service readiness, bounded tick collection, parity and digit
+  distributions, recent sequences, parity streaks, rolling-frequency momentum,
+  transition counts, payout quotes and structural data-quality audit.
+- **ML Predictions:** candidate/validated model registry, partition sizes,
+  research-only next-parity forecast and uncertainty display.
+- **Entry Intelligence:** backend-gated entry evaluation, explicit WAIT states,
+  payout-aware qualification and risk-bounded sequence planning. The browser
+  cannot supply probabilities, validation flags or policy overrides.
+- **Backtesting:** persisted chronological experiment history, train /
+  validation / calibration / test partition summaries, expanding walk-forward
+  folds and comparisons against constant and rolling-frequency baselines.
+- **Performance:** out-of-sample accuracy, balanced accuracy, precision derived
+  from the confusion matrix, Brier score, log loss, calibration error and
+  baseline comparisons.
+- **Sessions & risk:** persistent owner-scoped sessions, sequence ledger,
+  settlement records, fixed stake, session loss cap and configured trade caps.
+
+The frontend does not submit or close Deriv contracts. A candidate model forecast
+is never displayed as an actionable signal. The backend currently reports no
+validated predictive model and order execution remains disabled.
+
+Research runs execute outside the Vercel request lifecycle through the manually
+dispatched GitHub Actions workflow documented in
+`docs/even-odd/ML_RESEARCH_PIPELINE.md`. The current research evaluator tests
+probability forecasts and walk-forward baselines; it does **not** yet perform a
+full historical payout replay or calculate realized-return drawdown. The UI
+must not invent those metrics or describe predictive classification evaluation
+as a completed profitability backtest.
 
 ## Backend request boundaries
 
