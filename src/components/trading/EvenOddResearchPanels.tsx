@@ -82,7 +82,9 @@ export default function EvenOddResearchPanels(props: Props) {
   const modelComparison = object(comparisons.vs_constant_baseline);
   const rollingComparison = object(comparisons.vs_rolling_frequency_baseline);
   const freshTicks = props.history.slice(-3).length === 3 && props.history.slice(-3).every((tick) => Date.now() / 1000 - tick.tick_epoch <= 10);
-  const entryReady = Boolean(props.session?.id && props.session.status === "active" && selected?.status === "validated" && freshTicks);
+  const sessionMatchesMarket = Boolean(props.session?.market_symbol === props.symbol);
+  const modelMatchesMarket = Boolean(selected?.market_symbol === props.symbol);
+  const entryReady = Boolean(props.session?.id && props.session.status === "active" && sessionMatchesMarket && selected?.status === "validated" && modelMatchesMarket && freshTicks);
   const forecast = props.forecast ?? {};
   const forecastExists = props.forecast !== null;
   const forecastProb = num(forecast.probability_even);
@@ -140,7 +142,7 @@ export default function EvenOddResearchPanels(props: Props) {
       </div>
       <div className={styles.entryDecision}>
         <span className={entryReady ? styles.candidate : styles.waitTag}>{entryReady ? "READY FOR SERVER EVALUATION" : "WAIT"}</span>
-        <strong>{entryReady ? "Preconditions are present; backend gates still decide." : !props.session?.id ? "Create or load an active session." : !selected ? "Select a model to inspect the evidence." : selected.status !== "validated" ? "No validated model is available. Candidate models are blocked." : "Collect three fresh, consecutive persisted ticks."}</strong>
+        <strong>{entryReady ? "Preconditions are present; backend gates still decide." : !props.session?.id ? "Create or load an active session." : props.session.status !== "active" ? "The selected session is not active." : !sessionMatchesMarket ? "The loaded session belongs to a different market. Load a matching session." : !selected ? "Select a model to inspect the evidence." : !modelMatchesMarket ? "The selected model belongs to a different market." : selected.status !== "validated" ? "No validated model is available. Candidate models are blocked." : "Collect three fresh, consecutive persisted ticks."}</strong>
         <p>Ready status only enables a request. It does not indicate a positive edge and does not place an order.</p>
       </div>
       <div className={styles.sessionActions}>
