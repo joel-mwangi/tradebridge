@@ -555,8 +555,28 @@ export default function EvenOddLab() {
         <p className={styles.helper}>Entry checks require three consecutive persisted ticks, fresh data (maximum 10 seconds), a validated model and the backend’s payout-adjusted risk gates. Refresh or collect ticks immediately before evaluation.</p>
         {!selectedModel && <p className={styles.empty}>No model selected. Open Models & research to select one.</p>}
         {selectedModel && selectedModel.status !== "validated" && <p className={styles.empty}>Selected model is {selectedModel.status}. Entry evaluation and sequence planning remain unavailable until independent validation.</p>}
-        {entryResult && <div className={styles.resultBox}><strong>Entry evaluation · {String(entryResult.status ?? "unknown").toUpperCase()}</strong><p>{String(entryResult.reason ?? "Backend evaluation completed. No order was placed.")}</p><JsonPanel value={entryResult} /></div>}
-        {planResult && <div className={styles.resultBox}><strong>Adaptive sequence plan · {String(planResult.status ?? "unknown").toUpperCase()}</strong><div><span>Planned upper bound</span><b>{String(planResult.planned_trades ?? 0)} trade(s), max 7</b></div><p>{String(planResult.plan_reason ?? planResult.reason ?? "")}</p><p className={styles.helper}>{String(planResult.warning ?? "No order was placed.")}</p><JsonPanel value={planResult} />
+        {entryResult && <div className={styles.resultBox}>
+          <strong>Hybrid entry evaluation · {String(entryResult.status ?? "unknown").toUpperCase()}</strong>
+          <p>{String(entryResult.reason ?? "Backend evaluation completed. No order was placed.")}</p>
+          {entryResult.status === "candidate" && <div className={styles.forecastPanel}>
+            <div><span>RESEARCH SIDE</span><b>{String(entryResult.side ?? "—").toUpperCase()}</b></div>
+            <div><span>CONFIRMATIONS</span><b>{String(entryResult.confirmations ?? "—")}</b></div>
+            <div><span>CONSERVATIVE EV</span><b>{formatMoney(entryResult.conservative_expected_value, String(session.currency ?? currency))}</b></div>
+            <div><span>EDGE OVER BREAK-EVEN</span><b>{Number.isFinite(Number(entryResult.edge_over_break_even)) ? (Number(entryResult.edge_over_break_even) * 100).toFixed(2) + " pp" : "—"}</b></div>
+            <p>Research candidate only. No order is authorized or submitted.</p>
+          </div>}
+          <JsonPanel value={entryResult} />
+        </div>}
+        {planResult && <div className={styles.resultBox}><strong>Adaptive sequence plan · {String(planResult.status ?? "unknown").toUpperCase()}</strong><div><span>Planned upper bound</span><b>{String(planResult.planned_trades ?? 0)} trade(s), max 7</b></div><p>{String(planResult.plan_reason ?? planResult.reason ?? "")}</p><p className={styles.helper}>{String(planResult.warning ?? "No order was placed.")}</p>
+          {Array.isArray(planResult.expected_value_by_trade) && <div className={styles.planRows}>
+            <strong>Trade-by-trade conservative evaluation</strong>
+            {(planResult.expected_value_by_trade as unknown[]).map((value, index) => {
+              const conservative = Array.isArray(planResult.conservative_ev_by_trade) ? planResult.conservative_ev_by_trade[index] : undefined;
+              return <div key={index}><span>Trade {index + 1}</span><small>Expected EV {formatMoney(value, String(session.currency ?? currency))}</small><b>Conservative EV {formatMoney(conservative, String(session.currency ?? currency))}</b></div>;
+            })}
+          </div>}
+          <p className={styles.helper}>The planned count is an upper bound, not an instruction to complete every trade. Revalidate the model, uncertainty, payout, opportunity and remaining risk budget after every recorded settlement. Stop immediately when any gate fails.</p>
+          <JsonPanel value={planResult} />
           <button type="button" className={styles.primaryButton} onClick={() => void startSequence()} disabled={!!busy || planResult.status !== "plan" || Number(planResult.planned_trades) < 1}>{busy === "start-sequence" ? "Starting ledger…" : "Confirm and start sequence ledger"}</button>
         </div>}
         {activeSequences.length > 0 && <div className={styles.list}>{activeSequences.map((item) => <article key={String(item.id)}><div><strong>Sequence {String(item.id).slice(0, 8)} · {item.status}</strong><small>{item.completed_trades ?? 0} / {item.planned_trades ?? "—"} trades recorded</small></div><button type="button" className={styles.textButton} onClick={() => void loadSequence(String(item.id))}>View details</button></article>)}</div>}
