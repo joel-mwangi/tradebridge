@@ -32,7 +32,12 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
 
   const target = new URL(backendUrl + "/even-odd/" + endpoint);
   request.nextUrl.searchParams.forEach((value, key) => target.searchParams.append(key, value));
-  const headers = new Headers({ Authorization: "Bearer " + apiToken, Accept: "application/json" });
+  const headers = new Headers({
+    Authorization: "Bearer " + apiToken,
+    Accept: "application/json",
+    // Identity is derived from getUser() above; browser-supplied headers are never forwarded.
+    "X-TradeBridge-User-ID": data.user.id,
+  });
   let body: string | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
     headers.set("Content-Type", "application/json");
