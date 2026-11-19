@@ -304,7 +304,6 @@ export default function EvenOddLab() {
       if (session?.id) await loadSession(session.id);
       await loadSequence(sequence.id);
       setSettlement((previous) => ({ ...previous, tradeNumber: String(Number(previous.tradeNumber) + 1) }));
-      return result;
     });
   }
 
