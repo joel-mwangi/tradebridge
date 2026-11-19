@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-const SECTIONS = ["dashboard", "markets", "forex-analyst", "trade", "portfolio", "bots", "settings", "mt5"] as const;
+const SECTIONS = ["dashboard", "markets", "forex-analyst", "trade", "portfolio", "bots", "settings", "mt5", "even-odd-lab"] as const;
 
 /**
  * The persistent parent layout renders the workspace. This page validates that
