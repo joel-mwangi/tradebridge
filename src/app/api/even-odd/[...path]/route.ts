@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ALLOWED_PATHS = [
-  /^status$/, /^collect$/, /^analyze$/, /^history$/, /^quality$/,
+  /^status$/, /^collect$/, /^live-status$/, /^analyze$/, /^history$/, /^quality$/,
   /^payouts$/, /^models$/, /^research-runs$/, /^forecast$/, /^entry-check$/,
   /^sessions$/, /^sessions\/[0-9a-f-]{36}$/i, /^sequence-plan$/, /^sequences$/,
   /^sequences\/[0-9a-f-]{36}$/i, /^settlements$/,
