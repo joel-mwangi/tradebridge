@@ -239,6 +239,7 @@ export default function EvenOddLab() {
           }
         }).catch((error) => {
           finished = true;
+          collectionStopRef.current = true;
           setError(error instanceof Error ? error.message : "Browser collection failed.");
           ws.close(1011, "Collection failed");
         });
