@@ -53,11 +53,21 @@ as a completed profitability backtest.
 
 ## Backend request boundaries
 
-Tick collection uses the backend's validated request fields:
-`symbol`, `tick_count` (10–300), and `timeout_seconds` (5–80). The browser
-cannot provide model probabilities, payout terms, calibration evidence, or
-execution authorization. All API calls are no-store and pass through the
-authenticated Next.js server route.
+Manual tick collection is browser-managed. The signed-in browser opens the public
+Deriv WebSocket and submits batches of at most 100 live observations through the
+authenticated Next.js proxy to FastAPI. FastAPI verifies job ownership, validates
+market and basic tick fields, persists each batch to Database 2, and advances
+progress only after persistence succeeds. The browser must remain open and the
+computer awake; tab closure, browser suspension, network loss, or a Deriv socket
+disconnect can interrupt the collection. A partial sample is stopped, not marked
+completed. No historical backfill is used.
+
+The browser never connects directly to Database 2 and never receives its secret
+key. The existing worker deployment is no longer required for this collection
+flow. Browser-originated observations must be treated as client-originated data:
+they are not cryptographically attested by Deriv and must not be treated as
+tamper-proof evidence for shared model training without additional provenance
+controls.
 
 
 ## Session and sequence ownership
