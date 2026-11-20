@@ -212,22 +212,9 @@ export default function EvenOddLab() {
           const message = JSON.parse(String(event.data)) as { msg_type?: string; error?: { message?: string }; tick?: Record<string, unknown>; subscription?: { id?: string } };
           if (message.error) throw new Error(message.error.message ?? "Deriv subscription failed.");
           if (message.msg_type !== "tick" || !message.tick || message.tick.symbol !== symbol) return;
-          const tick = message.tick;
-          const precision = Number(tick.pip_size);
-          const quote = Number(tick.quote);
-          const epoch = Number(tick.epoch);
-          if (!Number.isInteger(precision) || precision < 0 || precision > 10 || !Number.isFinite(quote) || !Number.isInteger(epoch)) {
-            throw new Error("Deriv returned an invalid tick payload.");
-          }
-          const formatted = quote.toFixed(precision);
-          const lastDigit = Number(formatted.replace(".", "").slice(-1));
           batch.push({
-            received_at: new Date().toISOString(), epoch, symbol, quote: formatted,
-            pip_size: precision, last_digit: lastDigit,
-            parity: lastDigit % 2 === 0 ? "even" : "odd",
-            tick_id: tick.id == null ? null : String(tick.id),
-            stream_id: message.subscription?.id == null ? null : String(message.subscription.id),
-            capture_id: crypto.randomUUID(),
+            tick: message.tick,
+            subscription_id: message.subscription?.id == null ? null : String(message.subscription.id),
           });
           received += 1;
           if (batch.length >= 100 || received >= collectionTarget) {
