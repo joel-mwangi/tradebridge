@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 const ALLOWED_PATHS = [
   /^status$/, /^collect$/, /^live-status$/, /^analyze$/, /^history$/, /^quality$/,
   /^payouts$/, /^models$/, /^research-runs$/, /^forecast$/, /^entry-check$/,
+  /^collection-jobs$/, /^collection-jobs\/active$/, /^collection-jobs\/[0-9a-f-]{36}\/stop$/i,
   /^sessions$/, /^sessions\/[0-9a-f-]{36}$/i, /^sequence-plan$/, /^sequences$/,
   /^sequences\/[0-9a-f-]{36}$/i, /^settlements$/,
 ];
