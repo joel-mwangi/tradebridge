@@ -190,7 +190,7 @@ export default function EvenOddResearchPanels(props: Props) {
           <MetricCard label="BRIER SCORE" value={metric(modelMetrics.brier_score)} note="Lower is better" />
           <MetricCard label="LOG LOSS" value={metric(modelMetrics.log_loss)} note="Lower is better" />
           <MetricCard label="CALIBRATION ERROR" value={metric(modelMetrics.expected_calibration_error)} note="Lower is better" />
-          <MetricCard label="OOS ROWS" value={String(walk.evaluated_rows ?? latestRun.dataset_rows ?? "—")} />
+          <MetricCard label="OOS ROWS" value={String(walk.evaluated_rows ?? latestRun.partition_sizes?.test ?? "—")} note="Chronological test rows only" />
           <MetricCard label="WALK-FORWARD FOLDS" value={String(walk.fold_count ?? 0)} />
           <MetricCard label="VALIDATION STATUS" value="Candidate" note="Independent approval required" />
           <MetricCard label="PAYOUT-ADJUSTED EV" value="Not computed" note="Historical payout replay is not available" />
