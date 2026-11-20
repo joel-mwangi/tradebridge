@@ -467,7 +467,7 @@ export default function EvenOddLab() {
           <button type="button" className={styles.secondaryButton} onClick={() => void evaluateEntry()} disabled={!!busy || !sessionActive || !selectedModel || selectedModel.status !== "validated" || !entryFresh || latestThree.length !== 3}>Evaluate latest 3 ticks</button>
           <button type="button" className={styles.secondaryButton} onClick={() => void planSequence()} disabled={!!busy || !sessionActive || !selectedModel || selectedModel.status !== "validated" || latestTicks.length < 3}>Plan adaptive sequence</button>
         </div>
-        <p className={styles.helper}>Entry checks require three consecutive persisted ticks, fresh data (maximum 10 seconds), a validated model and the backend’s payout-adjusted risk gates. Refresh or collect ticks immediately before evaluation.</p>
+        <p className={styles.helper}>Entry checks require three consecutive persisted ticks, fresh data (maximum 10 seconds), a validated model and the backend’s payout-adjusted risk gates. Wait for fresh live ticks to be persisted before evaluation.</p>
         {!selectedModel && <p className={styles.empty}>No model selected. Open Models & research to select one.</p>}
         {selectedModel && selectedModel.status !== "validated" && <p className={styles.empty}>Selected model is {selectedModel.status}. Entry evaluation and sequence planning remain unavailable until independent validation.</p>}
         {entryResult && <div className={styles.resultBox}><strong>Entry evaluation · {String(entryResult.status ?? "unknown").toUpperCase()}</strong><p>{String(entryResult.reason ?? "Backend evaluation completed. No order was placed.")}</p><JsonPanel value={entryResult} /></div>}
