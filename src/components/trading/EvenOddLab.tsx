@@ -62,6 +62,7 @@ export default function EvenOddLab() {
   const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
   const [collectionTarget, setCollectionTarget] = useState(1000);
   const collectionSocketRef = useRef<WebSocket | null>(null);
+  const collectionHeartbeatRef = useRef<number | null>(null);
   const collectionStopRef = useRef(false);
   const collectionProcessingRef = useRef<Promise<void>>(Promise.resolve());
   const [status, setStatus] = useState<LabStatus | null>(null);
@@ -144,6 +145,15 @@ export default function EvenOddLab() {
     return () => window.clearInterval(timer);
   }, [refreshCollectionJob]);
   useEffect(() => {
+    return () => {
+      collectionStopRef.current = true;
+      if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
+      collectionHeartbeatRef.current = null;
+      const socket = collectionSocketRef.current;
+      if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Even/Odd Lab closed");
+    };
+  }, []);
+  useEffect(() => {
     if (!models.some((model) => model.id === selectedModelId)) {
       setSelectedModelId(models.find((model) => model.status === "validated")?.id ?? models[0]?.id ?? "");
     }
@@ -185,7 +195,7 @@ export default function EvenOddLab() {
       });
       const job = created.job as CollectionJob;
       setCollectionJob(job);
-      const heartbeatTimer = window.setInterval(() => {
+      collectionHeartbeatRef.current = window.setInterval(() => {
         void request("collection-jobs/" + encodeURIComponent(job.id) + "/heartbeat", { method: "POST" })
           .catch(() => { collectionStopRef.current = true; collectionSocketRef.current?.close(1011, "Collection heartbeat failed"); });
       }, 15000);
@@ -241,7 +251,8 @@ export default function EvenOddLab() {
       };
       ws.onerror = () => { collectionStopRef.current = true; setError("Deriv WebSocket connection failed. Check your connection and retry."); ws.close(1011, "Connection error"); };
       ws.onclose = () => {
-        window.clearInterval(heartbeatTimer);
+        if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
+        collectionHeartbeatRef.current = null;
         collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
           await flush();
           if (collectionStopRef.current && !finished) {
