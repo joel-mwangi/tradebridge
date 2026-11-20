@@ -218,11 +218,11 @@ export default function EvenOddLab() {
           pendingBatchId = null;
           setCollectionJob(saved.job as CollectionJob);
           received = Number((saved.job as CollectionJob).received_ticks ?? received + outgoing.length);
-          await refresh(symbol);
         } catch (error) {
           batch = [...outgoing, ...batch];
           throw error;
         }
+        await refresh(symbol);
       };
       ws.onopen = () => {
         ws.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: 8801 }));
