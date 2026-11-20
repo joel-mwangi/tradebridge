@@ -185,6 +185,10 @@ export default function EvenOddLab() {
       });
       const job = created.job as CollectionJob;
       setCollectionJob(job);
+      const heartbeatTimer = window.setInterval(() => {
+        void request("collection-jobs/" + encodeURIComponent(job.id) + "/heartbeat", { method: "POST" })
+          .catch(() => { collectionStopRef.current = true; collectionSocketRef.current?.close(1011, "Collection heartbeat failed"); });
+      }, 15000);
       setNotice("Connecting to Deriv. Keep this tab open and your computer awake until collection finishes.");
       const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
       collectionSocketRef.current = ws;
@@ -232,6 +236,7 @@ export default function EvenOddLab() {
       };
       ws.onerror = () => { collectionStopRef.current = true; setError("Deriv WebSocket connection failed. Check your connection and retry."); ws.close(1011, "Connection error"); };
       ws.onclose = () => {
+        window.clearInterval(heartbeatTimer);
         collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
           await flush();
           if (collectionStopRef.current && !finished) {
