@@ -238,13 +238,12 @@ export default function EvenOddLab() {
             ws.close(1000, "Target reached");
           }
         }).catch((error) => {
-          finished = true;
           collectionStopRef.current = true;
           setError(error instanceof Error ? error.message : "Browser collection failed.");
           ws.close(1011, "Collection failed");
         });
       };
-      ws.onerror = () => setError("Deriv WebSocket connection failed. Check your connection and retry.");
+      ws.onerror = () => { collectionStopRef.current = true; setError("Deriv WebSocket connection failed. Check your connection and retry."); ws.close(1011, "Connection error"); };
       ws.onclose = () => {
         collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
           await flush();
