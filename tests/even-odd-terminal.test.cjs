@@ -39,6 +39,8 @@ test("backtesting and performance read persisted evaluation reports and disclose
   assert.match(panels, /aggregate_constant_baseline_metrics/);
   assert.match(panels, /aggregate_rolling_frequency_baseline_metrics/);
   assert.match(panels, /walk-forward folds/);
+  assert.match(panels, /latestRun\.partition_sizes\?\.test/);
+  assert.doesNotMatch(panels, /walk\.evaluated_rows \?\? latestRun\.dataset_rows/);
   assert.match(panels, /does not run a full historical payout replay/i);
   assert.match(panels, /PAYOUT-ADJUSTED EV/);
   assert.match(panels, /REALIZED DRAWDOWN/);
