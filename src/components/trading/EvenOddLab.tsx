@@ -204,15 +204,18 @@ export default function EvenOddLab() {
       collectionSocketRef.current = ws;
       let received = 0;
       let batch: Record<string, unknown>[] = [];
+      let pendingBatchId: string | null = null;
       let finished = false;
       const flush = async () => {
         if (!batch.length) return;
         const outgoing = batch;
         batch = [];
+        pendingBatchId ??= crypto.randomUUID();
         try {
           const saved = await request("collection-jobs/" + encodeURIComponent(job.id) + "/batch", {
-            method: "POST", body: JSON.stringify({ ticks: outgoing }),
+            method: "POST", body: JSON.stringify({ batch_id: pendingBatchId, ticks: outgoing }),
           });
+          pendingBatchId = null;
           setCollectionJob(saved.job as CollectionJob);
           received = Number((saved.job as CollectionJob).received_ticks ?? received + outgoing.length);
           await refresh(symbol);
