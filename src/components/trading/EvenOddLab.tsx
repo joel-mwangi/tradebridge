@@ -23,6 +23,7 @@ type SessionRecord = Record<string, unknown> & { id?: string; market_symbol?: st
 type SequenceRecord = Record<string, unknown> & { id?: string; status?: string; planned_trades?: number; completed_trades?: number };
 type ApiResult = Record<string, unknown>;
 type PayoutQuote = { payout?: string | number; ask_price?: string | number; profit_if_win?: string | number; loss_if_lose?: string | number };
+type CollectionJob = { id: string; market_symbol: string; target_ticks: number; received_ticks: number; status: string; last_error?: string | null; created_at?: string; updated_at?: string };
 const SYMBOLS = ["R_50", "R_75", "1HZ100V", "1HZ75V"] as const;
 const CURRENCIES = ["USD", "EUR", "GBP"] as const;
 
@@ -59,6 +60,8 @@ function JsonPanel({ value }: { value: unknown }) {
 export default function EvenOddLab() {
   const [symbol, setSymbol] = useState<(typeof SYMBOLS)[number]>("R_50");
   const [liveCollector, setLiveCollector] = useState<ApiResult | null>(null);
+  const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
+  const [collectionTarget, setCollectionTarget] = useState(1000);
   const [status, setStatus] = useState<LabStatus | null>(null);
   const [history, setHistory] = useState<TickRow[]>([]);
   const [models, setModels] = useState<ModelRow[]>([]);
@@ -128,6 +131,19 @@ export default function EvenOddLab() {
   }, [request, symbol]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  const refreshCollectionJob = useCallback(async (selectedSymbol = symbol) => {
+    try {
+      const result = await request("collection-jobs/active?symbol=" + encodeURIComponent(selectedSymbol));
+      setCollectionJob(result.job && typeof result.job === "object" ? result.job as CollectionJob : null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh collection status.");
+    }
+  }, [request, symbol]);
+  useEffect(() => {
+    void refreshCollectionJob();
+    const timer = window.setInterval(() => { void refreshCollectionJob(); }, 2000);
+    return () => window.clearInterval(timer);
+  }, [refreshCollectionJob]);
   useEffect(() => {
     if (!models.some((model) => model.id === selectedModelId)) {
       setSelectedModelId(models.find((model) => model.status === "validated")?.id ?? models[0]?.id ?? "");
@@ -155,6 +171,26 @@ export default function EvenOddLab() {
     try { await action(); }
     catch (err) { setError(err instanceof Error ? err.message : "The request failed."); }
     finally { setBusy(""); }
+  }
+
+  async function startTickCollection() {
+    await runAction("collection-start", async () => {
+      const result = await request("collection-jobs", {
+        method: "POST",
+        body: JSON.stringify({ symbol, target_ticks: collectionTarget }),
+      });
+      setCollectionJob(result.job as CollectionJob);
+      setNotice("Live tick collection started. It continues independently of this browser.");
+    });
+  }
+
+  async function stopTickCollection() {
+    if (!collectionJob?.id) return;
+    await runAction("collection-stop", async () => {
+      const result = await request("collection-jobs/" + encodeURIComponent(collectionJob.id) + "/stop", { method: "POST" });
+      setCollectionJob(result.job as CollectionJob);
+      setNotice("Stop requested. The worker will finish its current persistence batch and stop.");
+    });
   }
 
   async function analyzeSample() {
@@ -357,15 +393,27 @@ export default function EvenOddLab() {
     {activeView === "overview" && <>
       <div className={styles.overviewGrid}>
         <section className={styles.panel}>
-          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>LIVE MARKET DATA</p><h2>Continuous Deriv stream</h2><p>Dedicated background worker captures new ticks only after subscribing to the live feed.</p></div><span className={styles.livePill}>LIVE FEED</span></div>
-          <div className={styles.statusGrid}>
-            <Stat label="COLLECTOR" value={String(liveCollector?.status ?? "Not reporting")} detail={String(liveCollector?.worker_id ?? "Background worker not detected")} />
-            <Stat label="LIVE TICKS" value={String(liveCollector?.ticks_received ?? 0)} detail="Received by this worker process" />
-            <Stat label="LAST TICK" value={liveCollector?.last_tick_at ? new Date(String(liveCollector.last_tick_at)).toLocaleString() : "—"} detail="UTC timestamp from collector heartbeat" />
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>LIVE MARKET DATA</p><h2>Manual tick collection</h2><p>Collect a bounded sample directly from the live Deriv feed.</p></div><span className={styles.livePill}>LIVE ONLY</span></div>
+          <div className={styles.fieldGrid}>
+            <Field label="Ticks to collect">
+              <select value={collectionTarget} onChange={(event) => setCollectionTarget(Number(event.target.value))} disabled={!!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>
+                <option value={500}>500 ticks</option><option value={1000}>1,000 ticks</option><option value={2500}>2,500 ticks</option><option value={5000}>5,000 ticks</option>
+              </select>
+            </Field>
+            <div className={styles.field}><span>Selected market</span><strong>{symbol}</strong></div>
           </div>
-          {liveCollector?.last_error && <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Collector connection warning</strong><p>{String(liveCollector.last_error)}</p></div></div>}
-          <p className={styles.helper}>The collector runs independently of this dashboard. It must be deployed as an always-on background worker with Database 2 credentials. Closing this browser does not stop collection. Historical backfills are disabled.</p>
-          <button type="button" className={styles.secondaryButton} onClick={() => void refresh(symbol)} disabled={loading || !!busy}>Refresh live status and data</button>
+          <div className={styles.statusGrid}>
+            <Stat label="JOB STATUS" value={collectionJob?.status ?? "Idle"} detail={collectionJob?.id ? "Collection job " + collectionJob.id.slice(0, 8) : "No job for this market"} />
+            <Stat label="TICKS RECEIVED" value={String(collectionJob?.received_ticks ?? 0)} detail={"Target: " + String(collectionJob?.target_ticks ?? collectionTarget)} />
+            <Stat label="PROGRESS" value={collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100).toFixed(1) + "%" : "0%"} detail="Persisted worker progress" />
+          </div>
+          <div className={styles.bar}><span style={{ width: (collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100) : 0) + "%" }} /></div>
+          {collectionJob?.last_error && <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Collection error</strong><p>{collectionJob.last_error}</p></div></div>}
+          <div className={styles.actionRow}>
+            <button type="button" className={styles.primaryButton} onClick={() => void startTickCollection()} disabled={!!busy || !!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-start" ? "Starting…" : "Start collection"}</button>
+            <button type="button" className={styles.secondaryButton} onClick={() => void stopTickCollection()} disabled={!!busy || !collectionJob || !["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-stop" ? "Stopping…" : "Stop collection"}</button>
+          </div>
+          <p className={styles.helper}>The background worker performs collection even if this page is closed. Collection stops automatically at the target or when you press Stop. Only newly received live ticks are stored; no historical backfill is used.</p>
         </section>
 
         <section className={styles.panel}>
