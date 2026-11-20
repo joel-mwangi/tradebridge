@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "./EvenOddLab.module.css";
 import EvenOddResearchPanels from "./EvenOddResearchPanels";
@@ -61,6 +61,10 @@ export default function EvenOddLab() {
   const [symbol, setSymbol] = useState<(typeof SYMBOLS)[number]>("R_50");
   const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
   const [collectionTarget, setCollectionTarget] = useState(1000);
+  const collectionSocketRef = useRef<WebSocket | null>(null);
+  const collectionHeartbeatRef = useRef<number | null>(null);
+  const collectionStopRef = useRef(false);
+  const collectionProcessingRef = useRef<Promise<void>>(Promise.resolve());
   const [status, setStatus] = useState<LabStatus | null>(null);
   const [history, setHistory] = useState<TickRow[]>([]);
   const [models, setModels] = useState<ModelRow[]>([]);
@@ -111,10 +115,10 @@ export default function EvenOddLab() {
     try {
       const [statusData, historyData, modelData, runData, qualityData] = await Promise.all([
         request("status"),
-        request("history?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
+        request("history?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000&capture_mode=browser_stream"),
         request("models?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
         request("research-runs?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
-        request("quality?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
+        request("quality?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000&capture_mode=browser_stream"),
       ]);
       setStatus(statusData as LabStatus);
       setHistory(Array.isArray(historyData.rows) ? historyData.rows as TickRow[] : []);
@@ -140,6 +144,15 @@ export default function EvenOddLab() {
     const timer = window.setInterval(() => { void refreshCollectionJob(); }, 2000);
     return () => window.clearInterval(timer);
   }, [refreshCollectionJob]);
+  useEffect(() => {
+    return () => {
+      collectionStopRef.current = true;
+      if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
+      collectionHeartbeatRef.current = null;
+      const socket = collectionSocketRef.current;
+      if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Even/Odd Lab closed");
+    };
+  }, []);
   useEffect(() => {
     if (!models.some((model) => model.id === selectedModelId)) {
       setSelectedModelId(models.find((model) => model.status === "validated")?.id ?? models[0]?.id ?? "");
@@ -171,21 +184,117 @@ export default function EvenOddLab() {
 
   async function startTickCollection() {
     await runAction("collection-start", async () => {
-      const result = await request("collection-jobs", {
+      if (collectionSocketRef.current && collectionSocketRef.current.readyState < WebSocket.CLOSING) {
+        throw new Error("A browser collection is already running in this tab.");
+      }
+      collectionStopRef.current = false;
+      collectionProcessingRef.current = Promise.resolve();
+      const created = await request("collection-jobs", {
         method: "POST",
         body: JSON.stringify({ symbol, target_ticks: collectionTarget }),
       });
-      setCollectionJob(result.job as CollectionJob);
-      setNotice("Live tick collection started. It continues independently of this browser.");
+      const job = created.job as CollectionJob;
+      setCollectionJob(job);
+      collectionHeartbeatRef.current = window.setInterval(() => {
+        void request("collection-jobs/" + encodeURIComponent(job.id) + "/heartbeat", { method: "POST" })
+          .catch(() => { collectionStopRef.current = true; collectionSocketRef.current?.close(1011, "Collection heartbeat failed"); });
+      }, 15000);
+      setNotice("Connecting to Deriv. Keep this tab open and your computer awake until collection finishes.");
+      const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
+      collectionSocketRef.current = ws;
+      let received = 0;
+      let batch: Record<string, unknown>[] = [];
+      let pendingBatchId: string | null = null;
+      let finished = false;
+      const flush = async () => {
+        if (!batch.length) return;
+        const outgoing = batch;
+        batch = [];
+        pendingBatchId ??= crypto.randomUUID();
+        try {
+          const saved = await request("collection-jobs/" + encodeURIComponent(job.id) + "/batch", {
+            method: "POST", body: JSON.stringify({ batch_id: pendingBatchId, ticks: outgoing }),
+          });
+          pendingBatchId = null;
+          setCollectionJob(saved.job as CollectionJob);
+          received = Number((saved.job as CollectionJob).received_ticks ?? received + outgoing.length);
+        } catch (error) {
+          batch = [...outgoing, ...batch];
+          throw error;
+        }
+        await refresh(symbol);
+      };
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: 8801 }));
+        setNotice("Connected to Deriv. Receiving live ticks; keep this tab open.");
+      };
+      ws.onmessage = (event) => {
+        collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
+          if (finished || collectionStopRef.current) return;
+          const message = JSON.parse(String(event.data)) as { msg_type?: string; error?: { message?: string }; tick?: Record<string, unknown>; subscription?: { id?: string } };
+          if (message.error) throw new Error(message.error.message ?? "Deriv subscription failed.");
+          if (message.msg_type !== "tick" || !message.tick || message.tick.symbol !== symbol) return;
+          batch.push({
+            tick: message.tick,
+            subscription_id: message.subscription?.id == null ? null : String(message.subscription.id),
+          });
+          received += 1;
+          if (batch.length >= 100 || received >= collectionTarget) {
+            await flush();
+          }
+          if (received >= collectionTarget) {
+            finished = true;
+            ws.close(1000, "Target reached");
+          }
+        }).catch((error) => {
+          collectionStopRef.current = true;
+          setError(error instanceof Error ? error.message : "Browser collection failed.");
+          ws.close(1011, "Collection failed");
+        });
+      };
+      ws.onerror = () => { collectionStopRef.current = true; setError("Deriv WebSocket connection failed. Check your connection and retry."); ws.close(1011, "Connection error"); };
+      ws.onclose = () => {
+        if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
+        collectionHeartbeatRef.current = null;
+        collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
+          await flush();
+          if (collectionStopRef.current && !finished) {
+            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
+            setCollectionJob(stopped.job as CollectionJob);
+            setNotice("Collection stopped. Successfully persisted ticks are retained.");
+          } else if (received >= collectionTarget) {
+            setNotice("Collection completed. All target ticks were persisted.");
+          } else if (!finished) {
+            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
+            setCollectionJob(stopped.job as CollectionJob);
+            setError("The Deriv connection closed before the target was reached. The job is stopped with a partial sample.");
+          }
+          collectionSocketRef.current = null;
+          await refresh(symbol);
+        }).catch(async (error) => {
+          setError(error instanceof Error ? error.message : "Could not finalize collection.");
+          try {
+            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
+            setCollectionJob(stopped.job as CollectionJob);
+          } catch { /* The next start request can recover a stale job after its heartbeat expires. */ }
+          collectionSocketRef.current = null;
+        });
+      };
     });
   }
 
   async function stopTickCollection() {
     if (!collectionJob?.id) return;
     await runAction("collection-stop", async () => {
-      const result = await request("collection-jobs/" + encodeURIComponent(collectionJob.id) + "/stop", { method: "POST" });
-      setCollectionJob(result.job as CollectionJob);
-      setNotice("Stop requested. The worker will finish its current persistence batch and stop.");
+      collectionStopRef.current = true;
+      const socket = collectionSocketRef.current;
+      if (socket && socket.readyState < WebSocket.CLOSING) {
+        socket.close(1000, "User requested stop");
+      } else {
+        const result = await request("collection-jobs/" + encodeURIComponent(collectionJob.id) + "/stop", { method: "POST" });
+        setCollectionJob(result.job as CollectionJob);
+      }
+      setNotice("Stop requested. The browser will persist its current batch and close the Deriv connection.");
     });
   }
 
@@ -401,7 +510,7 @@ export default function EvenOddLab() {
           <div className={styles.statusGrid}>
             <Stat label="JOB STATUS" value={collectionJob?.status ?? "Idle"} detail={collectionJob?.id ? "Collection job " + collectionJob.id.slice(0, 8) : "No job for this market"} />
             <Stat label="TICKS RECEIVED" value={String(collectionJob?.received_ticks ?? 0)} detail={"Target: " + String(collectionJob?.target_ticks ?? collectionTarget)} />
-            <Stat label="PROGRESS" value={collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100).toFixed(1) + "%" : "0%"} detail="Persisted worker progress" />
+            <Stat label="PROGRESS" value={collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100).toFixed(1) + "%" : "0%"} detail="Persisted browser progress" />
           </div>
           <div className={styles.bar}><span style={{ width: (collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100) : 0) + "%" }} /></div>
           {collectionJob?.last_error && <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Collection error</strong><p>{collectionJob.last_error}</p></div></div>}
@@ -409,11 +518,11 @@ export default function EvenOddLab() {
             <button type="button" className={styles.primaryButton} onClick={() => void startTickCollection()} disabled={!!busy || !!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-start" ? "Starting…" : "Start collection"}</button>
             <button type="button" className={styles.secondaryButton} onClick={() => void stopTickCollection()} disabled={!!busy || !collectionJob || !["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-stop" ? "Stopping…" : "Stop collection"}</button>
           </div>
-          <p className={styles.helper}>The background worker performs collection even if this page is closed. Collection stops automatically at the target or when you press Stop. Only newly received live ticks are stored; no historical backfill is used.</p>
+          <p className={styles.helper}>Collection runs in this browser tab. Keep the tab open and your computer awake. Closing the tab, losing network connectivity or suspending the browser can interrupt collection. Only newly received live ticks are stored; no historical backfill is used.</p>
         </section>
 
         <section className={styles.panel}>
-          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>OBSERVED DISTRIBUTION</p><h2>Parity snapshot</h2><p>{history.length} live-captured observations for {symbol}.</p></div></div>
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>OBSERVED DISTRIBUTION</p><h2>Parity snapshot</h2><p>{history.length} browser-captured observations for {symbol}.</p></div></div>
           <div className={styles.parityRow}>
             <div><span className={styles.evenDot} /><strong>Even</strong><b>{parity.evenPct.toFixed(1)}%</b><small>{parity.even} observations</small></div>
             <div><span className={styles.oddDot} /><strong>Odd</strong><b>{parity.oddPct.toFixed(1)}%</b><small>{parity.odd} observations</small></div>
