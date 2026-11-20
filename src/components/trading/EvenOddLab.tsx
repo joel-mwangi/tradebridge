@@ -58,15 +58,13 @@ function JsonPanel({ value }: { value: unknown }) {
 
 export default function EvenOddLab() {
   const [symbol, setSymbol] = useState<(typeof SYMBOLS)[number]>("R_50");
-  const [tickCount, setTickCount] = useState(100);
-  const [timeoutSeconds, setTimeoutSeconds] = useState(60);
+  const [liveCollector, setLiveCollector] = useState<ApiResult | null>(null);
   const [status, setStatus] = useState<LabStatus | null>(null);
   const [history, setHistory] = useState<TickRow[]>([]);
   const [models, setModels] = useState<ModelRow[]>([]);
   const [runs, setRuns] = useState<ResearchRun[]>([]);
   const [quality, setQuality] = useState<ApiResult | null>(null);
   const [sampleAnalysis, setSampleAnalysis] = useState<ApiResult | null>(null);
-  const [collection, setCollection] = useState<ApiResult | null>(null);
   const [payout, setPayout] = useState<ApiResult | null>(null);
   const [forecast, setForecast] = useState<ApiResult | null>(null);
   const [session, setSession] = useState<SessionRecord | null>(null);
@@ -109,18 +107,21 @@ export default function EvenOddLab() {
   const refresh = useCallback(async (selectedSymbol = symbol) => {
     setLoading(true); setError("");
     try {
-      const [statusData, historyData, modelData, runData, qualityData] = await Promise.all([
+      const [statusData, historyData, modelData, runData, qualityData, liveStatusData] = await Promise.all([
         request("status"),
         request("history?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
         request("models?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
         request("research-runs?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
         request("quality?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
+        request("live-status?symbol=" + encodeURIComponent(selectedSymbol)),
       ]);
       setStatus(statusData as LabStatus);
       setHistory(Array.isArray(historyData.rows) ? historyData.rows as TickRow[] : []);
       setModels(Array.isArray(modelData.models) ? modelData.models as ModelRow[] : []);
       setRuns(Array.isArray(runData.research_runs) ? runData.research_runs as ResearchRun[] : []);
       setQuality(qualityData);
+      setLiveCollector(liveStatusData.collector && typeof liveStatusData.collector === "object"
+        ? liveStatusData.collector as ApiResult : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load Even/Odd Lab.");
     } finally { setLoading(false); }
@@ -154,15 +155,6 @@ export default function EvenOddLab() {
     try { await action(); }
     catch (err) { setError(err instanceof Error ? err.message : "The request failed."); }
     finally { setBusy(""); }
-  }
-
-  async function collectTicks() {
-    await runAction("collect", async () => {
-      const result = await request("collect", { method: "POST", body: JSON.stringify({ symbol, tick_count: tickCount, timeout_seconds: timeoutSeconds }) });
-      setCollection(result);
-      setNotice("Collection completed. These observations are research data, not a trading signal.");
-      await refresh(symbol);
-    });
   }
 
   async function analyzeSample() {
@@ -365,24 +357,25 @@ export default function EvenOddLab() {
     {activeView === "overview" && <>
       <div className={styles.overviewGrid}>
         <section className={styles.panel}>
-          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>MARKET DATA</p><h2>Collect tick history</h2><p>Bounded collection from the dedicated Deriv public WebSocket.</p></div><span className={styles.livePill}>PUBLIC FEED</span></div>
-          <div className={styles.formGrid}>
-            <Field label="Ticks to collect"><select value={tickCount} onChange={(event) => setTickCount(Number(event.target.value))}><option value={50}>50 ticks</option><option value={100}>100 ticks</option><option value={250}>250 ticks</option><option value={300}>300 ticks</option></select></Field>
-            <Field label="Receive timeout"><select value={timeoutSeconds} onChange={(event) => setTimeoutSeconds(Number(event.target.value))}><option value={15}>15 seconds</option><option value={30}>30 seconds</option><option value={60}>60 seconds</option><option value={80}>80 seconds</option></select></Field>
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>LIVE MARKET DATA</p><h2>Continuous Deriv stream</h2><p>Dedicated background worker captures new ticks only after subscribing to the live feed.</p></div><span className={styles.livePill}>LIVE FEED</span></div>
+          <div className={styles.statusGrid}>
+            <Stat label="COLLECTOR" value={String(liveCollector?.status ?? "Not reporting")} detail={String(liveCollector?.worker_id ?? "Background worker not detected")} />
+            <Stat label="LIVE TICKS" value={String(liveCollector?.ticks_received ?? 0)} detail="Received by this worker process" />
+            <Stat label="LAST TICK" value={liveCollector?.last_tick_at ? new Date(String(liveCollector.last_tick_at)).toLocaleString() : "—"} detail="UTC timestamp from collector heartbeat" />
           </div>
-          <button type="button" className={styles.primaryButton} onClick={() => void collectTicks()} disabled={!!busy || loading || !status?.storage_configured}>{busy === "collect" ? "Collecting…" : "Start data collection"}</button>
-          <p className={styles.helper}>Allowed range: 10–300 ticks, 5–80 seconds. Partial collection is possible on timeout.</p>
-          {collection && <div className={styles.resultBox}><strong>Latest collection</strong><div><span>Received</span><b>{String(collection.returned_ticks ?? "—")} / {String(collection.requested_ticks ?? "—")}</b></div><div><span>Status</span><b>{String(collection.status ?? "—")}</b></div><div><span>Persisted</span><b>{collection.persisted ? "Yes" : "Not confirmed"}</b></div><small>ID: {String(collection.collection_id ?? "—")}</small></div>}
+          {liveCollector?.last_error && <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Collector connection warning</strong><p>{String(liveCollector.last_error)}</p></div></div>}
+          <p className={styles.helper}>The collector runs independently of this dashboard. It must be deployed as an always-on background worker with Database 2 credentials. Closing this browser does not stop collection. Historical backfills are disabled.</p>
+          <button type="button" className={styles.secondaryButton} onClick={() => void refresh(symbol)} disabled={loading || !!busy}>Refresh live status and data</button>
         </section>
 
         <section className={styles.panel}>
-          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>OBSERVED DISTRIBUTION</p><h2>Parity snapshot</h2><p>{history.length} persisted observations for {symbol}.</p></div></div>
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>OBSERVED DISTRIBUTION</p><h2>Parity snapshot</h2><p>{history.length} live-captured observations for {symbol}.</p></div></div>
           <div className={styles.parityRow}>
             <div><span className={styles.evenDot} /><strong>Even</strong><b>{parity.evenPct.toFixed(1)}%</b><small>{parity.even} observations</small></div>
             <div><span className={styles.oddDot} /><strong>Odd</strong><b>{parity.oddPct.toFixed(1)}%</b><small>{parity.odd} observations</small></div>
           </div>
           <div className={styles.bar}><span style={{ width: parity.evenPct + "%" }} /></div>
-          <p className={styles.helper}>Historical frequency is descriptive. It does not establish next-tick predictability or profitability.</p>
+          <p className={styles.helper}>Observed live frequency is descriptive. It does not establish next-tick predictability or profitability.</p>
           <button type="button" className={styles.secondaryButton} onClick={() => void analyzeSample()} disabled={!!busy || history.length === 0}>{busy === "analyze" ? "Analyzing…" : "Run descriptive sample analysis"}</button>
           {sampleAnalysis && <div className={styles.resultBox}><strong>Descriptive analysis · {String(sampleAnalysis.returned_ticks ?? "—")} observations</strong><JsonPanel value={sampleAnalysis.analysis ?? sampleAnalysis} /></div>}
         </section>
@@ -402,14 +395,14 @@ export default function EvenOddLab() {
           </div>}
         </section>
         <section className={styles.panel}>
-          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>DATA INTEGRITY</p><h2>History quality audit</h2><p>Structural checks on persisted observations and duplicate market ticks.</p></div><span className={styles.auditBadge}>{qualityData ? "AUDIT LOADED" : "PENDING"}</span></div>
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>DATA INTEGRITY</p><h2>Live data quality audit</h2><p>Structural checks on live-captured observations; possible same-second repeats are reported, not discarded.</p></div><span className={styles.auditBadge}>{qualityData ? "AUDIT LOADED" : "PENDING"}</span></div>
           {qualityData ? <JsonPanel value={qualityData} /> : <p className={styles.empty}>Quality information is not available yet.</p>}
         </section>
       </div>
     </>}
 
     {activeView === "overview" && <section className={styles.panel}>
-      <div className={styles.panelHeading}><div><p className={styles.eyebrow}>DIGIT STRUCTURE</p><h2>Digit frequency & sequence behaviour</h2><p>Descriptive statistics from the persisted {history.length}-tick snapshot. Frequencies do not predict the next tick.</p></div></div>
+      <div className={styles.panelHeading}><div><p className={styles.eyebrow}>DIGIT STRUCTURE</p><h2>Digit frequency & sequence behaviour</h2><p>Descriptive statistics from {history.length} live-captured observations. Frequencies do not predict the next tick.</p></div></div>
       <div className={styles.digitGrid}>{Array.from({ length: 10 }, (_, digit) => {
         const count = history.filter((tick) => tick.last_digit === digit).length;
         const share = history.length ? count / history.length * 100 : 0;
