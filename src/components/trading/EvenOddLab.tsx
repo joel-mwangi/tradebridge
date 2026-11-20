@@ -199,12 +199,17 @@ export default function EvenOddLab() {
         if (!batch.length) return;
         const outgoing = batch;
         batch = [];
-        const saved = await request("collection-jobs/" + encodeURIComponent(job.id) + "/batch", {
-          method: "POST", body: JSON.stringify({ ticks: outgoing }),
-        });
-        setCollectionJob(saved.job as CollectionJob);
-        received = Number((saved.job as CollectionJob).received_ticks ?? received + outgoing.length);
-        await refresh(symbol);
+        try {
+          const saved = await request("collection-jobs/" + encodeURIComponent(job.id) + "/batch", {
+            method: "POST", body: JSON.stringify({ ticks: outgoing }),
+          });
+          setCollectionJob(saved.job as CollectionJob);
+          received = Number((saved.job as CollectionJob).received_ticks ?? received + outgoing.length);
+          await refresh(symbol);
+        } catch (error) {
+          batch = [...outgoing, ...batch];
+          throw error;
+        }
       };
       ws.onopen = () => {
         ws.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: 8801 }));
@@ -252,7 +257,14 @@ export default function EvenOddLab() {
           }
           collectionSocketRef.current = null;
           await refresh(symbol);
-        }).catch((error) => setError(error instanceof Error ? error.message : "Could not finalize collection."));
+        }).catch(async (error) => {
+          setError(error instanceof Error ? error.message : "Could not finalize collection.");
+          try {
+            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
+            setCollectionJob(stopped.job as CollectionJob);
+          } catch { /* The next start request can recover a stale job after its heartbeat expires. */ }
+          collectionSocketRef.current = null;
+        });
       };
     });
   }
