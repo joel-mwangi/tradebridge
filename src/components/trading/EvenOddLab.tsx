@@ -115,10 +115,10 @@ export default function EvenOddLab() {
     try {
       const [statusData, historyData, modelData, runData, qualityData] = await Promise.all([
         request("status"),
-        request("history?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
+        request("history?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000&capture_mode=browser_stream"),
         request("models?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
         request("research-runs?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
-        request("quality?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
+        request("quality?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000&capture_mode=browser_stream"),
       ]);
       setStatus(statusData as LabStatus);
       setHistory(Array.isArray(historyData.rows) ? historyData.rows as TickRow[] : []);
@@ -522,7 +522,7 @@ export default function EvenOddLab() {
         </section>
 
         <section className={styles.panel}>
-          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>OBSERVED DISTRIBUTION</p><h2>Parity snapshot</h2><p>{history.length} live-captured observations for {symbol}.</p></div></div>
+          <div className={styles.panelHeading}><div><p className={styles.eyebrow}>OBSERVED DISTRIBUTION</p><h2>Parity snapshot</h2><p>{history.length} browser-captured observations for {symbol}.</p></div></div>
           <div className={styles.parityRow}>
             <div><span className={styles.evenDot} /><strong>Even</strong><b>{parity.evenPct.toFixed(1)}%</b><small>{parity.even} observations</small></div>
             <div><span className={styles.oddDot} /><strong>Odd</strong><b>{parity.oddPct.toFixed(1)}%</b><small>{parity.odd} observations</small></div>
