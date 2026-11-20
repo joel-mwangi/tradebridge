@@ -78,3 +78,26 @@
 .textButton { border:0; background:transparent; color:var(--teal); font-size:11px; font-weight:800; cursor:pointer; }
 @media (max-width:900px) { .forecastPanel { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:620px) { .quoteGrid,.forecastPanel { grid-template-columns:1fr; } }
+
+/* Even/Odd research terminal sections */
+.metricLine { display:flex; justify-content:space-between; gap:14px; padding:8px 0; border-bottom:1px solid var(--line); font-size:11px; }
+.metricLine span { color:var(--muted); }.metricLine strong { text-align:right; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.subheading { margin:18px 0 8px; font-size:12px; color:var(--ink); font-weight:850; }
+.entryDecision { display:grid; gap:8px; margin:18px 0; padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+.entryDecision strong { font-size:14px; }.entryDecision p { margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
+.waitTag { width:max-content; padding:5px 9px; border-radius:5px; background:rgba(245,158,11,.13); color:#d99a1c; font-size:10px; font-weight:900; letter-spacing:.7px; }
+.gateGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.gateGrid>div { display:flex; gap:9px; align-items:flex-start; padding:10px; border:1px solid var(--line); border-radius:8px; color:var(--ink); font-size:11px; line-height:1.45; }
+.gateGrid>div>span { color:var(--teal); font-weight:900; }
+.digitGrid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+.digitCell { display:grid; gap:8px; padding:12px; border:1px solid var(--line); border-radius:9px; background:var(--surface); }
+.digitCell>div { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+.digitCell>div b { font-size:17px; }.digitCell>div strong { font-size:12px; font-variant-numeric:tabular-nums; }
+.digitCell>span { display:block; height:6px; overflow:hidden; border-radius:10px; background:var(--line); }
+.digitCell>span i { display:block; height:100%; border-radius:10px; background:var(--teal); }
+.digitCell small { color:var(--muted); font-size:9px; }
+.sequenceSummary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:16px 0; }
+.sequenceSummary>div { display:grid; gap:6px; padding:12px; border:1px solid var(--line); border-radius:8px; }
+.sequenceSummary span { color:var(--muted); font-size:10px; }.sequenceSummary strong { font-size:12px; overflow-wrap:anywhere; }
+@media(max-width:900px) { .digitGrid { grid-template-columns:repeat(5,minmax(0,1fr)); } }
+@media(max-width:640px) { .gateGrid,.sequenceSummary { grid-template-columns:1fr; }.digitGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "./EvenOddLab.module.css";
+import EvenOddResearchPanels from "./EvenOddResearchPanels";
 
 type LabStatus = {
   module?: string; status?: string; data_source?: string; storage_configured?: boolean;
@@ -17,7 +18,7 @@ type ModelRow = {
   training_rows?: number; validation_rows?: number; calibration_rows?: number; test_rows?: number;
   execution_authorized?: boolean;
 };
-type ResearchRun = { id: string; market_symbol?: string; status?: string; started_at?: string; completed_at?: string; error_message?: string | null; dataset_rows?: number; model_id?: string };
+type ResearchRun = { id: string; market_symbol?: string; status?: string; started_at?: string; completed_at?: string; error_message?: string | null; dataset_rows?: number; model_id?: string; evaluation?: Record<string, unknown>; partition_sizes?: Record<string, number>; quality_report?: Record<string, unknown> };
 type SessionRecord = Record<string, unknown> & { id?: string; market_symbol?: string; status?: string; account_mode?: string; currency?: string; fixed_stake?: string | number; max_session_loss?: string | number; completed_trades?: number; consecutive_losses?: number; realized_profit?: string | number };
 type SequenceRecord = Record<string, unknown> & { id?: string; status?: string; planned_trades?: number; completed_trades?: number };
 type ApiResult = Record<string, unknown>;
@@ -75,7 +76,7 @@ export default function EvenOddLab() {
   const [entryResult, setEntryResult] = useState<ApiResult | null>(null);
   const [planResult, setPlanResult] = useState<ApiResult | null>(null);
   const [selectedModelId, setSelectedModelId] = useState("");
-  const [activeView, setActiveView] = useState<"overview" | "history" | "research" | "session">("overview");
+  const [activeView, setActiveView] = useState<"overview" | "ml" | "entry" | "backtesting" | "performance" | "session">("overview");
   const [stake, setStake] = useState("1.00");
   const [maxLoss, setMaxLoss] = useState("10.00");
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>("USD");
@@ -353,10 +354,11 @@ export default function EvenOddLab() {
     </div>
 
     <div className={styles.tabs} role="tablist" aria-label="Even/Odd Lab sections">
-      {(["overview", "history", "research", "session"] as const).map((view) =>
-        <button type="button" role="tab" aria-selected={activeView === view} className={activeView === view ? styles.tabActive : ""} onClick={() => setActiveView(view)} key={view}>
-          {view === "overview" ? "Overview" : view === "history" ? "Tick data" : view === "research" ? "Models & research" : "Sessions & risk"}
-        </button>
+      {([
+        ["overview", "Overview"], ["ml", "ML Predictions"], ["entry", "Entry Intelligence"],
+        ["backtesting", "Backtesting"], ["performance", "Performance"], ["session", "Sessions & risk"],
+      ] as const).map(([view, label]) =>
+        <button type="button" role="tab" aria-selected={activeView === view} className={activeView === view ? styles.tabActive : ""} onClick={() => setActiveView(view)} key={view}>{label}</button>
       )}
     </div>
 
@@ -406,28 +408,38 @@ export default function EvenOddLab() {
       </div>
     </>}
 
-    {activeView === "history" && <section className={styles.panel}>
-      <div className={styles.panelHeading}><div><p className={styles.eyebrow}>PERSISTED MARKET OBSERVATIONS</p><h2>Tick history · {symbol}</h2><p>Chronological backend snapshot. The latest seven rows are used as references for planning requests.</p></div><span className={styles.auditBadge}>{history.length} ROWS</span></div>
-      {history.length ? <div className={styles.tableWrap}><table><thead><tr><th>Time</th><th>Quote</th><th>Last digit</th><th>Parity</th><th>Row ID</th></tr></thead><tbody>{history.slice().reverse().map((tick) => <tr key={tick.id}><td>{formatTime(tick.tick_epoch)}</td><td>{tick.quote ?? "—"}</td><td><b>{tick.last_digit}</b></td><td><span className={tick.last_digit % 2 === 0 ? styles.evenTag : styles.oddTag}>{tick.last_digit % 2 === 0 ? "EVEN" : "ODD"}</span></td><td>{tick.id}</td></tr>)}</tbody></table></div> : <p className={styles.empty}>{loading ? "Loading persisted history…" : "No persisted ticks found. Start a collection to populate history."}</p>}
+    {activeView === "overview" && <section className={styles.panel}>
+      <div className={styles.panelHeading}><div><p className={styles.eyebrow}>DIGIT STRUCTURE</p><h2>Digit frequency & sequence behaviour</h2><p>Descriptive statistics from the persisted {history.length}-tick snapshot. Frequencies do not predict the next tick.</p></div></div>
+      <div className={styles.digitGrid}>{Array.from({ length: 10 }, (_, digit) => {
+        const count = history.filter((tick) => tick.last_digit === digit).length;
+        const share = history.length ? count / history.length * 100 : 0;
+        return <div className={styles.digitCell} key={digit}><div><b>{digit}</b><strong>{share.toFixed(1)}%</strong></div><span><i style={{ width: share + "%" }} /></span><small>{count} observations</small></div>;
+      })}</div>
+      <div className={styles.sequenceSummary}>
+        <div><span>Latest 12 digits</span><strong>{history.slice(-12).map((tick) => tick.last_digit).join(" · ") || "—"}</strong></div>
+        <div><span>Current parity streak</span><strong>{(() => { const rows = history.slice().reverse(); if (!rows.length) return "—"; const parity = rows[0].last_digit % 2; let count = 0; for (const row of rows) { if (row.last_digit % 2 !== parity) break; count++; } return count + " " + (parity === 0 ? "Even" : "Odd"); })()}</strong></div>
+        <div><span>Longest observed streak</span><strong>{(() => { let best = 0, current = 0, last = -1; for (const row of history) { const p = row.last_digit % 2; current = p === last ? current + 1 : 1; last = p; best = Math.max(best, current); } return best ? String(best) + " ticks" : "—"; })()}</strong></div>
+      </div>
+      <div className={styles.sequenceSummary}>
+        <div><span>Last 20 parity frequency</span><strong>{(() => { const rows = history.slice(-20); const even = rows.filter((row) => row.last_digit % 2 === 0).length; return rows.length ? ((even / rows.length) * 100).toFixed(1) + "% Even · " + (100 - even / rows.length * 100).toFixed(1) + "% Odd" : "—"; })()}</strong></div>
+        <div><span>Prior 20 parity frequency</span><strong>{(() => { const rows = history.slice(-40, -20); const even = rows.filter((row) => row.last_digit % 2 === 0).length; return rows.length ? ((even / rows.length) * 100).toFixed(1) + "% Even · " + (100 - even / rows.length * 100).toFixed(1) + "% Odd" : "Insufficient history"; })()}</strong></div>
+        <div><span>Momentum shift</span><strong>{(() => { const recent = history.slice(-20); const prior = history.slice(-40, -20); if (recent.length < 20 || prior.length < 20) return "Insufficient sample"; const a = recent.filter((row) => row.last_digit % 2 === 0).length / 20; const b = prior.filter((row) => row.last_digit % 2 === 0).length / 20; const delta = (a - b) * 100; return (delta > 0 ? "+" : "") + delta.toFixed(1) + " pp Even"; })()}</strong></div>
+      </div>
+      <div className={styles.tableWrap}><table><thead><tr><th>Transition</th><th>Count</th></tr></thead><tbody>{(() => { const counts = { "Even → Even": 0, "Even → Odd": 0, "Odd → Even": 0, "Odd → Odd": 0 }; for (let i = 1; i < history.length; i++) { const from = history[i - 1].last_digit % 2 === 0 ? "Even" : "Odd"; const to = history[i].last_digit % 2 === 0 ? "Even" : "Odd"; counts[`${from} → ${to}` as keyof typeof counts]++; } return Object.entries(counts).map(([label, count]) => <tr key={label}><td>{label}</td><td>{count}</td></tr>); })()}</tbody></table></div>
+      <p className={styles.helper}>Momentum and transition counts are descriptive sample diagnostics. They are not regime forecasts and do not establish serial dependence or a next-tick edge.</p>
+      <div className={styles.tableWrap}><table><thead><tr><th>Recent time</th><th>Quote</th><th>Digit</th><th>Parity</th></tr></thead><tbody>{history.slice(-12).reverse().map((tick) => <tr key={tick.id}><td>{formatTime(tick.tick_epoch)}</td><td>{tick.quote ?? "—"}</td><td><b>{tick.last_digit}</b></td><td>{tick.last_digit % 2 === 0 ? "Even" : "Odd"}</td></tr>)}</tbody></table></div>
+      <p className={styles.helper}>This view describes the sample only. A streak, frequency imbalance or transition count is not evidence of a predictive edge without chronological out-of-sample testing.</p>
     </section>}
 
-    {activeView === "research" && <>
-      <section className={styles.panel}>
-        <div className={styles.panelHeading}><div><p className={styles.eyebrow}>MODEL REGISTRY</p><h2>Research models</h2><p>Candidate and independently validated model metadata for {symbol}.</p></div></div>
-        <div className={styles.modelSummary}><div><strong>{candidateModels.length}</strong><span>Candidate</span></div><div><strong>{validatedModels.length}</strong><span>Validated</span></div><div><strong>{runs.length}</strong><span>Research runs</span></div></div>
-        {models.length ? <div className={styles.modelTable}><table><thead><tr><th>Model</th><th>Version</th><th>Status</th><th>Train</th><th>Validation</th><th>Test</th><th>Created</th></tr></thead><tbody>{models.map((model) => <tr key={model.id}><td>{model.model_name ?? model.id.slice(0, 8)}</td><td>{model.model_version ?? "—"}</td><td><span className={model.status === "validated" ? styles.validated : styles.candidate}>{model.status ?? "unknown"}</span></td><td>{model.training_rows ?? "—"}</td><td>{model.validation_rows ?? "—"}</td><td>{model.test_rows ?? "—"}</td><td>{model.created_at ? new Date(model.created_at).toLocaleDateString() : "—"}</td></tr>)}</tbody></table></div> : <p className={styles.empty}>No model records yet. Run the backend research pipeline locally after collecting sufficient quality-checked history.</p>}
-        <div className={styles.formGrid}>
-          <Field label="Select model for research"><select value={selectedModelId} onChange={(event) => { setSelectedModelId(event.target.value); setForecast(null); }}><option value="">Select model</option>{models.map((model) => <option value={model.id} key={model.id}>{model.model_version ?? model.id} · {model.status}</option>)}</select></Field>
-          <div className={styles.actionField}><span>Research-only forecast</span><button type="button" className={styles.secondaryButton} onClick={() => void loadForecast()} disabled={!!busy || !selectedModel}>{busy === "forecast" ? "Evaluating…" : "Inspect latest forecast"}</button></div>
-        </div>
-        {forecast && <div className={styles.forecastPanel}><div><span>MODEL STATUS</span><b>{String(forecast.model_status ?? "—")}</b></div><div><span>EVEN PROBABILITY</span><b>{Number.isFinite(forecastProbability) ? (forecastProbability * 100).toFixed(2) + "%" : "—"}</b></div><div><span>ODD PROBABILITY</span><b>{Number.isFinite(Number(forecast.probability_odd)) ? (Number(forecast.probability_odd) * 100).toFixed(2) + "%" : "—"}</b></div><div><span>DATA AGE</span><b>{forecast.data_age_seconds === undefined ? "—" : Number(forecast.data_age_seconds).toFixed(2) + "s"}</b></div><p>{String(forecast.warning ?? "Research forecast only. Not a trade signal.")}</p></div>}
-      </section>
-      <section className={styles.panel}>
-        <div className={styles.panelHeading}><div><p className={styles.eyebrow}>EXPERIMENT LOG</p><h2>Research runs</h2><p>Training, evaluation and data-quality audit history.</p></div></div>
-        {runs.length ? <div className={styles.list}>{runs.map((run) => <article key={run.id}><div><strong>{run.market_symbol ?? symbol} · {run.status ?? "unknown"}</strong><small>{formatTime(run.started_at)}{run.completed_at ? " → " + formatTime(run.completed_at) : ""} · {run.dataset_rows ?? "—"} rows</small>{run.error_message && <small className={styles.runError}>{run.error_message}</small>}</div><span className={styles.runId}>{run.id.slice(0, 8)}</span></article>)}</div> : <p className={styles.empty}>No research runs recorded for this market.</p>}
-      </section>
-      <div className={styles.warning}><span className={styles.warningIcon}>i</span><div><strong>Candidate models cannot pass entry gates</strong><p>Forecast inspection is descriptive research. Entry evaluation and sequence planning require an independently validated model and valid calibration evidence.</p></div></div>
-    </>}
+    {(["ml", "entry", "backtesting", "performance"] as const).includes(activeView as "ml" | "entry" | "backtesting" | "performance") && <EvenOddResearchPanels
+      view={activeView as "ml" | "entry" | "backtesting" | "performance"}
+      symbol={symbol} models={models} runs={runs} selectedModelId={selectedModelId}
+      onSelectModel={(id) => { setSelectedModelId(id); setForecast(null); }}
+      forecast={forecast} onLoadForecast={() => void loadForecast()} busy={busy}
+      history={history} session={session} entryResult={entryResult} planResult={planResult}
+      onEvaluateEntry={() => void evaluateEntry()} onPlanSequence={() => void planSequence()}
+      onStartSequence={() => void startSequence()}
+    />}
 
     {activeView === "session" && <>
       <div className={styles.overviewGrid}>
