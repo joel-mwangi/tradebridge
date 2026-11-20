@@ -59,7 +59,6 @@ function JsonPanel({ value }: { value: unknown }) {
 
 export default function EvenOddLab() {
   const [symbol, setSymbol] = useState<(typeof SYMBOLS)[number]>("R_50");
-  const [liveCollector, setLiveCollector] = useState<ApiResult | null>(null);
   const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
   const [collectionTarget, setCollectionTarget] = useState(1000);
   const [status, setStatus] = useState<LabStatus | null>(null);
@@ -110,21 +109,18 @@ export default function EvenOddLab() {
   const refresh = useCallback(async (selectedSymbol = symbol) => {
     setLoading(true); setError("");
     try {
-      const [statusData, historyData, modelData, runData, qualityData, liveStatusData] = await Promise.all([
+      const [statusData, historyData, modelData, runData, qualityData] = await Promise.all([
         request("status"),
         request("history?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
         request("models?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
         request("research-runs?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
         request("quality?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000"),
-        request("live-status?symbol=" + encodeURIComponent(selectedSymbol)),
       ]);
       setStatus(statusData as LabStatus);
       setHistory(Array.isArray(historyData.rows) ? historyData.rows as TickRow[] : []);
       setModels(Array.isArray(modelData.models) ? modelData.models as ModelRow[] : []);
       setRuns(Array.isArray(runData.research_runs) ? runData.research_runs as ResearchRun[] : []);
       setQuality(qualityData);
-      setLiveCollector(liveStatusData.collector && typeof liveStatusData.collector === "object"
-        ? liveStatusData.collector as ApiResult : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load Even/Odd Lab.");
     } finally { setLoading(false); }
@@ -394,7 +390,7 @@ export default function EvenOddLab() {
       <div className={styles.overviewGrid}>
         <section className={styles.panel}>
           <div className={styles.panelHeading}><div><p className={styles.eyebrow}>LIVE MARKET DATA</p><h2>Manual tick collection</h2><p>Collect a bounded sample directly from the live Deriv feed.</p></div><span className={styles.livePill}>LIVE ONLY</span></div>
-          <div className={styles.fieldGrid}>
+          <div className={styles.formGrid}>
             <Field label="Ticks to collect">
               <select value={collectionTarget} onChange={(event) => setCollectionTarget(Number(event.target.value))} disabled={!!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>
                 <option value={500}>500 ticks</option><option value={1000}>1,000 ticks</option><option value={2500}>2,500 ticks</option><option value={5000}>5,000 ticks</option>
@@ -409,7 +405,7 @@ export default function EvenOddLab() {
           </div>
           <div className={styles.bar}><span style={{ width: (collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100) : 0) + "%" }} /></div>
           {collectionJob?.last_error && <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Collection error</strong><p>{collectionJob.last_error}</p></div></div>}
-          <div className={styles.actionRow}>
+          <div className={styles.sessionActions}>
             <button type="button" className={styles.primaryButton} onClick={() => void startTickCollection()} disabled={!!busy || !!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-start" ? "Starting…" : "Start collection"}</button>
             <button type="button" className={styles.secondaryButton} onClick={() => void stopTickCollection()} disabled={!!busy || !collectionJob || !["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-stop" ? "Stopping…" : "Stop collection"}</button>
           </div>
