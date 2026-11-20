@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "./EvenOddLab.module.css";
 import EvenOddResearchPanels from "./EvenOddResearchPanels";
@@ -61,6 +61,9 @@ export default function EvenOddLab() {
   const [symbol, setSymbol] = useState<(typeof SYMBOLS)[number]>("R_50");
   const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
   const [collectionTarget, setCollectionTarget] = useState(1000);
+  const collectionSocketRef = useRef<WebSocket | null>(null);
+  const collectionStopRef = useRef(false);
+  const collectionProcessingRef = useRef<Promise<void>>(Promise.resolve());
   const [status, setStatus] = useState<LabStatus | null>(null);
   const [history, setHistory] = useState<TickRow[]>([]);
   const [models, setModels] = useState<ModelRow[]>([]);
@@ -171,21 +174,109 @@ export default function EvenOddLab() {
 
   async function startTickCollection() {
     await runAction("collection-start", async () => {
-      const result = await request("collection-jobs", {
+      if (collectionSocketRef.current && collectionSocketRef.current.readyState < WebSocket.CLOSING) {
+        throw new Error("A browser collection is already running in this tab.");
+      }
+      collectionStopRef.current = false;
+      collectionProcessingRef.current = Promise.resolve();
+      const created = await request("collection-jobs", {
         method: "POST",
         body: JSON.stringify({ symbol, target_ticks: collectionTarget }),
       });
-      setCollectionJob(result.job as CollectionJob);
-      setNotice("Live tick collection started. It continues independently of this browser.");
+      const job = created.job as CollectionJob;
+      setCollectionJob(job);
+      setNotice("Connecting to Deriv. Keep this tab open and your computer awake until collection finishes.");
+      const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
+      collectionSocketRef.current = ws;
+      let received = 0;
+      let batch: Record<string, unknown>[] = [];
+      let finished = false;
+      const flush = async () => {
+        if (!batch.length) return;
+        const outgoing = batch;
+        batch = [];
+        const saved = await request("collection-jobs/" + encodeURIComponent(job.id) + "/batch", {
+          method: "POST", body: JSON.stringify({ ticks: outgoing }),
+        });
+        setCollectionJob(saved.job as CollectionJob);
+        received = Number((saved.job as CollectionJob).received_ticks ?? received + outgoing.length);
+        await refresh(symbol);
+      };
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: 8801 }));
+        setNotice("Connected to Deriv. Receiving live ticks; keep this tab open.");
+      };
+      ws.onmessage = (event) => {
+        collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
+          if (finished || collectionStopRef.current) return;
+          const message = JSON.parse(String(event.data)) as { msg_type?: string; error?: { message?: string }; tick?: Record<string, unknown>; subscription?: { id?: string } };
+          if (message.error) throw new Error(message.error.message ?? "Deriv subscription failed.");
+          if (message.msg_type !== "tick" || !message.tick || message.tick.symbol !== symbol) return;
+          const tick = message.tick;
+          const precision = Number(tick.pip_size);
+          const quote = Number(tick.quote);
+          const epoch = Number(tick.epoch);
+          if (!Number.isInteger(precision) || precision < 0 || precision > 10 || !Number.isFinite(quote) || !Number.isInteger(epoch)) {
+            throw new Error("Deriv returned an invalid tick payload.");
+          }
+          const formatted = quote.toFixed(precision);
+          const lastDigit = Number(formatted.replace(".", "").slice(-1));
+          batch.push({
+            received_at: new Date().toISOString(), epoch, symbol, quote: formatted,
+            pip_size: precision, last_digit: lastDigit,
+            parity: lastDigit % 2 === 0 ? "even" : "odd",
+            tick_id: tick.id == null ? null : String(tick.id),
+            stream_id: message.subscription?.id == null ? null : String(message.subscription.id),
+            capture_id: crypto.randomUUID(),
+          });
+          received += 1;
+          if (batch.length >= 100 || received >= collectionTarget) {
+            await flush();
+          }
+          if (received >= collectionTarget) {
+            finished = true;
+            ws.close(1000, "Target reached");
+          }
+        }).catch((error) => {
+          finished = true;
+          setError(error instanceof Error ? error.message : "Browser collection failed.");
+          ws.close(1011, "Collection failed");
+        });
+      };
+      ws.onerror = () => setError("Deriv WebSocket connection failed. Check your connection and retry.");
+      ws.onclose = () => {
+        collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
+          await flush();
+          if (collectionStopRef.current && !finished) {
+            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
+            setCollectionJob(stopped.job as CollectionJob);
+            setNotice("Collection stopped. Successfully persisted ticks are retained.");
+          } else if (received >= collectionTarget) {
+            setNotice("Collection completed. All target ticks were persisted.");
+          } else if (!finished) {
+            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
+            setCollectionJob(stopped.job as CollectionJob);
+            setError("The Deriv connection closed before the target was reached. The job is stopped with a partial sample.");
+          }
+          collectionSocketRef.current = null;
+          await refresh(symbol);
+        }).catch((error) => setError(error instanceof Error ? error.message : "Could not finalize collection."));
+      };
     });
   }
 
   async function stopTickCollection() {
     if (!collectionJob?.id) return;
     await runAction("collection-stop", async () => {
-      const result = await request("collection-jobs/" + encodeURIComponent(collectionJob.id) + "/stop", { method: "POST" });
-      setCollectionJob(result.job as CollectionJob);
-      setNotice("Stop requested. The worker will finish its current persistence batch and stop.");
+      collectionStopRef.current = true;
+      const socket = collectionSocketRef.current;
+      if (socket && socket.readyState < WebSocket.CLOSING) {
+        socket.close(1000, "User requested stop");
+      } else {
+        const result = await request("collection-jobs/" + encodeURIComponent(collectionJob.id) + "/stop", { method: "POST" });
+        setCollectionJob(result.job as CollectionJob);
+      }
+      setNotice("Stop requested. The browser will persist its current batch and close the Deriv connection.");
     });
   }
 
@@ -401,7 +492,7 @@ export default function EvenOddLab() {
           <div className={styles.statusGrid}>
             <Stat label="JOB STATUS" value={collectionJob?.status ?? "Idle"} detail={collectionJob?.id ? "Collection job " + collectionJob.id.slice(0, 8) : "No job for this market"} />
             <Stat label="TICKS RECEIVED" value={String(collectionJob?.received_ticks ?? 0)} detail={"Target: " + String(collectionJob?.target_ticks ?? collectionTarget)} />
-            <Stat label="PROGRESS" value={collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100).toFixed(1) + "%" : "0%"} detail="Persisted worker progress" />
+            <Stat label="PROGRESS" value={collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100).toFixed(1) + "%" : "0%"} detail="Persisted browser progress" />
           </div>
           <div className={styles.bar}><span style={{ width: (collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100) : 0) + "%" }} /></div>
           {collectionJob?.last_error && <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Collection error</strong><p>{collectionJob.last_error}</p></div></div>}
@@ -409,7 +500,7 @@ export default function EvenOddLab() {
             <button type="button" className={styles.primaryButton} onClick={() => void startTickCollection()} disabled={!!busy || !!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-start" ? "Starting…" : "Start collection"}</button>
             <button type="button" className={styles.secondaryButton} onClick={() => void stopTickCollection()} disabled={!!busy || !collectionJob || !["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-stop" ? "Stopping…" : "Stop collection"}</button>
           </div>
-          <p className={styles.helper}>The background worker performs collection even if this page is closed. Collection stops automatically at the target or when you press Stop. Only newly received live ticks are stored; no historical backfill is used.</p>
+          <p className={styles.helper}>Collection runs in this browser tab. Keep the tab open and your computer awake. Closing the tab, losing network connectivity or suspending the browser can interrupt collection. Only newly received live ticks are stored; no historical backfill is used.</p>
         </section>
 
         <section className={styles.panel}>
