@@ -63,7 +63,7 @@ export default function EvenOddPatternIntelligence(props: Props) {
     const priorRate = getEvenRate(prior);
     const recentRate = getEvenRate(recent);
     return { size, sample, prior, recent, evenRate: getEvenRate(sample) ?? 0, momentum: priorRate === null || recentRate === null ? null : recentRate - priorRate };
-  }).filter((item): item is NonNullable<typeof item> => item !== null);
+  }).filter((item) => item !== null);
   const digitSample = rows.slice(-Math.min(1000, rows.length));
   const digitHalf = Math.floor(digitSample.length / 2);
   const digitPrior = digitSample.slice(0, digitHalf);
@@ -98,7 +98,6 @@ export default function EvenOddPatternIntelligence(props: Props) {
   const forecastOdd = numeric(props.forecast?.probability_odd);
   const evaluation = asObject(props.runs.find((run) => run.status === "completed" && run.evaluation)?.evaluation);
   const walkForward = asObject(evaluation.walk_forward);
-  const latestRun = props.runs[0] ?? null;
 
   return <div className={styles.patternWorkspace}>
     <section className={styles.panel}>
