@@ -602,7 +602,7 @@ export default function EvenOddLab() {
 
     <div className={styles.tabs} role="tablist" aria-label="Even/Odd Lab sections">
       {([
-        ["overview", "Overview"], ["patterns", "Pattern Intelligence"], ["ml", "ML Predictions"], ["entry", "Entry Intelligence"],
+        ["overview", "Overview"], ["patterns", "Pattern Intelligence"], ["ml", "Legacy Model Archive"], ["entry", "Entry Intelligence"],
         ["backtesting", "Backtesting"], ["performance", "Performance"], ["session", "Sessions & risk"],
       ] as const).map(([view, label]) =>
         <button type="button" role="tab" aria-selected={activeView === view} className={activeView === view ? styles.tabActive : ""} onClick={() => setActiveView(view)} key={view}>{label}</button>
