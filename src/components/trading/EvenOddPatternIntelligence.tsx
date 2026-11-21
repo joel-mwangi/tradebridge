@@ -138,12 +138,13 @@ export default function EvenOddPatternIntelligence(props: Props) {
         </div>
         {patterns.length ? <div className={styles.list}>{patterns.slice(0, 12).map((pattern, index) => {
           const horizons = Array.isArray(pattern.horizons) ? pattern.horizons.map(asObject) : [];
-          const sampleHorizon = horizons.find((item) => Number(item.horizon_ticks) === 5) ?? horizons.find((item) => Number(item.horizon_ticks) === 3) ?? horizons[0] ?? {};
+          const holdout = asObject(pattern.holdout_horizon_selection);
+          const selectedHorizonByEvent = asObject(holdout.selected_horizon_by_event);
+          const selectedOddHorizon = numeric(asObject(selectedHorizonByEvent.three_or_more_odd).horizon_ticks);
+          const sampleHorizon = (selectedOddHorizon === null ? undefined : horizons.find((item) => Number(item.horizon_ticks) === selectedOddHorizon)) ?? horizons.find((item) => Number(item.horizon_ticks) === 5) ?? horizons.find((item) => Number(item.horizon_ticks) === 3) ?? horizons[0] ?? {};
           const oddEvent = asObject(sampleHorizon.probability_at_least_3_odd);
           const consecutiveEvent = asObject(sampleHorizon.probability_3_consecutive_odd);
           const digitEvents = Array.isArray(sampleHorizon.digit_occurrence_probabilities) ? sampleHorizon.digit_occurrence_probabilities.map(asObject) : [];
-          const holdout = asObject(pattern.holdout_horizon_selection);
-          const selectedHorizonByEvent = asObject(holdout.selected_horizon_by_event);
           const selectedHorizonText = Object.entries(selectedHorizonByEvent).map(([event, value]) => event.replace(/_/g, " ") + ": " + String(asObject(value).horizon_ticks) + " ticks").join(" · ");
           return <article key={String(pattern.family) + "-" + String(pattern.context_ticks) + "-" + index}>
             <div className={styles.panelHeading}>
@@ -151,7 +152,7 @@ export default function EvenOddPatternIntelligence(props: Props) {
               <span className={styles.runId}>Exploratory</span>
             </div>
             <div className={styles.statusGrid}>
-              <article className={styles.stat}><span>3+ ODD IN {String(sampleHorizon.horizon_ticks ?? "—")} TICKS</span><strong>{probability(oddEvent.probability)}</strong><small>95% Wilson interval: {interval(oddEvent.confidence_95)}</small></article>
+              <article className={styles.stat}><span>3+ ODD · {String(sampleHorizon.horizon_ticks ?? "—")} TICKS</span><strong>{probability(oddEvent.probability)}</strong><small>95% Wilson interval: {interval(oddEvent.confidence_95)}</small></article>
               <article className={styles.stat}><span>3 CONSECUTIVE ODD</span><strong>{probability(consecutiveEvent.probability)}</strong><small>95% Wilson interval: {interval(consecutiveEvent.confidence_95)}</small></article>
               <article className={styles.stat}><span>ODD OCCURRENCES</span><strong>{numeric(sampleHorizon.mean_odd_count)?.toFixed(2) ?? "—"}</strong><small>Mean Odd count over displayed horizon</small></article>
               <article className={styles.stat}><span>3+ ODD LIFT</span><strong>{numeric(sampleHorizon.lift_at_least_3_odd) === null ? "—" : pp(Number(sampleHorizon.lift_at_least_3_odd) * 100)}</strong><small>Versus unconditional historical frequency</small></article>
