@@ -118,7 +118,7 @@ export default function EvenOddResearchPanels(props: Props) {
       <div className={styles.statusGrid}>
         <MetricCard label="SESSION" value={props.session?.status ?? "Not loaded"} note={props.session?.id ? String(props.session.id).slice(0, 8) : "Create or load a ledger session"} />
         <MetricCard label="MODEL" value={selected?.status ?? "Not selected"} note={selected?.model_version ?? "Choose a stored model"} />
-        <MetricCard label="CONFIRMATION TICKS" value={String(props.history.slice(-3).length) + " / 3"} note={freshTicks ? "Latest observations within 10 seconds" : "Fresh consecutive ticks required"} />
+        <MetricCard label="RECENT OBSERVATIONS" value={String(props.history.slice(-3).length)} note="Displayed for context only; not an entry trigger." />
         <MetricCard label="BROKER EXECUTION" value="Disabled" note="Research and ledger only" />
       </div>
       <div className={styles.entryDecision}>
