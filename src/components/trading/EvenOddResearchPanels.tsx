@@ -81,14 +81,7 @@ export default function EvenOddResearchPanels(props: Props) {
   const comparisons = object(walk.statistical_comparisons);
   const modelComparison = object(comparisons.vs_constant_baseline);
   const rollingComparison = object(comparisons.vs_rolling_frequency_baseline);
-  const freshTicks = props.history.slice(-3).length === 3 && props.history.slice(-3).every((tick) => Date.now() / 1000 - tick.tick_epoch <= 10);
-  const sessionMatchesMarket = Boolean(props.session?.market_symbol === props.symbol);
-  const modelMatchesMarket = Boolean(selected?.market_symbol === props.symbol);
-  const entryReady = Boolean(props.session?.id && props.session.status === "active" && sessionMatchesMarket && selected?.status === "validated" && modelMatchesMarket && freshTicks);
-  const forecast = props.forecast ?? {};
-  const forecastExists = props.forecast !== null;
-  const forecastProb = num(forecast.probability_even);
-  const forecastOdd = num(forecast.probability_odd);
+  const entryReady = false;
   const metrics = (source: Record<string, unknown>) => {
     const matrix = object(source.confusion_matrix);
     const tp = num(matrix.true_even_predicted_even) ?? 0;
@@ -106,30 +99,18 @@ export default function EvenOddResearchPanels(props: Props) {
   const fmt = (rows: Array<[string, string]>) => rows.map(([label, value]) => <div className={styles.metricLine} key={label}><span>{label}</span><strong>{value}</strong></div>);
 
   if (props.view === "ml") return <>
-    <Panel eyebrow="MODEL REGISTRY" title="ML predictions" description="Research forecasts are separated from validated evidence. Candidate models cannot qualify an entry.">
+    <Panel eyebrow="LEGACY MODEL ARCHIVE" title="Retired next-tick models" description="These stored artifacts were created by the earlier next-tick classification workflow. New manual research no longer trains or refreshes them.">
       <div className={styles.modelSummary}>
-        <div><strong>{props.models.length}</strong><span>Stored models</span></div>
-        <div><strong>{props.models.filter((m) => m.status === "candidate").length}</strong><span>Candidates</span></div>
-        <div><strong>{validated.length}</strong><span>Validated</span></div>
-        <div><strong>{props.runs.length}</strong><span>Experiments</span></div>
+        <div><strong>{props.models.length}</strong><span>Archived models</span></div>
+        <div><strong>{props.models.filter((m) => m.status === "candidate").length}</strong><span>Candidate artifacts</span></div>
+        <div><strong>{validated.length}</strong><span>Previously validated</span></div>
+        <div><strong>{props.runs.filter((run) => Boolean(object(run.evaluation).pattern_discovery)).length}</strong><span>Pattern research runs</span></div>
       </div>
-      {props.models.length ? <div className={styles.tableWrap}><table><thead><tr><th>Model</th><th>Version</th><th>Status</th><th>Train</th><th>Validation</th><th>Calibration</th><th>Test</th><th>Execution</th></tr></thead><tbody>
-        {props.models.map((model) => <tr key={model.id}><td>{model.model_name ?? "Logistic regression"}</td><td>{model.model_version ?? "—"}</td><td><span className={model.status === "validated" ? styles.validated : styles.candidate}>{model.status ?? "unknown"}</span></td><td>{model.training_rows ?? "—"}</td><td>{model.validation_rows ?? "—"}</td><td>{model.calibration_rows ?? "—"}</td><td>{model.test_rows ?? "—"}</td><td>{model.execution_authorized ? "Not enabled" : "Disabled"}</td></tr>)}
-      </tbody></table></div> : <Empty>No stored models for {props.symbol}. Collect sufficient history and run a chronological experiment.</Empty>}
-      <div className={styles.formGrid}>
-        <label className={styles.field}><span>Model for forecast inspection</span><select value={props.selectedModelId} onChange={(event) => props.onSelectModel(event.target.value)}><option value="">Select model</option>{props.models.map((model) => <option key={model.id} value={model.id}>{model.model_version ?? model.id.slice(0, 8)} · {model.status}</option>)}</select></label>
-        <div className={styles.actionField}><span>Research-only forecast</span><button type="button" className={styles.secondaryButton} onClick={props.onLoadForecast} disabled={!selected || !!props.busy}>{props.busy === "forecast" ? "Evaluating…" : "Inspect latest forecast"}</button></div>
-      </div>
-      {forecastExists && <div className={styles.forecastPanel}>
-        <MetricCard label="MODEL STATUS" value={String(forecast.model_status ?? selected?.status ?? "unknown")} />
-        <MetricCard label="EVEN PROBABILITY" value={forecastProb === null ? "—" : pct(forecastProb)} />
-        <MetricCard label="ODD PROBABILITY" value={forecastOdd === null ? "—" : pct(forecastOdd)} />
-        <MetricCard label="DATA AGE" value={num(forecast.data_age_seconds) === null ? "—" : metric(forecast.data_age_seconds, 2) + "s"} />
-        <p>{String(forecast.warning ?? "Research forecast only. This is not a trading signal.")}</p>
-        {forecast.calibration_interval !== undefined && forecast.calibration_interval !== null ? <pre className={styles.json}>{JSON.stringify(forecast.calibration_interval, null, 2)}</pre> : null}
-      </div>}
+      {props.models.length ? <div className={styles.tableWrap}><table><thead><tr><th>Legacy model</th><th>Version</th><th>Registry status</th><th>Train</th><th>Validation</th><th>Calibration</th><th>Test</th><th>Execution</th></tr></thead><tbody>
+        {props.models.map((model) => <tr key={model.id}><td>{model.model_name ?? "Legacy classifier"}</td><td>{model.model_version ?? "—"}</td><td><span className={model.status === "validated" ? styles.validated : styles.candidate}>{model.status ?? "unknown"}</span></td><td>{model.training_rows ?? "—"}</td><td>{model.validation_rows ?? "—"}</td><td>{model.calibration_rows ?? "—"}</td><td>{model.test_rows ?? "—"}</td><td>{model.execution_authorized ? "Not enabled" : "Disabled"}</td></tr>)}
+      </tbody></table></div> : <Empty>No archived next-tick models are stored for {props.symbol}. New research now focuses on conditional pattern discovery.</Empty>}
     </Panel>
-    <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Prediction is not proof of edge</strong><p>A probability estimate is not an entry instruction. Validation requires repeatable out-of-sample performance, calibration, payout-adjusted positive expected value and independent review.</p></div></div>
+    <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Next-tick classification is no longer the research objective</strong><p>Use Pattern Intelligence to inspect adaptive context lengths, discovered pattern families, holdout-selected horizons and conditional occurrence probabilities. Archived classifiers are retained for audit only; they are not used by the new pattern-discovery workflow.</p></div></div>
   </>;
 
   if (props.view === "entry") return <>
@@ -142,7 +123,7 @@ export default function EvenOddResearchPanels(props: Props) {
       </div>
       <div className={styles.entryDecision}>
         <span className={entryReady ? styles.candidate : styles.waitTag}>{entryReady ? "READY FOR SERVER EVALUATION" : "WAIT"}</span>
-        <strong>{entryReady ? "Preconditions are present; backend gates still decide." : !props.session?.id ? "Create or load an active session." : props.session.status !== "active" ? "The selected session is not active." : !sessionMatchesMarket ? "The loaded session belongs to a different market. Load a matching session." : !selected ? "Select a model to inspect the evidence." : !modelMatchesMarket ? "The selected model belongs to a different market." : selected.status !== "validated" ? "No validated model is available. Candidate models are blocked." : "Collect three fresh, consecutive persisted ticks."}</strong>
+        <strong>Entry evaluation is disabled until adaptive pattern probabilities have independent chronological validation and a pattern-based entry policy. Archived next-tick classifiers cannot qualify an entry.</strong>
         <p>Ready status only enables a request. It does not indicate a positive edge and does not place an order.</p>
       </div>
       <div className={styles.sessionActions}>
