@@ -142,9 +142,12 @@ export default function EvenOddPatternIntelligence(props: Props) {
           const oddEvent = asObject(sampleHorizon.probability_at_least_3_odd);
           const consecutiveEvent = asObject(sampleHorizon.probability_3_consecutive_odd);
           const digitEvents = Array.isArray(sampleHorizon.digit_occurrence_probabilities) ? sampleHorizon.digit_occurrence_probabilities.map(asObject) : [];
+          const holdout = asObject(pattern.holdout_horizon_selection);
+          const selectedHorizonByEvent = asObject(holdout.selected_horizon_by_event);
+          const selectedHorizonText = Object.entries(selectedHorizonByEvent).map(([event, value]) => event.replace(/_/g, " ") + ": " + String(asObject(value).horizon_ticks) + " ticks").join(" · ");
           return <article key={String(pattern.family) + "-" + String(pattern.context_ticks) + "-" + index}>
             <div className={styles.panelHeading}>
-              <div><strong>{String(pattern.family).replaceAll("_", " ")}</strong><small>{String(pattern.description ?? "")}</small><small>Context: {String(pattern.context_ticks)} ticks · Historical matches: {String(pattern.historical_matches)} · Support: {String(pattern.support_status)}</small><small>Pattern: {patternLabel(pattern.pattern)}</small></div>
+              <div><strong>{String(pattern.family).replace(/_/g, " ")}</strong><small>{String(pattern.description ?? "")}</small><small>Context: {String(pattern.context_ticks)} ticks · Historical matches: {String(pattern.historical_matches)} · Support: {String(pattern.support_status)}</small><small>Pattern: {patternLabel(pattern.pattern)}</small></div>
               <span className={styles.runId}>Exploratory</span>
             </div>
             <div className={styles.statusGrid}>
@@ -153,6 +156,7 @@ export default function EvenOddPatternIntelligence(props: Props) {
               <article className={styles.stat}><span>ODD OCCURRENCES</span><strong>{numeric(sampleHorizon.mean_odd_count)?.toFixed(2) ?? "—"}</strong><small>Mean Odd count over displayed horizon</small></article>
               <article className={styles.stat}><span>3+ ODD LIFT</span><strong>{numeric(sampleHorizon.lift_at_least_3_odd) === null ? "—" : pp(Number(sampleHorizon.lift_at_least_3_odd) * 100)}</strong><small>Versus unconditional historical frequency</small></article>
             </div>
+            <p className={styles.helper}>Chronological holdout horizon selection: {selectedHorizonText || "No horizon showed positive holdout Brier improvement"} · {String(holdout.status ?? "not evaluated")}</p>
             <details>
               <summary>Inspect all future horizons and digit occurrence probabilities</summary>
               <div className={styles.tableWrap}><table><thead><tr><th>Horizon</th><th>Matches</th><th>P(3+ Odd)</th><th>95% interval</th><th>P(3 consecutive Odd)</th><th>Lift vs baseline</th></tr></thead><tbody>
