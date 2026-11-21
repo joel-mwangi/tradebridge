@@ -10,7 +10,7 @@ const panels = read("src/components/trading/EvenOddResearchPanels.tsx");
 const css = read("src/components/trading/EvenOddLab.module.css");
 
 test("Even/Odd Lab exposes the agreed independent research workspaces", () => {
-  for (const label of ["Overview", "ML Predictions", "Entry Intelligence", "Backtesting", "Performance", "Sessions & risk"]) {
+  for (const label of ["Overview", "Legacy Model Archive", "Entry Intelligence", "Backtesting", "Performance", "Sessions & risk"]) {
     assert.ok(lab.includes(label), `missing workspace: ${label}`);
   }
   assert.match(lab, /EvenOddResearchPanels/);
@@ -25,10 +25,9 @@ test("overview exposes digit-frequency and parity-sequence analysis without clai
   assert.match(lab, /not evidence of a predictive edge/);
 });
 
-test("entry intelligence is backend-gated and defaults to WAIT without prerequisites", () => {
-  assert.match(panels, /"WAIT"/);
-  assert.match(panels, /selected\?\.status === "validated"/);
-  assert.match(panels, /three fresh, consecutive persisted ticks/);
+test("legacy next-tick entry evaluation is disabled until pattern policy validation", () => {
+  assert.match(panels, /const entryReady = false/);
+  assert.match(panels, /Entry evaluation is disabled until adaptive pattern probabilities have independent chronological validation/);
   assert.match(panels, /backend independently recomputes probabilities/i);
   assert.match(panels, /onEvaluateEntry/);
   assert.match(panels, /onPlanSequence/);
