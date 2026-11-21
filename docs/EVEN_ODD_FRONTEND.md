@@ -25,7 +25,8 @@ The terminal is organized into seven workspaces:
 - **Overview:** service readiness, bounded tick collection, parity and digit
   distributions, recent sequences, parity streaks, rolling-frequency momentum,
   transition counts, payout quotes and structural data-quality audit.
-- **Pattern Intelligence:** multi-window parity percentages and momentum, per-digit frequency movement, parity suffix patterns, digit-to-digit transition matrix, research probability inspection and manual training-run history. Descriptive rates are not actionable signals.\n- **ML Predictions:** candidate/validated model registry, partition sizes,
+- **Pattern Intelligence:** multi-window parity percentages and momentum, per-digit frequency movement, parity suffix patterns, digit-to-digit transition matrix, research probability inspection and manual training-run history. Descriptive rates are not actionable signals.
+- **ML Predictions:** candidate/validated model registry, partition sizes,
   research-only next-parity forecast and uncertainty display.
 - **Entry Intelligence:** backend-gated entry evaluation, explicit WAIT states,
   payout-aware qualification and risk-bounded sequence planning. The browser
