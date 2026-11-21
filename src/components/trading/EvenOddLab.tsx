@@ -128,7 +128,7 @@ export default function EvenOddLab() {
         request("status"),
         request("history?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000&capture_mode=browser_stream"),
         request("models?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
-        request("research-runs?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=100"),
+        request("research-runs?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=10"),
         request("quality?symbol=" + encodeURIComponent(selectedSymbol) + "&limit=5000&capture_mode=browser_stream"),
       ]);
       setStatus(statusData as LabStatus);
@@ -153,7 +153,7 @@ export default function EvenOddLab() {
 
   const refreshResearchRuns = useCallback(async () => {
     try {
-      const result = await request("research-runs?symbol=" + encodeURIComponent(symbol) + "&limit=100");
+      const result = await request("research-runs?symbol=" + encodeURIComponent(symbol) + "&limit=10");
       setRuns(Array.isArray(result.research_runs) ? result.research_runs as ResearchRun[] : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not refresh research-run status.");
