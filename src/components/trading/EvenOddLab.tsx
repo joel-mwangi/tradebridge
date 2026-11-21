@@ -242,13 +242,15 @@ export default function EvenOddLab() {
         await refresh(symbol);
       };
       const stopJob = async (message: string) => {
+        let flushError: unknown = null;
+        try { await flush(); } catch (error) { flushError = error; }
         try {
-          await flush();
           const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
           setCollectionJob(stopped.job as CollectionJob);
         } catch (stopError) {
           setError(stopError instanceof Error ? stopError.message : message);
         }
+        if (flushError) setError(flushError instanceof Error ? "Final batch could not be saved: " + flushError.message : "Final batch could not be saved.");
         setNotice(message);
         collectionSocketRef.current = null;
         collectionStopHandlerRef.current = null;
@@ -358,8 +360,16 @@ export default function EvenOddLab() {
             collectionFailureRef.current = "Collection heartbeat failed: " + detail;
             collectionStopRef.current = true;
             setError(collectionFailureRef.current);
-            collectionSocketRef.current?.close(1011, "Collection heartbeat failed");
-            if (!collectionSocketRef.current) void stopJob(collectionFailureRef.current + " Partial sample retained.");
+            if (collectionReconnectRef.current !== null) {
+              window.clearTimeout(collectionReconnectRef.current);
+              collectionReconnectRef.current = null;
+            }
+            const socket = collectionSocketRef.current;
+            if (socket && socket.readyState < WebSocket.CLOSING) {
+              socket.close(1011, "Collection heartbeat failed");
+            } else {
+              void stopJob(collectionFailureRef.current + " Partial sample retained.");
+            }
           });
       }, 15000);
       connect();
