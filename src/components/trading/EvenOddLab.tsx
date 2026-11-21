@@ -72,6 +72,7 @@ export default function EvenOddLab() {
   const collectionSocketRef = useRef<WebSocket | null>(null);
   const collectionHeartbeatRef = useRef<number | null>(null);
   const collectionStopRef = useRef(false);
+  const collectionStopHandlerRef = useRef<(() => Promise<void>) | null>(null);
   const collectionFailureRef = useRef<string | null>(null);
   const collectionProcessingRef = useRef<Promise<void>>(Promise.resolve());
   const [status, setStatus] = useState<LabStatus | null>(null);
@@ -250,10 +251,12 @@ export default function EvenOddLab() {
         }
         setNotice(message);
         collectionSocketRef.current = null;
+        collectionStopHandlerRef.current = null;
         if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
         collectionHeartbeatRef.current = null;
         await refresh(symbol);
       };
+      collectionStopHandlerRef.current = async () => { await stopJob("Collection stopped. Successfully persisted ticks are retained."); };
       const connect = () => {
         if (collectionStopRef.current || finished) return;
         setNotice(reconnectAttempts
@@ -272,7 +275,6 @@ export default function EvenOddLab() {
             ws.close(1000, "Collection no longer active");
             return;
           }
-          reconnectAttempts = 0;
           ws.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: 8801 }));
           setNotice("Connected to Deriv. Receiving live ticks; automatic reconnection is enabled.");
         };
@@ -368,14 +370,17 @@ export default function EvenOddLab() {
     if (!collectionJob?.id) return;
     await runAction("collection-stop", async () => {
       collectionStopRef.current = true;
+      if (collectionReconnectRef.current !== null) { window.clearTimeout(collectionReconnectRef.current); collectionReconnectRef.current = null; }
       const socket = collectionSocketRef.current;
       if (socket && socket.readyState < WebSocket.CLOSING) {
         socket.close(1000, "User requested stop");
+      } else if (collectionStopHandlerRef.current) {
+        await collectionStopHandlerRef.current();
+        setCollectionJob((current) => current ? { ...current, status: "stopped" } : current);
       } else {
         const result = await request("collection-jobs/" + encodeURIComponent(collectionJob.id) + "/stop", { method: "POST" });
         setCollectionJob(result.job as CollectionJob);
       }
-      if (collectionReconnectRef.current !== null) { window.clearTimeout(collectionReconnectRef.current); collectionReconnectRef.current = null; }
       setNotice("Stop requested. The browser will persist its current batch and close the Deriv connection.");
     });
   }
