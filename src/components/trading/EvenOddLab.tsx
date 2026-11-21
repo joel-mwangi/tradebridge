@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "./EvenOddLab.module.css";
 import EvenOddResearchPanels from "./EvenOddResearchPanels";
+import EvenOddPatternIntelligence from "./EvenOddPatternIntelligence";
 
 type LabStatus = {
   module?: string; status?: string; data_source?: string; storage_configured?: boolean;
@@ -90,7 +91,7 @@ export default function EvenOddLab() {
   const [entryResult, setEntryResult] = useState<ApiResult | null>(null);
   const [planResult, setPlanResult] = useState<ApiResult | null>(null);
   const [selectedModelId, setSelectedModelId] = useState("");
-  const [activeView, setActiveView] = useState<"overview" | "ml" | "entry" | "backtesting" | "performance" | "session">("overview");
+  const [activeView, setActiveView] = useState<"overview" | "patterns" | "ml" | "entry" | "backtesting" | "performance" | "session">("overview");
   const [stake, setStake] = useState("1.00");
   const [maxLoss, setMaxLoss] = useState("10.00");
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>("USD");
@@ -585,7 +586,7 @@ export default function EvenOddLab() {
 
     <div className={styles.tabs} role="tablist" aria-label="Even/Odd Lab sections">
       {([
-        ["overview", "Overview"], ["ml", "ML Predictions"], ["entry", "Entry Intelligence"],
+        ["overview", "Overview"], ["patterns", "Pattern Intelligence"], ["ml", "ML Predictions"], ["entry", "Entry Intelligence"],
         ["backtesting", "Backtesting"], ["performance", "Performance"], ["session", "Sessions & risk"],
       ] as const).map(([view, label]) =>
         <button type="button" role="tab" aria-selected={activeView === view} className={activeView === view ? styles.tabActive : ""} onClick={() => setActiveView(view)} key={view}>{label}</button>
@@ -674,6 +675,12 @@ export default function EvenOddLab() {
       <div className={styles.tableWrap}><table><thead><tr><th>Recent time</th><th>Quote</th><th>Digit</th><th>Parity</th></tr></thead><tbody>{history.slice(-12).reverse().map((tick) => <tr key={tick.id}><td>{formatTime(tick.tick_epoch)}</td><td>{tick.quote ?? "—"}</td><td><b>{tick.last_digit}</b></td><td>{tick.last_digit % 2 === 0 ? "Even" : "Odd"}</td></tr>)}</tbody></table></div>
       <p className={styles.helper}>This view describes the sample only. A streak, frequency imbalance or transition count is not evidence of a predictive edge without chronological out-of-sample testing.</p>
     </section>}
+
+    {activeView === "patterns" && <EvenOddPatternIntelligence
+      symbol={symbol} history={history} models={models} runs={runs}
+      selectedModelId={selectedModelId} forecast={forecast} busy={busy}
+      onLoadForecast={() => void loadForecast()}
+    />}
 
     {(["ml", "entry", "backtesting", "performance"] as const).includes(activeView as "ml" | "entry" | "backtesting" | "performance") && <EvenOddResearchPanels
       view={activeView as "ml" | "entry" | "backtesting" | "performance"}
