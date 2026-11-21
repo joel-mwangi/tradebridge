@@ -23,7 +23,7 @@ type SessionRecord = Record<string, unknown> & { id?: string; market_symbol?: st
 type SequenceRecord = Record<string, unknown> & { id?: string; status?: string; planned_trades?: number; completed_trades?: number };
 type ApiResult = Record<string, unknown>;
 type PayoutQuote = { payout?: string | number; ask_price?: string | number; profit_if_win?: string | number; loss_if_lose?: string | number };
-type CollectionJob = { id: string; market_symbol: string; target_ticks: number; received_ticks: number; status: string; last_error?: string | null; created_at?: string; updated_at?: string };
+type CollectionJob = { id: string; market_symbol: string; target_ticks: number; received_ticks: number; status: string; last_error?: string | null; created_at?: string; started_at?: string | null; completed_at?: string | null; updated_at?: string };
 const SYMBOLS = ["R_50", "R_75", "1HZ100V", "1HZ75V"] as const;
 const CURRENCIES = ["USD", "EUR", "GBP"] as const;
 
@@ -43,6 +43,12 @@ function formatTime(epoch?: number | string) {
   const date = new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
+function formatDuration(seconds: number) {
+  const safe = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safe / 60);
+  const remainder = safe % 60;
+  return minutes + "m " + String(remainder).padStart(2, "0") + "s";
+}
 function formatMoney(value: unknown, currency = "USD") {
   const amount = Number(value);
   return Number.isFinite(amount) ? new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 4 }).format(amount) : "—";
@@ -60,7 +66,9 @@ function JsonPanel({ value }: { value: unknown }) {
 export default function EvenOddLab() {
   const [symbol, setSymbol] = useState<(typeof SYMBOLS)[number]>("R_50");
   const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
-  const [collectionTarget, setCollectionTarget] = useState(1000);
+  const [collectionTarget, setCollectionTarget] = useState(100);
+  const [collectionClock, setCollectionClock] = useState(Date.now());
+  const collectionTimeoutRef = useRef<number | null>(null);
   const collectionSocketRef = useRef<WebSocket | null>(null);
   const collectionHeartbeatRef = useRef<number | null>(null);
   const collectionStopRef = useRef(false);
@@ -140,6 +148,11 @@ export default function EvenOddLab() {
     }
   }, [request, symbol]);
   useEffect(() => {
+    if (!collectionJob || !["queued", "collecting"].includes(collectionJob.status)) return;
+    const timer = window.setInterval(() => setCollectionClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [collectionJob?.id, collectionJob?.status]);
+  useEffect(() => {
     void refreshCollectionJob();
     const timer = window.setInterval(() => { void refreshCollectionJob(); }, 2000);
     return () => window.clearInterval(timer);
@@ -148,7 +161,9 @@ export default function EvenOddLab() {
     return () => {
       collectionStopRef.current = true;
       if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
+      if (collectionTimeoutRef.current !== null) window.clearTimeout(collectionTimeoutRef.current);
       collectionHeartbeatRef.current = null;
+      collectionTimeoutRef.current = null;
       const socket = collectionSocketRef.current;
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Even/Odd Lab closed");
     };
@@ -206,6 +221,12 @@ export default function EvenOddLab() {
       let batch: Record<string, unknown>[] = [];
       let pendingBatchId: string | null = null;
       let finished = false;
+      collectionTimeoutRef.current = window.setTimeout(() => {
+        if (finished || collectionStopRef.current) return;
+        collectionStopRef.current = true;
+        setNotice("Five-minute collection limit reached. Saving the partial sample and stopping.");
+        ws.close(1000, "Five-minute collection timeout");
+      }, 5 * 60 * 1000);
       const flush = async () => {
         if (!batch.length) return;
         const outgoing = batch;
@@ -255,7 +276,9 @@ export default function EvenOddLab() {
       ws.onerror = () => { collectionStopRef.current = true; setError("Deriv WebSocket connection failed. Check your connection and retry."); ws.close(1011, "Connection error"); };
       ws.onclose = () => {
         if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
+        if (collectionTimeoutRef.current !== null) window.clearTimeout(collectionTimeoutRef.current);
         collectionHeartbeatRef.current = null;
+        collectionTimeoutRef.current = null;
         collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
           await flush();
           if (collectionStopRef.current && !finished) {
@@ -502,7 +525,7 @@ export default function EvenOddLab() {
           <div className={styles.formGrid}>
             <Field label="Ticks to collect">
               <select value={collectionTarget} onChange={(event) => setCollectionTarget(Number(event.target.value))} disabled={!!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>
-                <option value={500}>500 ticks</option><option value={1000}>1,000 ticks</option><option value={2500}>2,500 ticks</option><option value={5000}>5,000 ticks</option>
+                <option value={100}>100 ticks</option><option value={500}>500 ticks</option><option value={1000}>1,000 ticks</option><option value={2500}>2,500 ticks</option><option value={5000}>5,000 ticks</option>
               </select>
             </Field>
             <div className={styles.field}><span>Selected market</span><strong>{symbol}</strong></div>
@@ -511,6 +534,7 @@ export default function EvenOddLab() {
             <Stat label="JOB STATUS" value={collectionJob?.status ?? "Idle"} detail={collectionJob?.id ? "Collection job " + collectionJob.id.slice(0, 8) : "No job for this market"} />
             <Stat label="TICKS RECEIVED" value={String(collectionJob?.received_ticks ?? 0)} detail={"Target: " + String(collectionJob?.target_ticks ?? collectionTarget)} />
             <Stat label="PROGRESS" value={collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100).toFixed(1) + "%" : "0%"} detail="Persisted browser progress" />
+            <Stat label="ELAPSED TIME" value={(() => { const start = collectionJob?.started_at ?? collectionJob?.created_at; if (!start) return "—"; const startMs = Date.parse(start); const endMs = collectionJob?.completed_at ? Date.parse(collectionJob.completed_at) : collectionClock; return Number.isFinite(startMs) && Number.isFinite(endMs) ? formatDuration((endMs - startMs) / 1000) : "—"; })()} detail="Actual collection duration" />
           </div>
           <div className={styles.bar}><span style={{ width: (collectionJob ? Math.min(100, collectionJob.received_ticks / collectionJob.target_ticks * 100) : 0) + "%" }} /></div>
           {collectionJob?.last_error && <div className={styles.warning}><span className={styles.warningIcon}>!</span><div><strong>Collection error</strong><p>{collectionJob.last_error}</p></div></div>}
@@ -518,7 +542,7 @@ export default function EvenOddLab() {
             <button type="button" className={styles.primaryButton} onClick={() => void startTickCollection()} disabled={!!busy || !!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-start" ? "Starting…" : "Start collection"}</button>
             <button type="button" className={styles.secondaryButton} onClick={() => void stopTickCollection()} disabled={!!busy || !collectionJob || !["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-stop" ? "Stopping…" : "Stop collection"}</button>
           </div>
-          <p className={styles.helper}>Collection runs in this browser tab. Keep the tab open and your computer awake. Closing the tab, losing network connectivity or suspending the browser can interrupt collection. Only newly received live ticks are stored; no historical backfill is used.</p>
+          <p className={styles.helper}>Collection runs in this browser tab with a 5-minute maximum timeout. Keep the tab open and your computer awake. The elapsed time is measured from job creation to completion or stop. Closing the tab, losing network connectivity or suspending the browser can interrupt collection. Only newly received live ticks are stored; no historical backfill is used.</p>
         </section>
 
         <section className={styles.panel}>
