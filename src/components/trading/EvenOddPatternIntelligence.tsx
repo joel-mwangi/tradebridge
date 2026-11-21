@@ -174,7 +174,7 @@ export default function EvenOddPatternIntelligence(props: Props) {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHeading}><div><p className={styles.eyebrow}>MANUAL TRAINING & EXPERIMENT HISTORY</p><h2>Research run monitor</h2><p>Training runs are manually dispatched in GitHub Actions and write their final research reports to the dedicated database.</p></div></div>
+      <div className={styles.panelHeading}><div><p className={styles.eyebrow}>MANUAL TRAINING & EXPERIMENT HISTORY</p><h2>Research run monitor</h2><p>Training runs are manually dispatched in GitHub Actions and write their run status and final research reports to the dedicated database. Status refreshes every 10 seconds while this workspace or Backtesting is open.</p></div></div>
       <div className={styles.sessionActions}><a className={styles.primaryButton} href={workflowUrl} target="_blank" rel="noreferrer">Open manual training workflow ↗</a><span className={styles.helper}>No always-on worker is required. The GitHub-hosted runner executes the experiment after manual dispatch.</span></div>
       {props.runs.length ? <div className={styles.list}>{props.runs.slice(0, 8).map((run) => {
         const ev = asObject(run.evaluation);
