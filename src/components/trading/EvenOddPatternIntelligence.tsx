@@ -96,8 +96,6 @@ export default function EvenOddPatternIntelligence(props: Props) {
   }
   const forecastEven = numeric(props.forecast?.probability_even);
   const forecastOdd = numeric(props.forecast?.probability_odd);
-  const evaluation = asObject(props.runs.find((run) => run.status === "completed" && run.evaluation)?.evaluation);
-  const walkForward = asObject(evaluation.walk_forward);
 
   return <div className={styles.patternWorkspace}>
     <section className={styles.panel}>
