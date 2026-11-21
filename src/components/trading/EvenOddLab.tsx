@@ -72,6 +72,7 @@ export default function EvenOddLab() {
   const collectionSocketRef = useRef<WebSocket | null>(null);
   const collectionHeartbeatRef = useRef<number | null>(null);
   const collectionStopRef = useRef(false);
+  const collectionFailureRef = useRef<string | null>(null);
   const collectionProcessingRef = useRef<Promise<void>>(Promise.resolve());
   const [status, setStatus] = useState<LabStatus | null>(null);
   const [history, setHistory] = useState<TickRow[]>([]);
@@ -203,6 +204,7 @@ export default function EvenOddLab() {
         throw new Error("A browser collection is already running in this tab.");
       }
       collectionStopRef.current = false;
+      collectionFailureRef.current = null;
       collectionProcessingRef.current = Promise.resolve();
       const created = await request("collection-jobs", {
         method: "POST",
@@ -212,7 +214,13 @@ export default function EvenOddLab() {
       setCollectionJob(job);
       collectionHeartbeatRef.current = window.setInterval(() => {
         void request("collection-jobs/" + encodeURIComponent(job.id) + "/heartbeat", { method: "POST" })
-          .catch(() => { collectionStopRef.current = true; collectionSocketRef.current?.close(1011, "Collection heartbeat failed"); });
+          .catch((heartbeatError) => {
+            const detail = heartbeatError instanceof Error ? heartbeatError.message : "Unknown heartbeat error";
+            collectionFailureRef.current = "Collection heartbeat failed: " + detail;
+            collectionStopRef.current = true;
+            setError(collectionFailureRef.current);
+            collectionSocketRef.current?.close(1011, "Collection heartbeat failed");
+          });
       }, 15000);
       setNotice("Connecting to Deriv. Keep this tab open and your computer awake until collection finishes.");
       const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
@@ -260,7 +268,7 @@ export default function EvenOddLab() {
             subscription_id: message.subscription?.id == null ? null : String(message.subscription.id),
           });
           received += 1;
-          if (batch.length >= 100 || received >= collectionTarget) {
+          if (batch.length >= 10 || received >= collectionTarget) {
             await flush();
           }
           if (received >= collectionTarget) {
@@ -268,13 +276,19 @@ export default function EvenOddLab() {
             ws.close(1000, "Target reached");
           }
         }).catch((error) => {
+          const detail = error instanceof Error ? error.message : "Browser collection failed.";
+          collectionFailureRef.current = detail;
           collectionStopRef.current = true;
-          setError(error instanceof Error ? error.message : "Browser collection failed.");
+          setError(detail);
           ws.close(1011, "Collection failed");
         });
       };
-      ws.onerror = () => { collectionStopRef.current = true; setError("Deriv WebSocket connection failed. Check your connection and retry."); ws.close(1011, "Connection error"); };
-      ws.onclose = () => {
+      ws.onerror = () => {
+        collectionFailureRef.current = "Deriv WebSocket transport error. Check the network connection and retry.";
+        collectionStopRef.current = true;
+        ws.close(1011, "Connection error");
+      };
+      ws.onclose = (closeEvent) => {
         if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
         if (collectionTimeoutRef.current !== null) window.clearTimeout(collectionTimeoutRef.current);
         collectionHeartbeatRef.current = null;
@@ -294,6 +308,14 @@ export default function EvenOddLab() {
           }
           collectionSocketRef.current = null;
           await refresh(symbol);
+          if (collectionFailureRef.current) {
+            setError(collectionFailureRef.current + " WebSocket close code: " + closeEvent.code +
+              (closeEvent.reason ? " (" + closeEvent.reason + ")" : "") + ".");
+          } else if (!finished && !collectionStopRef.current && closeEvent.code !== 1000) {
+            setError("Deriv WebSocket closed unexpectedly before the target was reached. Close code: " +
+              closeEvent.code + (closeEvent.reason ? " (" + closeEvent.reason + ")" : "") +
+              ". The partial sample was saved.");
+          }
         }).catch(async (error) => {
           setError(error instanceof Error ? error.message : "Could not finalize collection.");
           try {
