@@ -150,6 +150,22 @@ export default function EvenOddLab() {
       setError(err instanceof Error ? err.message : "Could not refresh collection status.");
     }
   }, [request, symbol]);
+
+  const refreshResearchRuns = useCallback(async () => {
+    try {
+      const result = await request("research-runs?symbol=" + encodeURIComponent(symbol) + "&limit=100");
+      setRuns(Array.isArray(result.research_runs) ? result.research_runs as ResearchRun[] : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh research-run status.");
+    }
+  }, [request, symbol]);
+
+  useEffect(() => {
+    if (activeView !== "patterns" && activeView !== "backtesting") return;
+    void refreshResearchRuns();
+    const timer = window.setInterval(() => { void refreshResearchRuns(); }, 10000);
+    return () => window.clearInterval(timer);
+  }, [activeView, refreshResearchRuns]);
   useEffect(() => {
     if (!collectionJob || !["queued", "collecting"].includes(collectionJob.status)) return;
     const timer = window.setInterval(() => setCollectionClock(Date.now()), 1000);
