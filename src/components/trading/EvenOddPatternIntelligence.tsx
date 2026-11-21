@@ -136,7 +136,7 @@ export default function EvenOddPatternIntelligence(props: Props) {
           <p><b>Future horizons:</b> {horizonsForSearch.join(", ") || "—"}</p>
           <small>{String(search.selection_method ?? "Data-driven context and horizon search")}</small>
         </div>
-        {patterns.length ? <div className={styles.list}>{patterns.slice(0, 12).map((pattern, index) => {
+        {patterns.length ? <div className={styles.list}>{patterns.map((pattern, index) => {
           const horizons = Array.isArray(pattern.horizons) ? pattern.horizons.map(asObject) : [];
           const holdout = asObject(pattern.holdout_horizon_selection);
           const selectedHorizonByEvent = asObject(holdout.selected_horizon_by_event);
@@ -144,7 +144,8 @@ export default function EvenOddPatternIntelligence(props: Props) {
           const sampleHorizon = (selectedOddHorizon === null ? undefined : horizons.find((item) => Number(item.horizon_ticks) === selectedOddHorizon)) ?? horizons.find((item) => Number(item.horizon_ticks) === 5) ?? horizons.find((item) => Number(item.horizon_ticks) === 3) ?? horizons[0] ?? {};
           const oddEvent = asObject(sampleHorizon.probability_at_least_3_odd);
           const consecutiveEvent = asObject(sampleHorizon.probability_3_consecutive_odd);
-          const digitEvents = Array.isArray(sampleHorizon.digit_occurrence_probabilities) ? sampleHorizon.digit_occurrence_probabilities.map(asObject) : [];
+          const digitHorizon = horizons.find((item) => Array.isArray(item.digit_occurrence_probabilities) && item.digit_occurrence_probabilities.length > 0) ?? {};
+          const digitEvents = Array.isArray(digitHorizon.digit_occurrence_probabilities) ? digitHorizon.digit_occurrence_probabilities.map(asObject) : [];
           const selectedHorizonText = Object.entries(selectedHorizonByEvent).map(([event, value]) => event.replace(/_/g, " ") + ": " + String(asObject(value).horizon_ticks) + " ticks").join(" · ");
           return <article key={String(pattern.family) + "-" + String(pattern.context_ticks) + "-" + index}>
             <div className={styles.panelHeading}>
@@ -167,6 +168,7 @@ export default function EvenOddPatternIntelligence(props: Props) {
                   return <tr key={String(item.horizon_ticks)}><td>{String(item.horizon_ticks)}</td><td>{String(item.sample_size ?? 0)}</td><td>{probability(odd.probability)}</td><td>{interval(odd.confidence_95)}</td><td>{probability(consecutive.probability)}</td><td>{numeric(item.lift_at_least_3_odd) === null ? "—" : pp(Number(item.lift_at_least_3_odd) * 100)}</td></tr>;
                 })}
               </tbody></table></div>
+              <p className={styles.helper}>Digit occurrence probabilities over {String(digitHorizon.horizon_ticks ?? "—")} ticks</p>
               <div className={styles.tableWrap}><table><thead><tr><th>Digit</th><th>Probability of at least one occurrence</th><th>Mean occurrences</th></tr></thead><tbody>
                 {digitEvents.map((item) => <tr key={String(item.digit)}><td>{String(item.digit)}</td><td>{probability(item.probability)}</td><td>{numeric(item.mean_occurrences)?.toFixed(2) ?? "—"}</td></tr>)}
               </tbody></table></div>
