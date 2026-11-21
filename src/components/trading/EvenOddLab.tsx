@@ -68,10 +68,11 @@ export default function EvenOddLab() {
   const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
   const [collectionTarget, setCollectionTarget] = useState(100);
   const [collectionClock, setCollectionClock] = useState(Date.now());
-  const collectionTimeoutRef = useRef<number | null>(null);
+  const collectionReconnectRef = useRef<number | null>(null);
   const collectionSocketRef = useRef<WebSocket | null>(null);
   const collectionHeartbeatRef = useRef<number | null>(null);
   const collectionStopRef = useRef(false);
+  const collectionStopHandlerRef = useRef<(() => Promise<void>) | null>(null);
   const collectionFailureRef = useRef<string | null>(null);
   const collectionProcessingRef = useRef<Promise<void>>(Promise.resolve());
   const [status, setStatus] = useState<LabStatus | null>(null);
@@ -162,9 +163,9 @@ export default function EvenOddLab() {
     return () => {
       collectionStopRef.current = true;
       if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
-      if (collectionTimeoutRef.current !== null) window.clearTimeout(collectionTimeoutRef.current);
+      if (collectionReconnectRef.current !== null) window.clearTimeout(collectionReconnectRef.current);
       collectionHeartbeatRef.current = null;
-      collectionTimeoutRef.current = null;
+      collectionReconnectRef.current = null;
       const socket = collectionSocketRef.current;
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Even/Odd Lab closed");
     };
@@ -203,6 +204,10 @@ export default function EvenOddLab() {
       if (collectionSocketRef.current && collectionSocketRef.current.readyState < WebSocket.CLOSING) {
         throw new Error("A browser collection is already running in this tab.");
       }
+      if (collectionReconnectRef.current !== null) {
+        window.clearTimeout(collectionReconnectRef.current);
+        collectionReconnectRef.current = null;
+      }
       collectionStopRef.current = false;
       collectionFailureRef.current = null;
       collectionProcessingRef.current = Promise.resolve();
@@ -212,29 +217,12 @@ export default function EvenOddLab() {
       });
       const job = created.job as CollectionJob;
       setCollectionJob(job);
-      collectionHeartbeatRef.current = window.setInterval(() => {
-        void request("collection-jobs/" + encodeURIComponent(job.id) + "/heartbeat", { method: "POST" })
-          .catch((heartbeatError) => {
-            const detail = heartbeatError instanceof Error ? heartbeatError.message : "Unknown heartbeat error";
-            collectionFailureRef.current = "Collection heartbeat failed: " + detail;
-            collectionStopRef.current = true;
-            setError(collectionFailureRef.current);
-            collectionSocketRef.current?.close(1011, "Collection heartbeat failed");
-          });
-      }, 15000);
-      setNotice("Connecting to Deriv. Keep this tab open and your computer awake until collection finishes.");
-      const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
-      collectionSocketRef.current = ws;
-      let received = 0;
+      let received = Number(job.received_ticks ?? 0);
       let batch: Record<string, unknown>[] = [];
       let pendingBatchId: string | null = null;
       let finished = false;
-      collectionTimeoutRef.current = window.setTimeout(() => {
-        if (finished || collectionStopRef.current) return;
-        collectionStopRef.current = true;
-        setNotice("Five-minute collection limit reached. Saving the partial sample and stopping.");
-        ws.close(1000, "Five-minute collection timeout");
-      }, 5 * 60 * 1000);
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 10;
       const flush = async () => {
         if (!batch.length) return;
         const outgoing = batch;
@@ -253,78 +241,138 @@ export default function EvenOddLab() {
         }
         await refresh(symbol);
       };
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: 8801 }));
-        setNotice("Connected to Deriv. Receiving live ticks; keep this tab open.");
-      };
-      ws.onmessage = (event) => {
-        collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
-          if (finished || collectionStopRef.current) return;
-          const message = JSON.parse(String(event.data)) as { msg_type?: string; error?: { message?: string }; tick?: Record<string, unknown>; subscription?: { id?: string } };
-          if (message.error) throw new Error(message.error.message ?? "Deriv subscription failed.");
-          if (message.msg_type !== "tick" || !message.tick || message.tick.symbol !== symbol) return;
-          batch.push({
-            tick: message.tick,
-            subscription_id: message.subscription?.id == null ? null : String(message.subscription.id),
-          });
-          received += 1;
-          if (batch.length >= 10 || received >= collectionTarget) {
-            await flush();
-          }
-          if (received >= collectionTarget) {
-            finished = true;
-            ws.close(1000, "Target reached");
-          }
-        }).catch((error) => {
-          const detail = error instanceof Error ? error.message : "Browser collection failed.";
-          collectionFailureRef.current = detail;
-          collectionStopRef.current = true;
-          setError(detail);
-          ws.close(1011, "Collection failed");
-        });
-      };
-      ws.onerror = () => {
-        collectionFailureRef.current = "Deriv WebSocket transport error. Check the network connection and retry.";
-        collectionStopRef.current = true;
-        ws.close(1011, "Connection error");
-      };
-      ws.onclose = (closeEvent) => {
+      const stopJob = async (message: string) => {
+        let flushError: unknown = null;
+        try { await flush(); } catch (error) { flushError = error; }
+        try {
+          const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
+          setCollectionJob(stopped.job as CollectionJob);
+        } catch (stopError) {
+          setError(stopError instanceof Error ? stopError.message : message);
+        }
+        if (flushError) setError(flushError instanceof Error ? "Final batch could not be saved: " + flushError.message : "Final batch could not be saved.");
+        setNotice(message);
+        collectionSocketRef.current = null;
+        collectionStopHandlerRef.current = null;
         if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
-        if (collectionTimeoutRef.current !== null) window.clearTimeout(collectionTimeoutRef.current);
         collectionHeartbeatRef.current = null;
-        collectionTimeoutRef.current = null;
-        collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
-          await flush();
-          if (collectionStopRef.current && !finished) {
-            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
-            setCollectionJob(stopped.job as CollectionJob);
-            setNotice("Collection stopped. Successfully persisted ticks are retained.");
-          } else if (received >= collectionTarget) {
-            setNotice("Collection completed. All target ticks were persisted.");
-          } else if (!finished) {
-            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
-            setCollectionJob(stopped.job as CollectionJob);
-            setError("The Deriv connection closed before the target was reached. The job is stopped with a partial sample.");
-          }
-          collectionSocketRef.current = null;
-          await refresh(symbol);
-          if (collectionFailureRef.current) {
-            setError(collectionFailureRef.current + " WebSocket close code: " + closeEvent.code +
-              (closeEvent.reason ? " (" + closeEvent.reason + ")" : "") + ".");
-          } else if (!finished && !collectionStopRef.current && closeEvent.code !== 1000) {
-            setError("Deriv WebSocket closed unexpectedly before the target was reached. Close code: " +
-              closeEvent.code + (closeEvent.reason ? " (" + closeEvent.reason + ")" : "") +
-              ". The partial sample was saved.");
-          }
-        }).catch(async (error) => {
-          setError(error instanceof Error ? error.message : "Could not finalize collection.");
-          try {
-            const stopped = await request("collection-jobs/" + encodeURIComponent(job.id) + "/stop", { method: "POST" });
-            setCollectionJob(stopped.job as CollectionJob);
-          } catch { /* The next start request can recover a stale job after its heartbeat expires. */ }
-          collectionSocketRef.current = null;
-        });
+        await refresh(symbol);
       };
+      collectionStopHandlerRef.current = async () => { await stopJob("Collection stopped. Successfully persisted ticks are retained."); };
+      const connect = () => {
+        if (collectionStopRef.current || finished) return;
+        setNotice(reconnectAttempts
+          ? "Reconnecting to Deriv (attempt " + reconnectAttempts + " of " + maxReconnectAttempts + "). Saved ticks are retained."
+          : "Connecting to Deriv. Keep this tab open and your computer awake until collection finishes.");
+        let ws: WebSocket;
+        try {
+          ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
+          collectionSocketRef.current = ws;
+        } catch {
+          scheduleReconnect("Could not create the Deriv WebSocket connection.");
+          return;
+        }
+        ws.onopen = () => {
+          if (collectionStopRef.current || finished) {
+            ws.close(1000, "Collection no longer active");
+            return;
+          }
+          ws.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: 8801 }));
+          setNotice("Connected to Deriv. Receiving live ticks; automatic reconnection is enabled.");
+        };
+        ws.onmessage = (event) => {
+          collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
+            if (finished || collectionStopRef.current || collectionSocketRef.current !== ws) return;
+            const message = JSON.parse(String(event.data)) as { msg_type?: string; error?: { message?: string }; tick?: Record<string, unknown>; subscription?: { id?: string } };
+            if (message.error) throw new Error(message.error.message ?? "Deriv subscription failed.");
+            if (message.msg_type !== "tick" || !message.tick || message.tick.symbol !== symbol) return;
+            batch.push({
+              tick: message.tick,
+              subscription_id: message.subscription?.id == null ? null : String(message.subscription.id),
+            });
+            received += 1;
+            if (batch.length >= 10 || received >= collectionTarget) await flush();
+            if (received >= collectionTarget) {
+              finished = true;
+              ws.close(1000, "Target reached");
+            }
+          }).catch((error) => {
+            const detail = error instanceof Error ? error.message : "Browser collection failed.";
+            collectionFailureRef.current = detail;
+            collectionStopRef.current = true;
+            setError(detail);
+            ws.close(1011, "Collection failed");
+          });
+        };
+        ws.onerror = () => {
+          // Browsers intentionally hide transport details; onclose handles bounded reconnect.
+          setNotice("Deriv connection interrupted. Saving received ticks and attempting to reconnect.");
+        };
+        ws.onclose = (closeEvent) => {
+          collectionProcessingRef.current = collectionProcessingRef.current.then(async () => {
+            await flush();
+            if (finished || received >= collectionTarget) {
+              finished = true;
+              setNotice("Collection completed. All " + received + " target ticks were persisted.");
+              collectionSocketRef.current = null;
+              if (collectionHeartbeatRef.current !== null) window.clearInterval(collectionHeartbeatRef.current);
+              collectionHeartbeatRef.current = null;
+              await refresh(symbol);
+              return;
+            }
+            if (collectionStopRef.current) {
+              await stopJob("Collection stopped. Successfully persisted ticks are retained.");
+              return;
+            }
+            if (collectionFailureRef.current) {
+              await stopJob(collectionFailureRef.current + " Partial sample retained.");
+              return;
+            }
+            scheduleReconnect("Deriv closed the connection (code " + closeEvent.code + ").");
+          }).catch(async (error) => {
+            const detail = error instanceof Error ? error.message : "Could not finalize the collection batch.";
+            collectionFailureRef.current = detail;
+            collectionStopRef.current = true;
+            await stopJob(detail + " Partial sample retained.");
+          });
+        };
+      };
+      const scheduleReconnect = (reason: string) => {
+        if (collectionStopRef.current || finished) return;
+        if (reconnectAttempts >= maxReconnectAttempts) {
+          collectionStopRef.current = true;
+          collectionFailureRef.current = "Deriv reconnection limit reached after " + maxReconnectAttempts + " attempts. " + reason;
+          void stopJob(collectionFailureRef.current + " Partial sample retained.");
+          return;
+        }
+        reconnectAttempts += 1;
+        const delay = Math.min(1000 * (2 ** (reconnectAttempts - 1)), 15000);
+        setNotice(reason + " Reconnecting in " + Math.ceil(delay / 1000) + "s (attempt " + reconnectAttempts + " of " + maxReconnectAttempts + ").");
+        collectionReconnectRef.current = window.setTimeout(() => {
+          collectionReconnectRef.current = null;
+          connect();
+        }, delay);
+      };
+      collectionHeartbeatRef.current = window.setInterval(() => {
+        void request("collection-jobs/" + encodeURIComponent(job.id) + "/heartbeat", { method: "POST" })
+          .catch((heartbeatError) => {
+            const detail = heartbeatError instanceof Error ? heartbeatError.message : "Unknown heartbeat error";
+            collectionFailureRef.current = "Collection heartbeat failed: " + detail;
+            collectionStopRef.current = true;
+            setError(collectionFailureRef.current);
+            if (collectionReconnectRef.current !== null) {
+              window.clearTimeout(collectionReconnectRef.current);
+              collectionReconnectRef.current = null;
+            }
+            const socket = collectionSocketRef.current;
+            if (socket && socket.readyState < WebSocket.CLOSING) {
+              socket.close(1011, "Collection heartbeat failed");
+            } else {
+              void stopJob(collectionFailureRef.current + " Partial sample retained.");
+            }
+          });
+      }, 15000);
+      connect();
     });
   }
 
@@ -332,9 +380,13 @@ export default function EvenOddLab() {
     if (!collectionJob?.id) return;
     await runAction("collection-stop", async () => {
       collectionStopRef.current = true;
+      if (collectionReconnectRef.current !== null) { window.clearTimeout(collectionReconnectRef.current); collectionReconnectRef.current = null; }
       const socket = collectionSocketRef.current;
       if (socket && socket.readyState < WebSocket.CLOSING) {
         socket.close(1000, "User requested stop");
+      } else if (collectionStopHandlerRef.current) {
+        await collectionStopHandlerRef.current();
+        setCollectionJob((current) => current ? { ...current, status: "stopped" } : current);
       } else {
         const result = await request("collection-jobs/" + encodeURIComponent(collectionJob.id) + "/stop", { method: "POST" });
         setCollectionJob(result.job as CollectionJob);
@@ -564,7 +616,7 @@ export default function EvenOddLab() {
             <button type="button" className={styles.primaryButton} onClick={() => void startTickCollection()} disabled={!!busy || !!collectionJob && ["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-start" ? "Starting…" : "Start collection"}</button>
             <button type="button" className={styles.secondaryButton} onClick={() => void stopTickCollection()} disabled={!!busy || !collectionJob || !["queued", "collecting"].includes(collectionJob.status)}>{busy === "collection-stop" ? "Stopping…" : "Stop collection"}</button>
           </div>
-          <p className={styles.helper}>Collection runs in this browser tab with a 5-minute maximum timeout. Keep the tab open and your computer awake. The elapsed time is measured from job creation to completion or stop. Closing the tab, losing network connectivity or suspending the browser can interrupt collection. Only newly received live ticks are stored; no historical backfill is used.</p>
+          <p className={styles.helper}>Collection runs in this browser tab until the selected tick target is reached or you press Stop; there is no fixed time limit. The collector saves every 10 ticks and automatically retries temporary Deriv WebSocket disconnections (up to 10 reconnect attempts with increasing delays). Keep this tab open and your computer awake. Closing the tab, losing network connectivity for too long or suspending the browser can still interrupt collection. Only newly received live ticks are stored; no historical backfill is used.</p>
         </section>
 
         <section className={styles.panel}>
